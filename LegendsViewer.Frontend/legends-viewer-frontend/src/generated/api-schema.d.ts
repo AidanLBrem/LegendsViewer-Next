@@ -15937,6 +15937,24 @@ export interface components {
             eventCount?: number;
             /** Format: int32 */
             eventCollectionCount?: number;
+            /** Format: int32 */
+            deathCount?: number | null;
+            /** Format: int32 */
+            attackerDeathCount?: number | null;
+            /** Format: int32 */
+            defenderDeathCount?: number | null;
+            /** Format: int32 */
+            attackerSitesGained?: number | null;
+            /** Format: int32 */
+            attackerSitesLost?: number | null;
+            /** Format: int32 */
+            attackerSitesPlundered?: number | null;
+            /** Format: int32 */
+            defenderSitesGained?: number | null;
+            /** Format: int32 */
+            defenderSitesLost?: number | null;
+            /** Format: int32 */
+            defenderSitesPlundered?: number | null;
         };
         WorldObjectDtoPaginatedResponse: {
             items?: components["schemas"]["WorldObjectDto"][] | null;
