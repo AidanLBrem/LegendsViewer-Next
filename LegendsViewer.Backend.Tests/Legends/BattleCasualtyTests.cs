@@ -214,6 +214,109 @@ public class BattleCasualtyTests
     }
 
     [TestMethod]
+    public void AnimatedSquads_AreSeparateFromLivingCreaturesInBattleAndWarCharts()
+    {
+        using var world = new World();
+        War war = CreateWar(world);
+        Battle battle = new([
+            P("id", "150"),
+            P("war_eventcol", "10"),
+            P("attacking_squad_race", "DWARF"),
+            P("attacking_squad_number", "30"),
+            P("attacking_squad_deaths", "5"),
+            P("attacking_squad_race", "DWARF"),
+            P("attacking_squad_animated", "true"),
+            P("attacking_squad_number", "40"),
+            P("attacking_squad_deaths", "12"),
+            P("attacking_squad_race", "GOBLIN"),
+            P("attacking_squad_number", "10"),
+            P("attacking_squad_animated", "true"),
+            P("attacking_squad_deaths", "3"),
+            P("defending_squad_race", "DWARF"),
+            P("defending_squad_number", "20"),
+            P("defending_squad_animated", "true"),
+            P("defending_squad_deaths", "7"),
+            P("defending_squad_race", "DWARF"),
+            P("defending_squad_number", "10"),
+            P("defending_squad_deaths", "2")
+        ], world);
+        war.EventCollections.Add(battle);
+
+        string dwarf = world.GetCreatureInfo("DWARF").NamePlural;
+        string goblin = world.GetCreatureInfo("GOBLIN").NamePlural;
+
+        Assert.IsFalse(battle.AttackerSquads[0].Animated);
+        Assert.IsTrue(battle.AttackerSquads[1].Animated);
+        Assert.IsTrue(battle.AttackerSquads[2].Animated);
+        Assert.IsTrue(battle.DefenderSquads[0].Animated);
+        Assert.IsFalse(battle.DefenderSquads[1].Animated);
+        Assert.IsTrue(battle.AttackingSquadAnimated);
+        Assert.IsTrue(battle.DefendingSquadAnimated);
+
+        static int ChartValue(ChartDataDto chart, string label)
+        {
+            int index = chart.Labels.IndexOf(label);
+            Assert.IsTrue(index >= 0, $"Missing chart category: {label}");
+            return chart.Datasets.Single().Data[index];
+        }
+
+        Assert.AreEqual(30, ChartValue(battle.AttackerInitialArmyByRace, dwarf));
+        Assert.AreEqual(40, ChartValue(battle.AttackerInitialArmyByRace, $"Undead {dwarf}"));
+        Assert.AreEqual(10, ChartValue(battle.AttackerInitialArmyByRace, $"Undead {goblin}"));
+        Assert.AreEqual(20, ChartValue(battle.DefenderInitialArmyByRace, $"Undead {dwarf}"));
+        Assert.AreEqual(10, ChartValue(battle.DefenderInitialArmyByRace, dwarf));
+        Assert.AreEqual(5, ChartValue(battle.AttackerDeathsByRace, dwarf));
+        Assert.AreEqual(12, ChartValue(battle.AttackerDeathsByRace, $"Undead {dwarf}"));
+        Assert.AreEqual(3, ChartValue(battle.AttackerDeathsByRace, $"Undead {goblin}"));
+        Assert.AreEqual(7, ChartValue(battle.DefenderDeathsByRace, $"Undead {dwarf}"));
+        Assert.AreEqual(2, ChartValue(battle.DefenderDeathsByRace, dwarf));
+
+        Assert.AreEqual(80, battle.AttackerCount);
+        Assert.AreEqual(30, battle.DefenderCount);
+        Assert.AreEqual(29, battle.DeathCount);
+        Assert.AreEqual(29, battle.DeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(110, battle.AttackerInitialArmyByRace.Datasets.Single().Data.Sum() +
+            battle.DefenderInitialArmyByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(29, war.DeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(80, war.AttackerDeploymentsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(30, war.DefenderDeploymentsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(40, ChartValue(war.AttackerDeploymentsByRace, $"Undead {dwarf}"));
+        Assert.AreEqual(19, ChartValue(war.DeathsByRace, $"Undead {dwarf}"));
+    }
+
+    [TestMethod]
+    public void UndeadNotableFigures_AreNotMergedIntoLivingRaceCounts()
+    {
+        using var world = new World();
+        var race = world.GetCreatureInfo("DWARF");
+        world.HistoricalFigures.Add(new HistoricalFigure([], world)
+        {
+            Id = 40,
+            Name = "Living Dwarf",
+            Race = race
+        });
+        world.HistoricalFigures.Add(new HistoricalFigure([], world)
+        {
+            Id = 41,
+            Name = "Undead Dwarf",
+            Race = race,
+            Zombie = true
+        });
+
+        Battle battle = new([
+            P("id", "151"),
+            P("attacking_hfid", "40"),
+            P("attacking_hfid", "41")
+        ], world);
+
+        Assert.AreEqual(2, battle.AttackerCount);
+        Assert.AreEqual(2, battle.AttackerInitialArmyByRace.Labels.Count);
+        Assert.IsTrue(battle.AttackerInitialArmyByRace.Labels.Contains(race.NamePlural));
+        Assert.IsTrue(battle.AttackerInitialArmyByRace.Labels.Contains($"Undead {race.NamePlural}"));
+        Assert.AreEqual(2, battle.AttackerInitialArmyByRace.Datasets.Single().Data.Sum());
+    }
+
+    [TestMethod]
     public void WarDeploymentTotals_MatchRaceChartsAndPreserveWarSidesAcrossBattleRoleReversals()
     {
         using var world = new World();
