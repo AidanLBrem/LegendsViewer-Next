@@ -50,56 +50,50 @@ public class War : EventCollection, IHasComplexSubtype
     }
 
     [JsonIgnore]
-    public List<HistoricalFigure> NotableDeaths => AllEvents?.OfType<HfDied>().Where(death => death.HistoricalFigure != null).Select(death => death.HistoricalFigure!).ToList() ?? [];
+    public List<HistoricalFigure> NotableDeaths => AllEvents?
+        .OfType<HfDied>()
+        .Where(death => death.HistoricalFigure != null)
+        .Select(death => death.HistoricalFigure!)
+        .Distinct()
+        .ToList() ?? [];
+
     public List<string> NotableDeathLinks => NotableDeaths.ConvertAll(x => x.ToLink(true, this));
+
     public ChartDataDto DeathsByRace
     {
         get
         {
+            // War totals include battle casualties, so build the race breakdown
+            // from those same battle totals rather than counting unrelated events.
             Dictionary<CreatureInfo, int> deaths = [];
-
-            foreach (var notableDeath in NotableDeaths)
+            foreach (var battle in Battles)
             {
-                if (deaths.TryGetValue(notableDeath.Race, out int deathCount))
+                foreach (var casualty in battle.Deaths)
                 {
-                    deaths[notableDeath.Race] = ++deathCount;
-                }
-                else
-                {
-                    deaths[notableDeath.Race] = 1;
+                    deaths.TryGetValue(casualty.Key, out int previous);
+                    deaths[casualty.Key] = previous + casualty.Value;
                 }
             }
 
-            foreach (var squad in Battles.SelectMany(battle => battle.AttackerSquads.Concat(battle.DefenderSquads)))
+            ChartDataDto chart = new();
+            ChartDatasetDto dataset = new();
+            foreach (var death in deaths.Where(entry => entry.Value > 0).OrderByDescending(entry => entry.Value))
             {
-                if (deaths.TryGetValue(squad.Race, out int deathCount))
-                {
-                    deaths[squad.Race] = deathCount + squad.Deaths;
-                }
-                else
-                {
-                    deaths[squad.Race] = squad.Deaths;
-                }
-            }
-            ChartDataDto deathsByRace = new();
-            ChartDatasetDto deathsByRaceDataset = new();
-            foreach (var death in deaths)
-            {
-                deathsByRace.Labels.Add(death.Key.NamePlural);
-                deathsByRaceDataset.Data.Add(death.Value);
+                chart.Labels.Add(death.Key.NamePlural);
+                dataset.Data.Add(death.Value);
                 if (World != null && World.MainRaces.TryGetValue(death.Key, out var raceColor))
                 {
-                    deathsByRaceDataset.BorderColor.Add(raceColor.ToRgbaString());
-                    deathsByRaceDataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
+                    dataset.BorderColor.Add(raceColor.ToRgbaString());
+                    dataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
                 }
                 else
                 {
-                    deathsByRaceDataset.BorderColor.Add(Color.SlateGray.ToRgbaString());
-                    deathsByRaceDataset.BackgroundColor.Add(Color.SlateGray.ToRgbaString(0.2f));
+                    dataset.BorderColor.Add(Color.SlateGray.ToRgbaString());
+                    dataset.BackgroundColor.Add(Color.SlateGray.ToRgbaString(0.2f));
                 }
             }
-            deathsByRace.Datasets.Add(deathsByRaceDataset);
-            return deathsByRace;
+            chart.Datasets.Add(dataset);
+            return chart;
         }
     }
 
@@ -198,9 +192,9 @@ public class War : EventCollection, IHasComplexSubtype
     [JsonIgnore]
     public List<EventCollection> DefenderVictories { get; set; } = [];
     [JsonIgnore]
-    public List<Battle> AttackerBattleVictories => EventCollections.OfType<Battle>().Where(battle => battle.Victor?.EqualsOrParentEquals(Attacker) ?? false).ToList();
+    public List<Battle> AttackerBattleVictories => AttackerVictories.OfType<Battle>().ToList();
     [JsonIgnore]
-    public List<Battle> DefenderBattleVictories => EventCollections.OfType<Battle>().Where(battle => battle.Victor?.EqualsOrParentEquals(Defender) ?? false).ToList();
+    public List<Battle> DefenderBattleVictories => DefenderVictories.OfType<Battle>().ToList();
     [JsonIgnore]
     public List<Battle> ErrorBattles => EventCollections.OfType<Battle>()
         .Where(battle =>
