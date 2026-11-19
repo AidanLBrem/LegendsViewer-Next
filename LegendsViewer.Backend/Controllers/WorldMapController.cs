@@ -123,8 +123,9 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
         return dto;
     }
 
-    // Packed in row-major order (bit y * width + x). This is kept separate
-    // from the world DTO so the map loads it only when territory rendering needs it.
+    // Water barriers (oceans and lakes), packed in row-major order.
+    // This stays separate from the world DTO so terrain connectivity
+    // is loaded only when territory rendering needs it.
     [HttpGet("ocean-mask")]
     public IActionResult GetOceanMask()
     {
@@ -144,7 +145,8 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
         byte[] mask = new byte[(int)((tileCount + 7) / 8)];
         foreach (var region in _worldDataService.Regions)
         {
-            if (region.RegionType != RegionType.Ocean || region.Depth != null)
+            if ((region.RegionType != RegionType.Ocean &&
+                 region.RegionType != RegionType.Lake) || region.Depth != null)
             {
                 continue;
             }
