@@ -61,6 +61,8 @@ const countRows = computed(() => {
         { title: 'Peace agreements', count: p.peaceAgreements },
         { title: 'Alliances formed', count: p.alliances },
         { title: 'Internal upheavals', count: p.internalUpheavals },
+        { title: 'Harsh edicts issued', count: p.harshEdictsIssued },
+        { title: 'Harsh edicts repealed', count: p.harshEdictsRevoked },
     ];
 });
 const categories = [
@@ -74,6 +76,8 @@ const categories = [
     { title: 'Peace', value: 'peace' },
     { title: 'Alliances', value: 'alliance' },
     { title: 'Internal upheaval', value: 'upheaval' },
+    { title: 'Harsh laws issued', value: 'harshLaw' },
+    { title: 'Harsh laws repealed', value: 'lawRepealed' },
     { title: 'Territorial losses', value: 'loss' },
 ];
 const selectedEvidence = computed<NationCultureEvidence[]>(() => {
