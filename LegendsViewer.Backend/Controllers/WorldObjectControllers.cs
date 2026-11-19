@@ -56,6 +56,44 @@ public class EntityController(IWorldObjectRepository<Entity> repository) : World
         return Ok(Repository.GetAllElements().Where(x => x.IsCiv || (x.EntityType == Legends.Enums.EntityType.Civilization && x.SiteHistory.Count > 0)));
     }
 
+    [HttpGet("cultures")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<List<NationCultureSummaryDto>> GetCivilizationCultures()
+    {
+        var profiles = Repository.GetAllElements()
+            .Where(entity => entity.IsCiv || entity.EntityType == Legends.Enums.EntityType.Civilization)
+            .Select(entity =>
+            {
+                var profile = NationCultureProfileDto.FromEntity(entity);
+                return new NationCultureSummaryDto
+                {
+                    Id = entity.Id,
+                    Name = entity.Name,
+                    Race = entity.Race?.NamePlural ?? "",
+                    CurrentSites = entity.CurrentSites.Count,
+                    Character = profile.Character,
+                    Periods = profile.Periods
+                };
+            })
+            .OrderBy(entity => entity.Name)
+            .ToList();
+
+        return Ok(profiles);
+    }
+
+    [HttpGet("{id}/culture")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<NationCultureProfileDto> GetCivilizationCulture([FromRoute] int id)
+    {
+        Entity? entity = Repository.GetById(id);
+        if (entity == null)
+        {
+            return NotFound();
+        }
+        return Ok(NationCultureProfileDto.FromEntity(entity));
+    }
+
     [HttpGet("{id}/monarchs")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
