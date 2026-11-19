@@ -3,6 +3,7 @@ using LegendsViewer.Backend.Extensions;
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.EventCollections;
+using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.Parser;
 using LegendsViewer.Backend.Legends.WorldObjects;
 
@@ -137,6 +138,174 @@ public class WarfareSiteOutcomesTests
             .SortByProperty("defenderSitesLostCount", "desc").ToList();
         Assert.AreSame(battle, ranked[0]);
         Assert.AreSame(quietBattle, ranked[1]);
+    }
+
+    [TestMethod]
+    public void WarOutcomes_FindDirectAndNestedTerritorialEventsWithoutConquestCollections()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        War war = setup.War;
+
+        Site captured = new([], world) { Id = 501, Name = "Taken Town" };
+        Site razed = new([], world) { Id = 502, Name = "Burned Fortress" };
+        Site surrendered = new([], world) { Id = 503, Name = "Surrendered City" };
+        Site plundered = new([], world) { Id = 504, Name = "Pillaged Hamlet" };
+        Site abandoned = new([], world) { Id = 505, Name = "Abandoned Hold" };
+        Site reclaimed = new([], world) { Id = 506, Name = "Reclaimed Keep" };
+
+        // These are linked to the war, but none is a SiteConquered collection.
+        war.Events.Add(new SiteTakenOver([], world)
+        {
+            Site = captured, Attacker = setup.Attacker, Defender = setup.Defender
+        });
+        war.Events.Add(new DestroyedSite([], world)
+        {
+            Site = razed, Attacker = setup.Attacker, Defender = setup.Defender
+        });
+        war.Events.Add(new SiteSurrendered([], world)
+        {
+            Site = surrendered, Attacker = setup.Attacker, Defender = setup.Defender
+        });
+        war.Events.Add(new PlunderedSite([], world)
+        {
+            Site = plundered, Attacker = setup.Attacker, Defender = setup.Defender
+        });
+        war.Events.Add(new SiteAbandoned([], world)
+        {
+            Site = abandoned, Civ = setup.Defender
+        });
+
+        Battle nestedBattle = new([P("id", "560")], world)
+        {
+            Attacker = setup.Defender, Defender = setup.Attacker
+        };
+        nestedBattle.Events.Add(new ReclaimSite([], world)
+        {
+            Site = reclaimed, Civ = setup.Defender
+        });
+        war.EventCollections.Add(nestedBattle);
+
+        WarfareSiteOutcomesDto outcomes = war.SiteOutcomes;
+        Assert.AreEqual(2, outcomes.AttackerGained.Count);
+        Assert.AreEqual(1, outcomes.DefenderGained.Count);
+        Assert.AreEqual(4, outcomes.DefenderLost.Count);
+        Assert.AreEqual(1, outcomes.AttackerPlundered.Count);
+        Assert.IsTrue(outcomes.AttackerGained.Any(link => link.Contains("Taken Town")));
+        Assert.IsTrue(outcomes.AttackerGained.Any(link => link.Contains("Surrendered City")));
+        Assert.IsTrue(outcomes.DefenderLost.Any(link => link.Contains("Abandoned Hold")));
+        Assert.IsFalse(outcomes.AttackerGained.Any(link => link.Contains("Burned Fortress")));
+
+        WorldObjectDto overview = new(war);
+        Assert.AreEqual(2, overview.AttackerSitesGainedCount);
+        Assert.AreEqual(4, overview.DefenderSitesLostCount);
+
+        // The battle sees only its own reclamation, not unrelated war events.
+        Assert.AreEqual(1, nestedBattle.SiteOutcomes.DefenderGained.Count);
+        Assert.AreEqual(0, nestedBattle.SiteOutcomes.AttackerGained.Count);
+    }
+
+    [TestMethod]
+    public void WarOutcomes_ResolveSiteFromChildEventWhenCollectionSiteIsMissing()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Site town = new([], world) { Id = 601, Name = "Hidden Collection Site" };
+
+        SiteConquered conquest = new([P("id", "620")], world)
+        {
+            Attacker = setup.Attacker,
+            Defender = setup.Defender,
+            ConquerType = SiteConqueredType.Conquest,
+            Site = null
+        };
+        // The event gives the site ID, but is not a proof of victory by itself.
+        conquest.Events.Add(new AttackedSite([], world)
+        {
+            Site = town, Attacker = setup.Attacker, Defender = setup.Defender
+        });
+        setup.War.EventCollections.Add(conquest);
+
+        var outcomes = setup.War.SiteOutcomes;
+        Assert.AreEqual(1, outcomes.AttackerGained.Count);
+        Assert.AreEqual(1, outcomes.DefenderLost.Count);
+        Assert.IsTrue(outcomes.AttackerGained.Single().Contains("Hidden Collection Site"));
+    }
+
+    [TestMethod]
+    public void WarOutcomes_IncludeWorldLinkedRecordsAbsentFromParentLists()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Site town = new([], world) { Id = 701, Name = "Parent Linked Town" };
+        Site city = new([], world) { Id = 702, Name = "Parent Linked City" };
+
+        // The collection and event have war parent references but are not in
+        // war.EventCollections or war.Events.
+        var conquest = new([P("id", "703")], world)
+        {
+            ParentCollection = setup.War,
+            Site = town,
+            Attacker = setup.Attacker,
+            Defender = setup.Defender,
+            ConquerType = SiteConqueredType.Conquest
+        };
+        world.EventCollections.Add(conquest);
+        var takeover = new SiteTakenOver([], world)
+        {
+            ParentCollection = setup.War,
+            Site = city,
+            Attacker = setup.Attacker,
+            Defender = setup.Defender
+        };
+        world.Events.Add(takeover);
+
+        var outcomes = setup.War.SiteOutcomes;
+        Assert.AreEqual(2, outcomes.AttackerGained.Count);
+        Assert.AreEqual(2, outcomes.DefenderLost.Count);
+    }
+
+    [TestMethod]
+    public void WarOutcomes_DeduplicateSiteWhenCollectionAndEventDescribeSameCapture()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Site town = new([], world) { Id = 801, Name = "Twice Described Town" };
+        var conquest = AddOutcome(world, setup.War, 820,
+            setup.Attacker, setup.Defender, town, SiteConqueredType.Conquest);
+        conquest.Events.Add(new SiteTakenOver([], world)
+        {
+            Site = town, Attacker = setup.Attacker, Defender = setup.Defender
+        });
+        setup.War.Events.Add(new SiteTakenOver([], world)
+        {
+            Site = town, Attacker = setup.Attacker, Defender = setup.Defender
+        });
+
+        var outcomes = setup.War.SiteOutcomes;
+        Assert.AreEqual(1, outcomes.AttackerGained.Count);
+        Assert.AreEqual(1, outcomes.DefenderLost.Count);
+        Assert.AreEqual(0, outcomes.Unattributed.Count);
+    }
+
+    [TestMethod]
+    public void WarOutcomes_PreserveUnattributedSiteActionsWithoutClaimingWarVictories()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Entity mercenaries = new([], world) { Id = 900, Name = "Neutral Mercenaries" };
+        Site taken = new([], world) { Id = 901, Name = "Third Party Victory" };
+        var eventRecord = new SiteTakenOver([], world)
+        {
+            Site = taken, Attacker = mercenaries, Defender = setup.Defender
+        };
+        setup.War.Events.Add(eventRecord);
+
+        var outcomes = setup.War.SiteOutcomes;
+        Assert.AreEqual(0, outcomes.AttackerGained.Count);
+        Assert.AreEqual(0, outcomes.DefenderLost.Count);
+        Assert.AreEqual(1, outcomes.Unattributed.Count);
+        Assert.IsTrue(outcomes.Unattributed.Single().Contains("Third Party Victory"));
     }
 
     [TestMethod]
