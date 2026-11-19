@@ -6,7 +6,7 @@
     <div class="site-color-selector">
       <label for="site-color-mode">Site colors</label>
       <select id="site-color-mode" v-model="siteColorMode">
-        <option value="current">Current nation</option>
+        <option value="current">Owner in selected year</option>
         <option value="origin">Origin nation</option>
       </select>
     </div>
@@ -37,7 +37,7 @@
       <div class="history-stepper__limits">
         <span>0</span><span>{{ historyMaxYear.toLocaleString() }}</span>
       </div>
-      <small>Site ownership timeline. Terrain and warfare overlays remain present-day.</small>
+      <small>Recorded site ownership only. Sites without history retain their current display; terrain and warfare overlays remain present-day.</small>
     </section>
   </div>
 </template>
@@ -1446,6 +1446,7 @@ export default defineComponent({
       historyReady.value = false;
       historyUpdateGeneration++;
       stopHistoryPlayback();
+      historyBusy.value = false;
       isRenderingSites = true;
       mapProgress.value = 'Preparing map markers...';
       mapError.value = '';
