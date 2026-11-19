@@ -142,6 +142,49 @@ public class WarfareMapTests
     }
 
     [TestMethod]
+    public void HistoricalMap_ReturnsDatedSiteOutcomesWithoutPollutingCurrentOverlay()
+    {
+        var world = new Mock<IWorld>();
+        var generator = new Mock<IWorldMapImageGenerator>();
+        world.Setup(w => w.Events).Returns(new List<WorldEvent>());
+        world.Setup(w => w.Entities).Returns(new List<Entity>());
+
+        var site = new Site([], world.Object)
+        {
+            Id = 92,
+            Name = "Old Citadel",
+            Coordinates = [new Location(16, 24)]
+        };
+        var outcome = new SiteConquered([
+            new Property { Name = "id", Value = "42" },
+            new Property { Name = "start_year", Value = "150" }
+        ], world.Object)
+        {
+            Site = site,
+            ConquerType = LegendsViewer.Backend.Legends.Enums.SiteConqueredType.Pillaging
+        };
+
+        world.Setup(w => w.EventCollections).Returns(new List<EventCollection> { outcome });
+        var controller = new WorldMapController(world.Object, generator.Object);
+
+        var current = controller.GetWarfareMap(activeOnly: true);
+        var history = controller.GetWarfareMap(activeOnly: false);
+
+        Assert.IsNotNull(current.Value);
+        Assert.AreEqual(0, current.Value.SiteConquests.Count);
+        Assert.IsNotNull(history.Value);
+        Assert.AreEqual(1, history.Value.SiteConquests.Count);
+        var marker = history.Value.SiteConquests[0];
+        Assert.AreEqual(42, marker.Id);
+        Assert.AreEqual(92, marker.SiteId);
+        Assert.AreEqual("Old Citadel", marker.SiteName);
+        Assert.AreEqual(150, marker.Year);
+        Assert.AreEqual("Pillaging", marker.Outcome);
+        Assert.AreEqual(16, marker.Coordinates!.X);
+        Assert.AreEqual(24, marker.Coordinates!.Y);
+    }
+
+    [TestMethod]
     public void GetObjectCoordinates_ForWar_ReturnsBoundsAndCoordinates()
     {
         var worldMock = new Mock<IWorld>();
