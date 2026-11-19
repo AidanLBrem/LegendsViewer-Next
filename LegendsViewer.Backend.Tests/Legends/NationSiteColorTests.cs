@@ -175,6 +175,51 @@ public class NationSiteColorTests
     }
 
     [TestMethod]
+    public void SiteMarker_ExportsCreationDestructionAndOwnershipEndCauses()
+    {
+        using World world = new();
+        var owner = new Entity([], world)
+        {
+            Id = 300, Name = "Old Kingdom", IsCiv = true, LineColor = Color.Red
+        };
+        var site = new Site([], world) { Id = 301, Name = "Abandoned Fortress" };
+        site.OwnerHistory.Add(new OwnerPeriod(site, owner, 10, "constructed")
+        {
+            EndYear = 30,
+            EndCause = "abandoned"
+        });
+        site.OwnerHistory.Add(new OwnerPeriod(site, owner, 60, "reclaimed")
+        {
+            EndYear = 80,
+            EndCause = "destroyed"
+        });
+
+        var marker = new SiteMarkerDto(site);
+
+        Assert.AreEqual(10, marker.CreatedYear);
+        CollectionAssert.AreEqual(new List<int> { 80 }, marker.DestroyedYears);
+        Assert.AreEqual("abandoned", marker.OwnerHistory[0].EndCause);
+        Assert.AreEqual("destroyed", marker.OwnerHistory[1].EndCause);
+    }
+
+    [TestMethod]
+    public void SiteMarker_DoesNotInferSiteCreationFromFirstRecordedConquest()
+    {
+        using World world = new();
+        var owner = new Entity([], world)
+        {
+            Id = 350, Name = "Conquerors", IsCiv = true
+        };
+        var site = new Site([], world) { Id = 351, Name = "Older Settlement" };
+        site.OwnerHistory.Add(new OwnerPeriod(site, owner, 100, "took over"));
+
+        var marker = new SiteMarkerDto(site);
+
+        Assert.IsNull(marker.CreatedYear);
+        Assert.AreEqual(0, marker.DestroyedYears.Count);
+    }
+
+    [TestMethod]
     public void SiteMarkers_SubordinateNecromancerSitesUseTheirParentFaction()
     {
         using World world = new();
