@@ -137,7 +137,8 @@ public class Site : WorldObject, IHasCoordinates
                 return CurrentOwner;
             }
             Entity? parent = CurrentOwner.Parent;
-            while (parent != null)
+            HashSet<Entity> visited = [];
+            while (parent != null && visited.Add(parent))
             {
                 if (parent.IsCiv)
                 {
