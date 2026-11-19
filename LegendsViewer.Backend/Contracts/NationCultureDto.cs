@@ -120,7 +120,7 @@ public sealed class NationCultureProfileDto
         static bool SameNation(Entity? actor, Entity nation) =>
             actor != null && (actor == nation || actor.CurrentCiv == nation);
 
-        foreach (var entry in nation.Events.DistinctBy(e => e.Id))
+        foreach (var entry in nation.Events.Distinct())
         {
             switch (entry)
             {
@@ -167,7 +167,7 @@ public sealed class NationCultureProfileDto
             }
         }
 
-        foreach (var war in nation.Wars.DistinctBy(w => w.Id))
+        foreach (var war in nation.Wars.Distinct())
         {
             if (war.StartYear < 0)
             {
