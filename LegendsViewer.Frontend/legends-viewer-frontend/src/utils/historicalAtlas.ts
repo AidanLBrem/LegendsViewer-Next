@@ -92,6 +92,9 @@ export async function createTerritoryGrid(
     }
     validSeeds.push(seed);
   }
+  if (validSeeds.length === 0) {
+    return { width: rasterWidth, height: rasterHeight, nation, colors };
+  }
 
   const maxDimension = Math.max(rasterWidth, rasterHeight);
   let step = 1;
