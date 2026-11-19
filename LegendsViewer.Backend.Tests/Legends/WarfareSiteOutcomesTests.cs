@@ -462,6 +462,27 @@ public class WarfareSiteOutcomesTests
     }
 
     [TestMethod]
+    public void ConquestWithoutNamedCaptor_UsesRecordedOpponentInWar()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Site site = new([], world) { Id = 950, Name = "Unknown Captor Town" };
+        var conquest = new SiteConquered([P("id", "951")], world)
+        {
+            Site = site,
+            Attacker = null,
+            Defender = setup.Defender,
+            ConquerType = SiteConqueredType.Conquest
+        };
+
+        var outcomes = WarfareSiteOutcomesDto.FromConquerings(
+            [conquest], setup.Attacker, setup.Defender);
+        Assert.AreEqual(1, outcomes.AttackerGained.Count);
+        Assert.AreEqual(1, outcomes.DefenderLost.Count);
+        Assert.AreEqual(0, outcomes.Unattributed.Count);
+    }
+
+    [TestMethod]
     public void UnattributedConquest_IsNotSilentlyCreditedToEitherSide()
     {
         var setup = CreateWar();
