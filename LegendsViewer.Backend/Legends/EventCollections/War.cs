@@ -77,8 +77,20 @@ public class War : EventCollection, IHasComplexSubtype
 
         bool? attackerSide = KnownSide(attacker);
         bool? defenderSide = KnownSide(defender);
-        RegisterParticipant(attacker, attackerSide ?? (defenderSide.HasValue ? !defenderSide.Value : null));
-        RegisterParticipant(defender, defenderSide ?? (attackerSide.HasValue ? !attackerSide.Value : null));
+        bool? inferredAttackerSide = attackerSide;
+        bool? inferredDefenderSide = defenderSide;
+
+        if (!attackerSide.HasValue && defenderSide.HasValue)
+        {
+            inferredAttackerSide = !defenderSide.Value;
+        }
+        if (!defenderSide.HasValue && attackerSide.HasValue)
+        {
+            inferredDefenderSide = !attackerSide.Value;
+        }
+
+        RegisterParticipant(attacker, inferredAttackerSide);
+        RegisterParticipant(defender, inferredDefenderSide);
     }
 
     public void RegisterParticipant(Entity? participant, bool? attackingSide = null)
