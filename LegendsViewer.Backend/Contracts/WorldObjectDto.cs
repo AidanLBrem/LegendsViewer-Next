@@ -3,10 +3,6 @@ using LegendsViewer.Backend.Legends.EventCollections;
 
 namespace LegendsViewer.Backend.Contracts;
 
-/// <summary>
-/// Lightweight row for the shared paginated overview tables.
-/// Warfare-only numeric columns are null on other world object types.
-/// </summary>
 public class WorldObjectDto
 {
     public WorldObjectDto(WorldObject worldObject, DwarfObject? pointOfView = null)
@@ -21,30 +17,21 @@ public class WorldObjectDto
         EventCount = worldObject.EventCount;
         EventCollectionCount = worldObject.EventCollectionCount;
 
-        WarfareSiteOutcomesDto? sites = null;
-        if (worldObject is Battle battle)
-        {
-            DeathCount = battle.DeathCount;
-            AttackerDeathCount = battle.AttackerDeathCount;
-            DefenderDeathCount = battle.DefenderDeathCount;
-            sites = battle.SiteOutcomes;
-        }
-        else if (worldObject is War war)
+        // Add numeric fields to the paginated row, instead of returning only
+        // the full detail object. Unrelated object types leave them null.
+        if (worldObject is War war)
         {
             DeathCount = war.DeathCount;
             AttackerDeathCount = war.AttackerDeathCount;
             DefenderDeathCount = war.DefenderDeathCount;
-            sites = war.SiteOutcomes;
+            SetSiteCounts(war.SiteOutcomes);
         }
-
-        if (sites != null)
+        else if (worldObject is Battle battle)
         {
-            AttackerSitesGained = sites.AttackerGained.Count;
-            AttackerSitesLost = sites.AttackerLost.Count;
-            AttackerSitesPlundered = sites.AttackerPlundered.Count;
-            DefenderSitesGained = sites.DefenderGained.Count;
-            DefenderSitesLost = sites.DefenderLost.Count;
-            DefenderSitesPlundered = sites.DefenderPlundered.Count;
+            DeathCount = battle.DeathCount;
+            AttackerDeathCount = battle.AttackerDeathCount;
+            DefenderDeathCount = battle.DefenderDeathCount;
+            SetSiteCounts(battle.SiteOutcomes);
         }
     }
 
@@ -61,10 +48,21 @@ public class WorldObjectDto
     public int? DeathCount { get; set; }
     public int? AttackerDeathCount { get; set; }
     public int? DefenderDeathCount { get; set; }
+
     public int? AttackerSitesGained { get; set; }
     public int? AttackerSitesLost { get; set; }
     public int? AttackerSitesPlundered { get; set; }
     public int? DefenderSitesGained { get; set; }
     public int? DefenderSitesLost { get; set; }
     public int? DefenderSitesPlundered { get; set; }
+
+    private void SetSiteCounts(WarfareSiteOutcomesDto sites)
+    {
+        AttackerSitesGained = sites.AttackerGained.Count;
+        AttackerSitesLost = sites.AttackerLost.Count;
+        AttackerSitesPlundered = sites.AttackerPlundered.Count;
+        DefenderSitesGained = sites.DefenderGained.Count;
+        DefenderSitesLost = sites.DefenderLost.Count;
+        DefenderSitesPlundered = sites.DefenderPlundered.Count;
+    }
 }
