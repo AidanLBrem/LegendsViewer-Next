@@ -22,6 +22,50 @@ describe('historical atlas political influence', () => {
     }
   );
 
+  it('carries elven influence through a wooded pass and leaves the solid ridge to dwarves', async () => {
+    const width = 28, height = 17;
+    const tiles = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) tiles.fill(1, y * width + 7, y * width + 12);
+    const seeds = [
+      { x: 4.5, y: 8.5, nationId: 1, siteName: 'Grove', color: '#080', race: 'Elf', population: 10000 },
+      { x: 15.5, y: 8.5, nationId: 2, siteName: 'Hold', color: '#888', race: 'Dwarf', population: 10000 },
+    ];
+    const draw = () => createTerritoryGrid(width, height, seeds, undefined, undefined, undefined, undefined, tiles);
+    const shoulder = 5 * width + 9; // Still mountain, one row beyond the pass.
+    expect((await draw())!.nation[shoulder]).toBe(2);
+    tiles.fill(2, 6 * width + 7, 6 * width + 12);
+    const grid = (await draw())!;
+    expect(grid.nation[shoulder]).toBe(1);
+    expect(grid.nation[8 * width + 9]).toBe(2);
+    const e = grid.evidence!;
+    expect(e.seeds[e.strongestSeed[shoulder]].siteName).toBe('Grove');
+    expect(e.runner[shoulder]).toBe(2);
+    expect(e.strength[shoulder]).toBeGreaterThan(e.runnerStrength[shoulder]);
+  });
+
+  it('shows the strongest rival when recorded site ownership overrides its score', async () => {
+    const grid = (await createTerritoryGrid(16, 16, [
+      { x: 7, y: 7, nationId: 1, siteName: 'Camp', color: '#888' },
+      { x: 8, y: 7, nationId: 2, siteName: 'Capital', color: '#080', population: 100000 },
+    ], undefined, undefined, undefined, undefined, new Uint8Array(256)))!;
+    const cell = 7 * 16 + 7, e = grid.evidence!;
+    expect(grid.nation[cell]).toBe(1);
+    expect(e.anchors[cell]).toBe(1);
+    expect(e.seeds[e.strongestSeed[cell]].siteName).toBe('Camp');
+    expect(e.runner[cell]).toBe(2);
+    expect(e.runnerStrength[cell]).toBeGreaterThan(e.strength[cell]);
+  });
+
+  it('routes around a lake but cannot cut a diagonal gap between water tiles', async () => {
+    const terrain = new Uint8Array(100);
+    const seed = { x: 0, y: 0, nationId: 3, color: '#444' };
+    const draw = () => createTerritoryGrid(10, 10, [seed], undefined, undefined, undefined, undefined, terrain);
+    terrain[1] = 10;
+    expect((await draw())!.nation[2]).toBe(3);
+    terrain[10] = 4;
+    expect((await draw())!.nation[11]).toBe(-1);
+  });
+
   it('colors nearby cells by the closest dated settlement, not global factions', async () => {
     const grid = await createTerritoryGrid(32, 32, [
       { x: 5, y: 5, nationId: 10, color: '#ff0000' },
