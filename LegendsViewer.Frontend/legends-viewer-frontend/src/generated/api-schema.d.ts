@@ -15944,17 +15944,17 @@ export interface components {
             /** Format: int32 */
             defenderDeathCount?: number | null;
             /** Format: int32 */
-            attackerSitesGained?: number | null;
+            attackerSitesGainedCount?: number | null;
             /** Format: int32 */
-            attackerSitesLost?: number | null;
+            attackerSitesLostCount?: number | null;
             /** Format: int32 */
-            attackerSitesPlundered?: number | null;
+            attackerSitesPlunderedCount?: number | null;
             /** Format: int32 */
-            defenderSitesGained?: number | null;
+            defenderSitesGainedCount?: number | null;
             /** Format: int32 */
-            defenderSitesLost?: number | null;
+            defenderSitesLostCount?: number | null;
             /** Format: int32 */
-            defenderSitesPlundered?: number | null;
+            defenderSitesPlunderedCount?: number | null;
         };
         WorldObjectDtoPaginatedResponse: {
             items?: components["schemas"]["WorldObjectDto"][] | null;
