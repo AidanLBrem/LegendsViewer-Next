@@ -52,6 +52,11 @@ public class BattleCasualtyTests
         Assert.AreEqual(32, battle.DefendersRemainingCount);
         Assert.AreEqual(128, battle.DeathCount);
         Assert.AreEqual(128, battle.DeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(120, battle.AttackerDeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(8, battle.DefenderDeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(battle.DeathCount,
+            battle.AttackerDeathsByRace.Datasets.Single().Data.Sum() +
+            battle.DefenderDeathsByRace.Datasets.Single().Data.Sum());
         Assert.AreEqual(128, war.DeathCount);
         Assert.AreEqual(war.AttackerDeathCount + war.DefenderDeathCount, war.DeathCount);
         Assert.AreEqual(128, war.DeathsByRace.Datasets.Single().Data.Sum());
@@ -83,6 +88,8 @@ public class BattleCasualtyTests
         Assert.AreEqual(-1, battle.AttackerSquads.Single().Population);
         Assert.AreEqual(10, battle.DeathCount);
         Assert.AreEqual(10, battle.DeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(7, battle.AttackerDeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(3, battle.DefenderDeathsByRace.Datasets.Single().Data.Sum());
         Assert.AreEqual(10, war.DeathCount);
         Assert.AreEqual(0, war.AttackerBattleVictories.Count);
         Assert.AreEqual(1, war.DefenderBattleVictories.Count);
