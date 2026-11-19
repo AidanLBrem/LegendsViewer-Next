@@ -110,9 +110,30 @@ export interface WarMapOverlayDto {
     battleIds?: number[];
 }
 
+export interface SiteConquestMapMarkerDto {
+    id: number;
+    siteId: number;
+    siteName: string;
+    siteLink?: string;
+    link?: string;
+    outcome: string;
+    year: number;
+    attackerId?: number;
+    attackerName?: string;
+    attackerLink?: string;
+    attackerColor?: string;
+    defenderId?: number;
+    defenderName?: string;
+    defenderLink?: string;
+    warId?: number;
+    battleId?: number;
+    coordinates?: LocationDto;
+}
+
 export interface WarfareMapDto {
     wars: WarMapOverlayDto[];
     battles: BattleMapMarkerDto[];
+    siteConquests?: SiteConquestMapMarkerDto[];
 }
 
 
