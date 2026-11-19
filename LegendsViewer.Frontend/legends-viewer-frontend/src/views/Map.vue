@@ -69,11 +69,67 @@
         Shaded territory is estimated from settlement locations, not exact borders.
       </small>
     </section>
+    <section v-if="historyReady && nationOptions.length" class="nation-expansion-panel"
+      aria-label="Historical territorial expansion">
+      <button type="button" class="map-panel-toggle" :aria-expanded="nationExpansionExpanded"
+        aria-controls="nation-expansion-details" @click="nationExpansionExpanded = !nationExpansionExpanded">
+        <strong>Territorial expansion</strong>
+        <span aria-hidden="true">{{ nationExpansionExpanded ? '▾' : '▸' }}</span>
+      </button>
+      <div id="nation-expansion-details" v-show="nationExpansionExpanded" class="nation-expansion-panel__body">
+        <label for="nation-expansion-selector">Civilization or faction</label>
+        <select id="nation-expansion-selector" v-model.number="selectedNationId">
+          <option v-for="nation in nationOptions" :key="nation.id" :value="nation.id">
+            {{ nation.name }}
+          </option>
+        </select>
+        <div class="nation-expansion-panel__metrics">
+          <div><span>Owned sites in year {{ selectedYear }}</span>
+            <strong>{{ nationSnapshot?.sites ?? 0 }}</strong></div>
+          <div><span>Estimated land tiles</span>
+            <strong>{{ selectedNationArea == null ? '—' : selectedNationArea.toLocaleString() }}</strong></div>
+          <div><span>Peak owned sites</span>
+            <strong>{{ nationHistory?.peakSites ?? 0 }} (year {{ nationHistory?.peakYear ?? 0 }})</strong></div>
+          <div><span>Sites gained since year 0</span>
+            <strong>+{{ nationSnapshot?.totalGained ?? 0 }}</strong></div>
+          <div><span>Sites lost since year 0</span>
+            <strong>−{{ nationSnapshot?.totalLost ?? 0 }}</strong></div>
+        </div>
+        <div v-if="nationSnapshot && (nationSnapshot.gained || nationSnapshot.lost)"
+          class="nation-expansion-panel__change">
+          Year {{ nationSnapshot.year }}: +{{ nationSnapshot.gained }} gained,
+          −{{ nationSnapshot.lost }} lost
+        </div>
+        <div class="nation-expansion-panel__navigation">
+          <button type="button" @click="jumpToNationChange(-1)">Previous change</button>
+          <button type="button" @click="jumpToNationPeak">Peak</button>
+          <button type="button" @click="jumpToNationChange(1)">Next change</button>
+        </div>
+        <div class="nation-expansion-panel__chart-heading">
+          <strong>Historical site ownership</strong>
+          <span>Peak: {{ nationHistory?.peakSites ?? 0 }}</span>
+        </div>
+        <svg viewBox="0 0 320 110" preserveAspectRatio="none" role="img"
+          :aria-label="'Owned settlements by year for ' + (selectedNation?.name ?? 'selected nation')">
+          <line x1="10" y1="100" x2="310" y2="100" stroke="currentColor" opacity="0.3" />
+          <path :d="nationChartPath" fill="none" stroke="#7895f2" stroke-width="2.5"
+            stroke-linejoin="round" />
+          <line :x1="nationChartCursor" y1="7" :x2="nationChartCursor" y2="103"
+            stroke="currentColor" stroke-width="1.3" stroke-dasharray="3 3" opacity="0.75" />
+        </svg>
+        <div class="nation-expansion-panel__axis">
+          <span>Year 0</span><span>Year {{ historyMaxYear }}</span>
+        </div>
+        <small>Site counts come from recorded ownership changes. Land area is an estimate
+          based on the map's connected, ocean-clipped influence model; no historical
+          population is inferred.</small>
+      </div>
+    </section>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, watch, ref, shallowRef, toRaw, onBeforeUnmount, type Ref } from 'vue';
+import { computed, defineComponent, onMounted, watch, ref, shallowRef, toRaw, onBeforeUnmount, type Ref } from 'vue';
 import { useRouter, useRoute, type Router } from 'vue-router';
 import { useWorldStore } from '../stores/worldStore';
 import { useWorldMapStore } from '../stores/mapStore';
@@ -105,6 +161,14 @@ import {
   type SiteWithOwnershipHistory,
 } from '../utils/siteHistory';
 import { isSiteTypeVisible } from '../utils/siteVisibility';
+import {
+  buildNationExpansionHistory,
+  listHistoricalNations,
+  nationExpansionAtYear,
+  nationExpansionChartPath,
+  type NationExpansionHistory,
+  type NationOption,
+} from '../utils/nationExpansion';
 
 export type SiteType = components['schemas']['SiteType'];
 type SiteMarker = components['schemas']['SiteMarkerDto'] & SiteWithOwnershipHistory;
@@ -1072,6 +1136,31 @@ export default defineComponent({
     const selectedYear = ref(0);
     const historyPlaying = ref(false);
     const historyBusy = ref(false);
+    const nationExpansionExpanded = ref(true);
+    const nationOptions = ref<NationOption[]>([]);
+    const selectedNationId = ref(-1);
+    const nationHistory = shallowRef<NationExpansionHistory | null>(null);
+    const territoryLandTiles = shallowRef(new Map<number, number>());
+    const selectedNation = computed(() =>
+      nationOptions.value.find(nation => nation.id === selectedNationId.value));
+    const nationSnapshot = computed(() =>
+      nationHistory.value ? nationExpansionAtYear(nationHistory.value, selectedYear.value) : null);
+    const selectedNationArea = computed(() =>
+      territoryLandTiles.value.get(selectedNationId.value) ?? null);
+    const nationChartPath = computed(() =>
+      nationHistory.value ? nationExpansionChartPath(nationHistory.value, historyMaxYear.value) : '');
+    const nationChartCursor = computed(() =>
+      10 + 300 * selectedYear.value / Math.max(1, historyMaxYear.value));
+
+    watch(selectedNationId, id => {
+      if (id < 0 || !worldStore.world) {
+        nationHistory.value = null;
+        return;
+      }
+      nationHistory.value = buildNationExpansionHistory(
+        toRaw(worldStore.world.siteMarkers ?? []) as SiteMarker[], id, historyMaxYear.value);
+    });
+
     let ownershipChangeYears: number[] = [];
     let historyTimer: ReturnType<typeof setInterval> | null = null;
     let historyUpdateGeneration = 0;
@@ -1142,6 +1231,23 @@ export default defineComponent({
       selectedYear.value = historyMaxYear.value;
     };
 
+    const jumpToNationPeak = () => {
+      if (!nationHistory.value?.peakSites) return;
+      stopHistoryPlayback();
+      selectedYear.value = nationHistory.value.peakYear;
+    };
+
+    const jumpToNationChange = (direction: -1 | 1) => {
+      const points = nationHistory.value?.points ?? [];
+      const changes = points.filter(point => point.gained > 0 || point.lost > 0);
+      const next = direction === 1
+        ? changes.find(point => point.year > selectedYear.value)
+        : [...changes].reverse().find(point => point.year < selectedYear.value);
+      if (!next) return;
+      stopHistoryPlayback();
+      selectedYear.value = next.year;
+    };
+
     const onHistorySliderInput = (event: Event) => {
       stopHistoryPlayback();
       selectedYear.value = Math.max(0, Math.min(historyMaxYear.value,
@@ -1193,6 +1299,7 @@ export default defineComponent({
         clearTerritoryTip();
         activeTerritoryGrid = null;
         activeTerritoryOwners.clear();
+        territoryLandTiles.value = new Map();
         territorySnapshotKey = '';
         return;
       }
@@ -1205,6 +1312,7 @@ export default defineComponent({
         clearTerritoryTip();
         activeTerritoryGrid = null;
         activeTerritoryOwners.clear();
+        territoryLandTiles.value = new Map();
         return;
       }
       const year = selectedYear.value;
@@ -1252,6 +1360,20 @@ export default defineComponent({
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
       const image = territoryGridToDataUrl(grid, oceanMask, width, height, showBorderLines.value);
+      // Count world tiles rather than downsampled raster cells, so the
+      // selected year's area never includes ocean or unanchored claims.
+      const landTiles = new Map<number, number>();
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const id = getTerritoryNationAtTile(grid, width, height, x, y, oceanMask);
+          if (id != null) landTiles.set(id, (landTiles.get(id) ?? 0) + 1);
+        }
+        if (y % 32 === 31) {
+          await yieldToBrowser();
+          if (disposed || generation !== historyUpdateGeneration) return;
+        }
+      }
+      territoryLandTiles.value = landTiles;
       clearTerritoryTip();
       activeTerritoryGrid = grid;
       activeTerritoryOwners = ownerLinks;
@@ -1735,6 +1857,7 @@ export default defineComponent({
       }
 
       const territory = getNominalControllerAtTile(tileX, tileY);
+      if (territory?.ownerId != null) selectedNationId.value = territory.ownerId;
       if (items.length === 0 && !territory) return;
       L.popup({ minWidth: 220 })
         .setLatLng(items.length ? toLatLng(selectedX, selectedY) : event.latlng)
@@ -2039,6 +2162,9 @@ export default defineComponent({
         clearTerritoryTip();
         activeTerritoryGrid = null;
         activeTerritoryOwners.clear();
+        territoryLandTiles.value = new Map();
+        nationOptions.value = [];
+        nationHistory.value = null;
         if (historicalWarfareLayer.value) {
           leafletMap.value.removeLayer(historicalWarfareLayer.value);
           historicalWarfareLayer.value.clearLayers();
@@ -2092,6 +2218,10 @@ export default defineComponent({
         // thousands of exported sites and polygon coordinates.
         const markers = toRaw(worldStore.world.siteMarkers ?? []) as SiteMarker[];
         necromancerNationIds = getNecromancerNationIds(markers);
+        nationOptions.value = listHistoricalNations(markers, historyMaxYear.value);
+        selectedNationId.value = nationOptions.value[0]?.id ?? -1;
+        nationHistory.value = selectedNationId.value < 0 ? null :
+          buildNationExpansionHistory(markers, selectedNationId.value, historyMaxYear.value);
         territoryChangeYears = getOwnershipChangeYears(markers, historyMaxYear.value);
         ownershipChangeYears = [...territoryChangeYears];
 
@@ -2250,8 +2380,19 @@ export default defineComponent({
       stepHistoryYear,
       jumpToHistoryChange,
       goToPresent,
+      jumpToNationPeak,
+      jumpToNationChange,
       onHistorySliderInput,
       toggleHistoryPlayback,
+      nationExpansionExpanded,
+      nationOptions,
+      selectedNationId,
+      selectedNation,
+      nationHistory,
+      nationSnapshot,
+      selectedNationArea,
+      nationChartPath,
+      nationChartCursor,
     };
   },
 });
@@ -2437,6 +2578,84 @@ export default defineComponent({
   margin-top: 4px;
 }
 
+.nation-expansion-panel {
+  position: absolute;
+  right: 12px;
+  bottom: 154px;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: min(290px, calc(100% - 24px));
+  padding: 9px 12px;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  border-radius: 5px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+}
+.nation-expansion-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.nation-expansion-panel select {
+  width: 100%;
+  padding: 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: rgb(var(--v-theme-background));
+  color: inherit;
+}
+.nation-expansion-panel__metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.nation-expansion-panel__metrics > div,
+.nation-expansion-panel__chart-heading,
+.nation-expansion-panel__axis {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.nation-expansion-panel__metrics strong {
+  text-align: right;
+}
+.nation-expansion-panel__change {
+  opacity: 0.85;
+}
+.nation-expansion-panel__navigation {
+  display: flex;
+  gap: 4px;
+}
+.nation-expansion-panel__navigation button {
+  flex: 1;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 4px 2px;
+  background: rgb(var(--v-theme-background));
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+.nation-expansion-panel__navigation button:hover {
+  filter: brightness(1.15);
+}
+.nation-expansion-panel svg {
+  display: block;
+  width: 100%;
+  height: 90px;
+}
+.nation-expansion-panel__axis {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.nation-expansion-panel small {
+  font-size: 10px;
+  opacity: 0.75;
+}
 .map-progress {
   position: absolute;
   bottom: 20px;
