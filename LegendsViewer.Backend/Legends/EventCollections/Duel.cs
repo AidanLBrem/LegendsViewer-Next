@@ -45,8 +45,10 @@ public class Duel : EventCollection
                 War? parentWar = battle?.ParentCollection as War;
                 if (battle != null && battle.NotableAttackers.Contains(death.HistoricalFigure))
                 {
+                    Battle.Squad squad = FindCombatantSquad(
+                        battle.Attackers, death.HistoricalFigure, battle);
                     battle.AttackerDeathCount++;
-                    battle.Attackers.Single(squad => squad.Race == death.HistoricalFigure.Race).Deaths++;
+                    squad.Deaths++;
 
                     if (parentWar != null)
                     {
@@ -55,8 +57,10 @@ public class Duel : EventCollection
                 }
                 else if (battle != null && battle.NotableDefenders.Contains(death.HistoricalFigure))
                 {
+                    Battle.Squad squad = FindCombatantSquad(
+                        battle.Defenders, death.HistoricalFigure, battle);
                     battle.DefenderDeathCount++;
-                    battle.Defenders.Single(squad => squad.Race == death.HistoricalFigure.Race).Deaths++;
+                    squad.Deaths++;
                     if (parentWar != null)
                     {
                         parentWar.DefenderDeathCount++;
@@ -75,6 +79,17 @@ public class Duel : EventCollection
         Name = $"{Formatting.AddOrdinal(Ordinal)} duel";
 
         Icon = HtmlStyleUtil.GetIconString("fencing");
+    }
+
+    private static Battle.Squad FindCombatantSquad(
+        IEnumerable<Battle.Squad> squads, HistoricalFigure figure, Battle battle)
+    {
+        bool undead = battle.IsUndeadCombatant(figure);
+        return squads.SingleOrDefault(squad =>
+            squad.Race == figure.Race && squad.Animated == undead)
+            ?? throw new InvalidOperationException(
+                $"Unable to attribute duel death of figure {figure.Id} in battle {battle.Id}: " +
+                $"no {(undead ? "undead" : "living")} {figure.Race.NameSingular} squad was found.");
     }
 
     public override string ToLink(bool link = true, DwarfObject? pov = null, WorldEvent? worldEvent = null)
