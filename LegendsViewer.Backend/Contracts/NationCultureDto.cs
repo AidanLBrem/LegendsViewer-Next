@@ -1,3 +1,4 @@
+using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.WorldObjects;
 
@@ -24,6 +25,8 @@ public sealed class NationCulturePeriodDto
     public int PeaceAgreements { get; set; }
     public int Alliances { get; set; }
     public int InternalUpheavals { get; set; }
+    public int HarshEdictsIssued { get; set; }
+    public int HarshEdictsRevoked { get; set; }
     public double ExpansionPerCentury { get; set; }
     public double OffensiveOperationsPerCentury { get; set; }
     public double PlundersPerCentury { get; set; }
@@ -125,6 +128,13 @@ public sealed class NationCultureProfileDto
         {
             switch (entry)
             {
+                case EntityCreated founded when SameNation(founded.Entity, nation):
+                    Add(entry.Year, "origin", "Civilization founded");
+                    break;
+                case EntityLaw law when SameNation(law.Entity, nation) && law.Law == EntityLawType.Harsh:
+                    Add(entry.Year, law.LawLaid ? "harshLaw" : "lawRepealed",
+                        law.LawLaid ? "Harsh edicts issued" : "Harsh edicts repealed");
+                    break;
                 case AttackedSite attack:
                     if (SameNation(attack.Attacker, nation))
                     {
@@ -214,7 +224,7 @@ public sealed class NationCultureProfileDto
                             ? "Defensively engaged"
                             : peace + alliances >= 2 && peace + alliances >= offense
                                 ? "Diplomatically active"
-                                : entries.Count > 0
+                                : entries.Any(f => f.Category != "origin")
                                     ? "Mixed recorded activity"
                                     : "Insufficient recorded activity";
             return new NationCulturePeriodDto
@@ -236,6 +246,8 @@ public sealed class NationCultureProfileDto
                 PeaceAgreements = peace,
                 Alliances = alliances,
                 InternalUpheavals = upheavals,
+                HarshEdictsIssued = Count("harshLaw"),
+                HarshEdictsRevoked = Count("lawRepealed"),
                 ExpansionPerCentury = Rate(conquests + settlements),
                 OffensiveOperationsPerCentury = Rate(offense),
                 PlundersPerCentury = Rate(plunders),
