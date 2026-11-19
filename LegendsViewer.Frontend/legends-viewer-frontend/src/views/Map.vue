@@ -30,7 +30,7 @@
       </div>
       <div v-if="historicalStatus" class="text-caption" role="status">{{ historicalStatus }}</div>
       <div class="history-stepper__actions">
-        <button type="button" title="Previous ownership change" aria-label="Previous ownership change"
+        <button type="button" title="Previous recorded event" aria-label="Previous recorded event"
           :disabled="selectedYear <= 0" @click="jumpToHistoryChange(-1)">⏮</button>
         <button type="button" title="Previous year" aria-label="Previous year"
           :disabled="selectedYear <= 0" @click="stepHistoryYear(-1)">−1</button>
@@ -40,7 +40,7 @@
         </button>
         <button type="button" title="Next year" aria-label="Next year"
           :disabled="selectedYear >= historyMaxYear" @click="stepHistoryYear(1)">+1</button>
-        <button type="button" title="Next ownership change" aria-label="Next ownership change"
+        <button type="button" title="Next recorded event" aria-label="Next recorded event"
           :disabled="selectedYear >= historyMaxYear" @click="jumpToHistoryChange(1)">⏭</button>
         <button type="button" title="Return to the latest year" aria-label="Return to present"
           :disabled="selectedYear >= historyMaxYear" @click="goToPresent">Present</button>
@@ -984,6 +984,7 @@ export default defineComponent({
     let historicalDataLoading = false;
     let territorySnapshotKey = '';
     let territoryChangeYears: number[] = [];
+    let ownerVisibilityVersion = 0;
 
     const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
@@ -1080,7 +1081,7 @@ export default defineComponent({
       if (!width || !height) return;
       const year = selectedYear.value;
       const key = [
-        territoryBoundaryYear(year),
+        territoryBoundaryYear(year), ownerVisibilityVersion,
         showMonasteries.value, showCamps.value, showCaves.value
       ].join(':');
       if (key === territorySnapshotKey && territoryOverlay.value) {
@@ -1091,7 +1092,11 @@ export default defineComponent({
       const sites = toRaw(worldStore.world?.siteMarkers ?? []) as SiteMarker[];
       const seeds = getTerritorySeeds(
         sites, year, historyMaxYear.value,
-        site => siteTypeIsVisible(site as SiteMarker)
+        site => {
+          const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
+          const layer = ownerLayers[owner.ownerText];
+          return siteTypeIsVisible(site as SiteMarker) && !!layer && map.hasLayer(layer);
+        }
       );
       const grid = await createTerritoryGrid(
         width, height, seeds, yieldToBrowser,
@@ -1424,6 +1429,8 @@ export default defineComponent({
             // Add the all/none control only after map initialization.
             addCustomControl(leafletMap.value, ownerLayers, warfareLayer as any, () => {
               syncTileBadges();
+              ownerVisibilityVersion++;
+              void applyHistoryYear();
               if (warfareLayer.value && leafletMap.value?.hasLayer(warfareLayer.value)) {
                 void loadWarfareOverlay();
               }
@@ -1913,7 +1920,11 @@ export default defineComponent({
         // mounted at once, so the layer chooser never needs an arbitrary cap.
         controlLayers.value = createOwnerLayerControl(
           leafletMap.value, ownerLayers, warfareLayer.value,
-          syncTileBadges,
+          () => {
+            syncTileBadges();
+            ownerVisibilityVersion++;
+            void applyHistoryYear();
+          },
           () => { void loadWarfareOverlay(); }
         );
 
