@@ -3,6 +3,7 @@ using System.Reflection;
 using LegendsViewer.Backend.Contracts;
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.Parser;
+using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.Various;
 using LegendsViewer.Backend.Legends.WorldObjects;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -200,6 +201,39 @@ public class NationSiteColorTests
         CollectionAssert.AreEqual(new List<int> { 80 }, marker.DestroyedYears);
         Assert.AreEqual("abandoned", marker.OwnerHistory[0].EndCause);
         Assert.AreEqual("destroyed", marker.OwnerHistory[1].EndCause);
+    }
+
+    [TestMethod]
+    public void SiteMarker_UsesExplicitCreatedAndDestroyedSiteEvents()
+    {
+        using World world = new();
+        var owner = new Entity([], world)
+        {
+            Id = 360, Name = "The Builders", IsCiv = true
+        };
+        var site = new Site([], world)
+        {
+            Id = 361, Name = "A Settlement"
+        };
+        world.Entities.Add(owner);
+        world.Sites.Add(site);
+
+        _ = new CreatedSite([
+            new Property { Name = "id", Value = "362" },
+            new Property { Name = "year", Value = "12" },
+            new Property { Name = "site_id", Value = "361" },
+            new Property { Name = "civ_id", Value = "360" },
+        ], world);
+        _ = new DestroyedSite([
+            new Property { Name = "id", Value = "363" },
+            new Property { Name = "year", Value = "55" },
+            new Property { Name = "site_id", Value = "361" },
+        ], world);
+
+        var marker = new SiteMarkerDto(site);
+        Assert.AreEqual(12, marker.CreatedYear);
+        CollectionAssert.AreEqual(new List<int> { 55 }, marker.DestroyedYears);
+        Assert.AreEqual("destroyed", marker.OwnerHistory.Last().EndCause);
     }
 
     [TestMethod]
