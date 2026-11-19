@@ -286,6 +286,13 @@ public class Entity : WorldObject, IHasCoordinates
     {
         get
         {
+            // A civilization stays its own nation even if its parent field
+            // happens to reference another organization.
+            if (IsCiv)
+            {
+                return this;
+            }
+
             Entity nation = this;
             HashSet<Entity> visited = [this];
             while (nation.Parent is Entity parent && visited.Add(parent))
