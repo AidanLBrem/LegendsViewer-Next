@@ -5,7 +5,7 @@ import {
     type NationCulturePeriod, type NationCultureSummary
 } from '../types/nationCulture';
 
-type RateKey = 'expansionPerCentury' | 'offensiveOperationsPerCentury' |
+type RateKey = 'settlementExpansionPerCentury' | 'conquestPerCentury' | 'offensiveOperationsPerCentury' |
     'plundersPerCentury' | 'diplomacyPerCentury' | 'upheavalsPerCentury';
 type SortKey = RateKey | 'name' | 'currentSites';
 type CultureRow = NationCultureSummary & { period: NationCulturePeriod };
@@ -15,11 +15,12 @@ const loading = ref(false);
 const error = ref('');
 const search = ref('');
 const windowYears = ref(100);
-const sortKey = ref<SortKey>('expansionPerCentury');
+const sortKey = ref<SortKey>('settlementExpansionPerCentury');
 const descending = ref(true);
 
 const rateColumns: { key: RateKey; title: string }[] = [
-    { key: 'expansionPerCentury', title: 'Expansion' },
+    { key: 'settlementExpansionPerCentury', title: 'Expansion' },
+    { key: 'conquestPerCentury', title: 'Conquest' },
     { key: 'offensiveOperationsPerCentury', title: 'Offense' },
     { key: 'plundersPerCentury', title: 'Plunder' },
     { key: 'diplomacyPerCentury', title: 'Diplomacy' },
@@ -80,7 +81,7 @@ onMounted(async () => {
                 </v-row>
                 <div class="text-caption text-medium-emphasis mb-3">
                     Rates are recorded actions per 100 observed years, not official cultural values.
-                    Click a header to sort all civilizations. Expansion includes conquest and settlement, not reclamation.
+                    Click a header to sort all civilizations. Expansion = founded settlements; Conquest = captured sites. Reclamations are excluded from both.
                 </div>
                 <v-progress-linear v-if="loading" color="primary" indeterminate />
                 <v-alert v-else-if="error" type="warning" variant="tonal" :text="error" />
@@ -121,7 +122,7 @@ onMounted(async () => {
                                 </td>
                             </tr>
                             <tr v-if="sortedNations.length === 0">
-                                <td colspan="8" class="text-medium-emphasis">No matching civilizations.</td>
+                                <td colspan="9" class="text-medium-emphasis">No matching civilizations.</td>
                             </tr>
                         </tbody>
                     </v-table>
