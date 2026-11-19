@@ -983,6 +983,7 @@ export default defineComponent({
     let historicalWarfareData: WarfareMapDto | null = null;
     let historicalDataLoading = false;
     let territorySnapshotKey = '';
+    let oceanMask: Uint8Array | null = null;
     let territoryChangeYears: number[] = [];
     let ownerVisibilityVersion = 0;
 
@@ -1078,7 +1079,10 @@ export default defineComponent({
 
       const width = worldStore.world?.width ?? 0;
       const height = worldStore.world?.height ?? 0;
-      if (!width || !height) return;
+      if (!width || !height || !oceanMask) {
+        if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
+        return;
+      }
       const year = selectedYear.value;
       const key = [
         territoryBoundaryYear(year), ownerVisibilityVersion,
@@ -1100,11 +1104,12 @@ export default defineComponent({
       );
       const grid = await createTerritoryGrid(
         width, height, seeds, yieldToBrowser,
-        () => disposed || generation !== historyUpdateGeneration || !showEstimatedTerritories.value
+        () => disposed || generation !== historyUpdateGeneration || !showEstimatedTerritories.value,
+        oceanMask
       );
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
-      const image = territoryGridToDataUrl(grid);
+      const image = territoryGridToDataUrl(grid, oceanMask, width, height);
       if (!territoryOverlay.value) {
         const bounds: L.LatLngBoundsExpression = [[0, 0], [height * 8, width * 8]];
         territoryOverlay.value = L.imageOverlay(image, bounds, {
@@ -1406,6 +1411,20 @@ export default defineComponent({
           mapError.value = 'World dimensions are unavailable. Try reloading the world.';
           return;
         }
+
+        // The terrain mask comes from the actual overworld region data,
+        // not from colors in the exported map image.
+        oceanMask = null;
+        const maskResponse = await fetch('http://localhost:15421/api/WorldMap/ocean-mask');
+        if (!maskResponse.ok) {
+          throw new Error('Unable to load the ocean terrain mask.');
+        }
+        const mask = new Uint8Array(await maskResponse.arrayBuffer());
+        if (mask.length !== Math.ceil(width * height / 8)) {
+          throw new Error('The ocean terrain mask does not match the loaded world.');
+        }
+        if (disposed) return;
+        oceanMask = mask;
 
         // The large map uses 10 px per world tile. Limit image dimensions
         // to avoid allocating hundreds of megabytes for large DF worlds.
