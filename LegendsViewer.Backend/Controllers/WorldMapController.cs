@@ -314,10 +314,18 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
     private static SiteConquestMapMarkerDto? CreateSiteConquestMapMarkerDto(SiteConquered outcome)
     {
         var site = outcome.Site;
-        if (site == null || site.Coordinates.Count == 0 || outcome.StartYear < 0)
+        if (site == null || site.Coordinates.Count == 0)
         {
             return null;
         }
+
+        // Some exports put the date on child events rather than the site
+        // conquest collection. Preserve those dated outcomes in playback.
+        int year = outcome.StartYear >= 0
+            ? outcome.StartYear
+            : outcome.Events.Where(e => e.Year >= 0)
+                .Select(e => e.Year).DefaultIfEmpty(-1).Min();
+        if (year < 0) return null;
 
         var parentWar = outcome.ParentCollection as War ?? outcome.Battle?.ParentCollection as War;
         var coord = site.Coordinates[0];
@@ -329,7 +337,7 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
             SiteLink = site.ToLink(true),
             Link = outcome.ToLink(true),
             Outcome = outcome.ConquerType.ToString(),
-            Year = outcome.StartYear,
+            Year = year,
             AttackerId = outcome.Attacker?.Id,
             AttackerName = outcome.Attacker?.Name ?? string.Empty,
             AttackerLink = outcome.Attacker?.ToLink(true),
