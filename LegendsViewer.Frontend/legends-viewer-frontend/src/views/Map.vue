@@ -1695,6 +1695,71 @@ export default defineComponent({
   cursor: pointer;
 }
 
+.history-stepper {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  box-sizing: border-box;
+  width: min(600px, calc(100% - 28px));
+  padding: 12px 16px;
+  border-radius: 7px;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+.history-stepper__title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.history-stepper__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+}
+.history-stepper__actions button {
+  min-width: 44px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 4px 9px;
+  cursor: pointer;
+  background: rgb(var(--v-theme-background));
+  color: inherit;
+  font-size: 12px;
+}
+.history-stepper__actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.history-stepper__actions button:not(:disabled):hover {
+  filter: brightness(1.15);
+}
+.history-stepper__range {
+  display: block;
+  margin-top: 10px;
+  width: 100%;
+  cursor: pointer;
+  accent-color: #7895f2;
+}
+.history-stepper__limits {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.history-stepper small {
+  display: block;
+  font-size: 10px;
+  opacity: 0.75;
+  text-align: center;
+  margin-top: 4px;
+}
+
 .map-progress {
   position: absolute;
   bottom: 20px;
