@@ -41,10 +41,10 @@ public class Battle : EventCollection, IHasComplexSubtype
     public List<Squad> AttackerSquads { get; set; } = [];
     [JsonIgnore]
     public List<Squad> DefenderSquads { get; set; } = [];
-    public int AttackerCount => NotableAttackers.Count + AttackerSquads.Sum(squad => squad.Numbers);
-    public int DefenderCount => NotableDefenders.Count + DefenderSquads.Sum(squad => squad.Numbers);
-    public int AttackersRemainingCount => Attackers.Sum(squad => squad.Numbers - squad.Deaths);
-    public int DefendersRemainingCount => Defenders.Sum(squad => squad.Numbers - squad.Deaths);
+    public int AttackerCount => NotableAttackers.Distinct().Count() + AttackerSquads.Sum(squad => squad.Numbers);
+    public int DefenderCount => NotableDefenders.Distinct().Count() + DefenderSquads.Sum(squad => squad.Numbers);
+    public int AttackersRemainingCount => Attackers.Sum(squad => Math.Max(0, squad.Numbers - squad.Deaths));
+    public int DefendersRemainingCount => Defenders.Sum(squad => Math.Max(0, squad.Numbers - squad.Deaths));
     public int DeathCount => AttackerDeathCount + DefenderDeathCount;
     [JsonIgnore]
     public Dictionary<CreatureInfo, int> Deaths { get; set; } = [];
@@ -77,61 +77,47 @@ public class Battle : EventCollection, IHasComplexSubtype
     }
 
     [JsonIgnore]
-    public List<HistoricalFigure> NotableDeaths => NotableAttackers
-        .Where(attacker => GetSubEvents().OfType<HfDied>().Any(death => death.HistoricalFigure == attacker))
-        .Concat(NotableDefenders.Where(defender => GetSubEvents().OfType<HfDied>().Any(death => death.HistoricalFigure == defender)))
-        .ToList();
+    public List<HistoricalFigure> NotableDeaths
+    {
+        get
+        {
+            HashSet<HistoricalFigure> deceased = GetSubEvents().OfType<HfDied>()
+                .Where(death => death.HistoricalFigure != null)
+                .Select(death => death.HistoricalFigure!)
+                .ToHashSet();
+            return NotableAttackers.Concat(NotableDefenders)
+                .Distinct().Where(deceased.Contains).ToList();
+        }
+    }
+
     public List<string> NotableDeathLinks => NotableDeaths.ConvertAll(x => x.ToLink(true, this));
+
     public ChartDataDto DeathsByRace
     {
         get
         {
-            Dictionary<CreatureInfo, int> deaths = [];
-
-            foreach (var notableDeath in NotableDeaths)
+            ChartDataDto chart = new();
+            ChartDatasetDto dataset = new();
+            foreach (var death in Deaths.Where(entry => entry.Value > 0).OrderByDescending(entry => entry.Value))
             {
-                if (deaths.TryGetValue(notableDeath.Race, out int deathCount))
-                {
-                    deaths[notableDeath.Race] = ++deathCount;
-                }
-                else
-                {
-                    deaths[notableDeath.Race] = 1;
-                }
-            }
-
-            foreach (var squad in AttackerSquads.Concat(DefenderSquads))
-            {
-                if (deaths.TryGetValue(squad.Race, out int deathCount))
-                {
-                    deaths[squad.Race] = deathCount + squad.Deaths;
-                }
-                else
-                {
-                    deaths[squad.Race] = squad.Deaths;
-                }
-            }
-            ChartDataDto deathsByRace = new();
-            ChartDatasetDto deathsByRaceDataset = new();
-            foreach (var death in deaths)
-            {
-                deathsByRace.Labels.Add(death.Key.NamePlural);
-                deathsByRaceDataset.Data.Add(death.Value);
+                chart.Labels.Add(death.Key.NamePlural);
+                dataset.Data.Add(death.Value);
                 if (World != null && World.MainRaces.TryGetValue(death.Key, out var raceColor))
                 {
-                    deathsByRaceDataset.BorderColor.Add(raceColor.ToRgbaString());
-                    deathsByRaceDataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
+                    dataset.BorderColor.Add(raceColor.ToRgbaString());
+                    dataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
                 }
                 else
                 {
-                    deathsByRaceDataset.BorderColor.Add(Color.SlateGray.ToRgbaString());
-                    deathsByRaceDataset.BackgroundColor.Add(Color.SlateGray.ToRgbaString(0.2f));
+                    dataset.BorderColor.Add(Color.SlateGray.ToRgbaString());
+                    dataset.BackgroundColor.Add(Color.SlateGray.ToRgbaString(0.2f));
                 }
             }
-            deathsByRace.Datasets.Add(deathsByRaceDataset);
-            return deathsByRace;
+            chart.Datasets.Add(dataset);
+            return chart;
         }
     }
+
     public int AttackerDeathCount { get; set; }
     public int DefenderDeathCount { get; set; }
     public double AttackersToDefenders
@@ -226,22 +212,22 @@ public class Battle : EventCollection, IHasComplexSubtype
                 case "attacking_squad_entity_pop": attackerSquadEntityPopulation.Add(Convert.ToInt32(property.Value)); break;
                 case "attacking_squad_number":
                     int attackerSquadNumber = Convert.ToInt32(property.Value);
-                    attackerSquadNumbers.Add(attackerSquadNumber < 0 || attackerSquadNumber > Squad.MAX_SIZE ? Squad.MAX_SIZE : attackerSquadNumber);
+                    attackerSquadNumbers.Add(Math.Max(0, attackerSquadNumber));
                     break;
                 case "attacking_squad_deaths":
                     int attackerSquadDeath = Convert.ToInt32(property.Value);
-                    attackerSquadDeaths.Add(attackerSquadDeath < 0 || attackerSquadDeath > Squad.MAX_SIZE ? Squad.MAX_SIZE : attackerSquadDeath);
+                    attackerSquadDeaths.Add(Math.Max(0, attackerSquadDeath));
                     break;
                 case "attacking_squad_site": attackerSquadSite.Add(Convert.ToInt32(property.Value)); break;
                 case "defending_squad_race": defenderSquadRaces.Add(world.GetCreatureInfo(property.Value)); break;
                 case "defending_squad_entity_pop": defenderSquadEntityPopulation.Add(Convert.ToInt32(property.Value)); break;
                 case "defending_squad_number":
                     int defenderSquadNumber = Convert.ToInt32(property.Value);
-                    defenderSquadNumbers.Add(defenderSquadNumber < 0 || defenderSquadNumber > Squad.MAX_SIZE ? Squad.MAX_SIZE : defenderSquadNumber);
+                    defenderSquadNumbers.Add(Math.Max(0, defenderSquadNumber));
                     break;
                 case "defending_squad_deaths":
                     int defenderSquadDeath = Convert.ToInt32(property.Value);
-                    defenderSquadDeaths.Add(defenderSquadDeath < 0 || defenderSquadDeath > Squad.MAX_SIZE ? Squad.MAX_SIZE : defenderSquadDeath);
+                    defenderSquadDeaths.Add(Math.Max(0, defenderSquadDeath));
                     break;
                 case "defending_squad_site": defenderSquadSite.Add(Convert.ToInt32(property.Value)); break;
                 case "noncom_hfid":
@@ -368,53 +354,36 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         for (int i = 0; i < attackerSquadRaces.Count; i++)
         {
-            AttackerSquads.Add(new Squad(attackerSquadRaces[i], attackerSquadNumbers[i], attackerSquadDeaths[i], attackerSquadSite[i], attackerSquadEntityPopulation[i]));
+            int number = attackerSquadNumbers.ElementAtOrDefault(i);
+            int deaths = Math.Min(number, attackerSquadDeaths.ElementAtOrDefault(i));
+            int site = i < attackerSquadSite.Count ? attackerSquadSite[i] : -1;
+            int population = i < attackerSquadEntityPopulation.Count ? attackerSquadEntityPopulation[i] : -1;
+            AttackerSquads.Add(new Squad(attackerSquadRaces[i], number, deaths, site, population));
         }
 
         for (int i = 0; i < defenderSquadRaces.Count; i++)
         {
-            DefenderSquads.Add(new Squad(defenderSquadRaces[i], defenderSquadNumbers[i], defenderSquadDeaths[i], defenderSquadSite[i], defenderSquadEntityPopulation[i]));
+            int number = defenderSquadNumbers.ElementAtOrDefault(i);
+            int deaths = Math.Min(number, defenderSquadDeaths.ElementAtOrDefault(i));
+            int site = i < defenderSquadSite.Count ? defenderSquadSite[i] : -1;
+            int population = i < defenderSquadEntityPopulation.Count ? defenderSquadEntityPopulation[i] : -1;
+            DefenderSquads.Add(new Squad(defenderSquadRaces[i], number, deaths, site, population));
         }
 
-        var groupedAttackerSquads = from squad in AttackerSquads
-                                    group squad by squad.Race into squadRace
-                                    select new { Race = squadRace.Key, Count = squadRace.Sum(squad => squad.Numbers), Deaths = squadRace.Sum(squad => squad.Deaths) };
-        foreach (var squad in groupedAttackerSquads)
-        {
-            int attackerSquadNumber = squad.Count + NotableAttackers.Count(attacker => attacker?.Race?.Id == squad.Race.Id);
-            int attackerSquadDeath = squad.Deaths + Events.OfType<HfDied>().Count(death => death.HistoricalFigure?.Race == squad.Race && NotableAttackers.Contains(death.HistoricalFigure));
-            Squad attackerSquad = new(squad.Race, attackerSquadNumber, attackerSquadDeath, -1, -1);
-            Attackers.Add(attackerSquad);
-        }
+        HashSet<HistoricalFigure> deceasedFigures = GetSubEvents().OfType<HfDied>()
+            .Where(death => death.HistoricalFigure != null)
+            .Select(death => death.HistoricalFigure!)
+            .ToHashSet();
 
-        foreach (var attacker in NotableAttackers.Where(hf => Attackers.Count(squad => squad.Race == hf.Race) == 0).GroupBy(hf => hf.Race).Select(race => new { Race = race.Key, Count = race.Count() }))
-        {
-            var attackerDeath = Events.OfType<HfDied>().Count(death => death.HistoricalFigure != null && NotableAttackers.Contains(death.HistoricalFigure) && death.HistoricalFigure.Race == attacker.Race);
-            Attackers.Add(new Squad(attacker.Race, attacker.Count, attackerDeath, -1, -1));
-        }
-
-        var groupedDefenderSquads = from squad in DefenderSquads
-                                    group squad by squad.Race into squadRace
-                                    select new { Race = squadRace.Key, Count = squadRace.Sum(squad => squad.Numbers), Deaths = squadRace.Sum(squad => squad.Deaths) };
-        foreach (var squad in groupedDefenderSquads)
-        {
-            int defenderSquadNumber = squad.Count + NotableDefenders.Count(defender => defender?.Race?.Id == squad.Race.Id);
-            int defenderSquadDeath = squad.Deaths + Events.OfType<HfDied>().Count(death => death.HistoricalFigure?.Race == squad.Race && NotableDefenders.Contains(death.HistoricalFigure));
-            Defenders.Add(new Squad(squad.Race, defenderSquadNumber, defenderSquadDeath, -1, -1));
-        }
-
-        foreach (var defender in NotableDefenders.Where(hf => Defenders.Count(squad => squad.Race == hf.Race) == 0).GroupBy(hf => hf.Race).Select(race => new { Race = race.Key, Count = race.Count() }))
-        {
-            int defenderDeath = Events.OfType<HfDied>().Count(death => death.HistoricalFigure != null &&  NotableDefenders.Contains(death.HistoricalFigure) && death.HistoricalFigure.Race == defender.Race);
-            Defenders.Add(new Squad(defender.Race, defender.Count, defenderDeath, -1, -1));
-        }
+        Attackers = AggregateCombatants(AttackerSquads, NotableAttackers, deceasedFigures);
+        Defenders = AggregateCombatants(DefenderSquads, NotableDefenders, deceasedFigures);
 
         Deaths = [];
-        foreach (Squad squad in Attackers.Concat(Defenders).Where(a => a.Race != null && a.Race != CreatureInfo.Unknown))
+        foreach (Squad squad in Attackers.Concat(Defenders))
         {
-            if (Deaths.ContainsKey(squad.Race))
+            if (Deaths.TryGetValue(squad.Race, out int currentDeaths))
             {
-                Deaths[squad.Race] += squad.Deaths;
+                Deaths[squad.Race] = currentDeaths + squad.Deaths;
             }
             else
             {
@@ -436,7 +405,12 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         if (ParentCollection is War parentWar)
         {
-            if (parentWar.Attacker == Attacker)
+            bool battleAttackerBelongsToWarAttacker =
+                BelongsToWarSide(Attacker, parentWar.Attacker) ||
+                (!BelongsToWarSide(Attacker, parentWar.Defender) &&
+                 BelongsToWarSide(Defender, parentWar.Defender));
+
+            if (battleAttackerBelongsToWarAttacker)
             {
                 parentWar.AttackerDeathCount += AttackerDeathCount;
                 parentWar.DefenderDeathCount += DefenderDeathCount;
@@ -446,15 +420,30 @@ public class Battle : EventCollection, IHasComplexSubtype
                 parentWar.AttackerDeathCount += DefenderDeathCount;
                 parentWar.DefenderDeathCount += AttackerDeathCount;
             }
-            parentWar.DeathCount += attackerSquadDeaths.Sum() + defenderSquadDeaths.Sum() + Events.OfType<HfDied>().Count();
 
-            if (Attacker == parentWar.Attacker && Victor == Attacker)
+            parentWar.DeathCount += DeathCount;
+
+            if (Outcome == BattleOutcome.AttackerWon)
             {
-                parentWar.AttackerVictories.Add(this);
+                if (battleAttackerBelongsToWarAttacker)
+                {
+                    parentWar.AttackerVictories.Add(this);
+                }
+                else
+                {
+                    parentWar.DefenderVictories.Add(this);
+                }
             }
-            else
+            else if (Outcome == BattleOutcome.DefenderWon)
             {
-                parentWar.DefenderVictories.Add(this);
+                if (battleAttackerBelongsToWarAttacker)
+                {
+                    parentWar.DefenderVictories.Add(this);
+                }
+                else
+                {
+                    parentWar.AttackerVictories.Add(this);
+                }
             }
         }
         Region?.Battles.Add(this);
@@ -478,6 +467,45 @@ public class Battle : EventCollection, IHasComplexSubtype
         }
 
         Icon = HtmlStyleUtil.GetIconString("chess-bishop");
+    }
+
+    private static bool BelongsToWarSide(Entity? entity, Entity? side)
+    {
+        return entity != null && side != null &&
+            (entity.EqualsOrParentEquals(side) || entity.CurrentCiv == side);
+    }
+
+    private static List<Squad> AggregateCombatants(
+        IEnumerable<Squad> squads,
+        IEnumerable<HistoricalFigure> notableFigures,
+        HashSet<HistoricalFigure> deceasedFigures)
+    {
+        Dictionary<CreatureInfo, Squad> grouped = [];
+        foreach (Squad squad in squads)
+        {
+            if (!grouped.TryGetValue(squad.Race, out Squad? aggregate))
+            {
+                aggregate = new Squad(squad.Race, 0, 0, -1, -1);
+                grouped.Add(squad.Race, aggregate);
+            }
+            aggregate.Numbers += squad.Numbers;
+            aggregate.Deaths += squad.Deaths;
+        }
+
+        foreach (HistoricalFigure figure in notableFigures.Distinct())
+        {
+            if (!grouped.TryGetValue(figure.Race, out Squad? aggregate))
+            {
+                aggregate = new Squad(figure.Race, 0, 0, -1, -1);
+                grouped.Add(figure.Race, aggregate);
+            }
+            aggregate.Numbers++;
+            if (deceasedFigures.Contains(figure))
+            {
+                aggregate.Deaths++;
+            }
+        }
+        return grouped.Values.ToList();
     }
 
     public void GenerateComplexSubType()
@@ -527,7 +555,7 @@ public class Battle : EventCollection, IHasComplexSubtype
         sb.Append("&#13");
         sb.Append(Attacker != null ? Attacker.PrintEntity(false) : "UNKNOWN");
         sb.Append(" (Attacker)");
-        if (Victor == Attacker)
+        if (Victor != null && Victor == Attacker)
         {
             sb.Append("(V)");
         }
@@ -538,7 +566,7 @@ public class Battle : EventCollection, IHasComplexSubtype
         sb.Append("&#13");
         sb.Append(Defender != null ? Defender.PrintEntity(false) : "UNKNOWN");
         sb.Append(" (Defender)");
-        if (Victor == Defender)
+        if (Victor != null && Victor == Defender)
         {
             sb.Append("(V)");
         }
