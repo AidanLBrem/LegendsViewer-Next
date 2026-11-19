@@ -42,6 +42,56 @@ describe('historical atlas political influence', () => {
     expect(seeds).toEqual([{ x: 5, y: 6, nationId: 5, color: '#445566' }]);
   });
 
+  it('does not create territory from a nomadic group controlling only one site', () => {
+    const loneCamp = {
+      coordinates: [{ x: 5, y: 5 }, { x: 6, y: 5 }],
+      ownerId: 10, ownerText: 'Wandering Band',
+      ownerEntityType: 'NomadicGroup', color: '#aa4400',
+    };
+    const town = {
+      coordinates: [{ x: 20, y: 20 }],
+      ownerId: 20, ownerText: 'Settled Civilization',
+      ownerEntityType: 'Civilization', color: '#0044aa',
+    };
+
+    expect(getTerritorySeeds([loneCamp, town], 100, 100)).toEqual([
+      { x: 20, y: 20, nationId: 20, color: '#0044aa' },
+    ]);
+    // Even if one site has multiple coordinates, it is still one site.
+    expect(getTerritorySeeds([loneCamp], 100, 100)).toEqual([]);
+  });
+
+  it('allows multi-site nomadic territory even when a site layer is hidden', () => {
+    const camp = {
+      coordinates: [{ x: 5, y: 5 }], ownerId: 10,
+      ownerEntityType: 'NomadicGroup', ownerText: 'Wandering Band',
+      color: '#aa4400',
+    };
+    const secondCamp = { ...camp, coordinates: [{ x: 12, y: 8 }] };
+    expect(getTerritorySeeds([camp, secondCamp], 100, 100)).toHaveLength(2);
+    expect(getTerritorySeeds(
+      [camp, secondCamp], 100, 100, site => site === camp
+    )).toEqual([{ x: 5, y: 5, nationId: 10, color: '#aa4400' }]);
+  });
+
+  it('recalculates nomadic territory from ownership in the selected year', () => {
+    const owner = {
+      ownerId: 10, ownerText: 'Wandering Band',
+      ownerEntityType: 'NomadicGroup', color: '#aa4400',
+    };
+    const firstCamp = {
+      coordinates: [{ x: 5, y: 5 }],
+      ownerHistory: [{ ...owner, startYear: 10, endYear: -1, startCause: 'founded' }],
+    };
+    const secondCamp = {
+      coordinates: [{ x: 12, y: 8 }],
+      ownerHistory: [{ ...owner, startYear: 40, endYear: 70, startCause: 'founded' }],
+    };
+    expect(getTerritorySeeds([firstCamp, secondCamp], 30, 100)).toEqual([]);
+    expect(getTerritorySeeds([firstCamp, secondCamp], 50, 100)).toHaveLength(2);
+    expect(getTerritorySeeds([firstCamp, secondCamp], 80, 100)).toEqual([]);
+  });
+
   it('excludes ocean settlements as influence seeds, but keeps inland sites', async () => {
     const width = 16;
     const height = 16;
