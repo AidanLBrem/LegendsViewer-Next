@@ -26,6 +26,12 @@ public class War : EventCollection, IHasComplexSubtype
     // recorded army at the start of the war. A soldier appearing in two
     // battles counts twice. Map local attacking/defending positions back to
     // the aggressor and defender of the war.
+    // Numeric aliases used by the generic overview server-side sorter.
+    [JsonIgnore]
+    public int AttackerTroopCount => AttackerBattleDeployments;
+    [JsonIgnore]
+    public int DefenderTroopCount => DefenderBattleDeployments;
+
     public int AttackerBattleDeployments => Battles.Sum(battle =>
         BattleAttackerIsWarAttacker(battle) ? battle.AttackerCount : battle.DefenderCount);
     public int DefenderBattleDeployments => Battles.Sum(battle =>
