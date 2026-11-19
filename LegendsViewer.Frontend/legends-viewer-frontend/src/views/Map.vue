@@ -1,6 +1,13 @@
 <template>
   <div class="map-container">
     <div id="map" style="height: 100%;"></div>
+    <div class="site-color-selector">
+      <label for="site-color-mode">Site colors</label>
+      <select id="site-color-mode" v-model="siteColorMode">
+        <option value="current">Current nation</option>
+        <option value="origin">Origin nation</option>
+      </select>
+    </div>
   </div>
 </template>
 
@@ -420,7 +427,7 @@ const siteTypeMarkers: Record<SiteType, MarkerConfig> = {
 
 function createMarker(siteType: SiteType, siteColor: string | null | undefined, latlng: L.LatLngExpression): L.Layer {
   const config = siteTypeMarkers[siteType];
-  const color = config?.color ?? siteColor ?? "#666"
+  const color = siteColor ?? config?.color ?? "#666"
   const size = config?.size ?? 3;
   const options = { pane: 'overlayPane', color: color };
   switch (config?.shape) {
@@ -621,6 +628,21 @@ export default defineComponent({
     const siteCountLayer = ref<LayerGroup | null>(null);
     const highlightLayer = ref<LayerGroup | null>(null);
     const siteMarkersMap = new Map<number, { marker: L.Layer; popup: HTMLElement }>();
+    const siteColorMode = ref<'current' | 'origin'>('current');
+    const siteLayers: Array<{ marker: L.Path; site: SiteMarker }> = [];
+
+    const colorForSite = (site: SiteMarker): string => {
+      if (siteColorMode.value === 'origin') {
+        return site.originColor || '#666';
+      }
+      return siteTypeMarkers[site.type ?? 'Unknown']?.color ?? site.color ?? '#666';
+    };
+
+    watch(siteColorMode, () => {
+      for (const { marker, site } of siteLayers) {
+        marker.setStyle({ color: colorForSite(site) });
+      }
+    });
 
     // This will hold the LayerGroups for different owners
     const ownerLayers: Record<string, LayerGroup> = {};
@@ -1021,6 +1043,7 @@ export default defineComponent({
       }
 
       siteMarkersMap.clear();
+      siteLayers.length = 0;
       tileItemsMap.clear();
 
       const scale = 8;
@@ -1055,9 +1078,10 @@ export default defineComponent({
               if (coordinate.x != null && coordinate.y != null) {
                 const marker = createMarker(
                   siteMarker.type ?? 'Unknown',
-                  siteMarker.color,
+                  colorForSite(siteMarker),
                   toLatLng(coordinate.x, coordinate.y)
                 );
+                siteLayers.push({ marker: marker as L.Path, site: siteMarker });
 
                 const siteAtCoord: SiteAtCoordinate = { marker: siteMarker, x: coordinate.x, y: coordinate.y };
                 registerTileItem({
@@ -1154,6 +1178,7 @@ export default defineComponent({
 
     return {
       mapStore,
+      siteColorMode,
     };
   },
 });
@@ -1165,6 +1190,30 @@ export default defineComponent({
   width: 100%;
   position: relative;
   /* Ensure the map and controls are positioned properly */
+}
+
+.site-color-selector {
+  position: absolute;
+  top: 84px;
+  left: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 4px;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+}
+
+.site-color-selector select {
+  background: rgb(var(--v-theme-background));
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 4px;
 }
 
 .leaflet-image-layer {
