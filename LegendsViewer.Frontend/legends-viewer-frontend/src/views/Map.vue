@@ -931,6 +931,7 @@ export default defineComponent({
       const year = selectedYear.value;
       historyBusy.value = true;
       leafletMap.value?.closePopup();
+      let siteMembershipChanged = false;
       try {
         for (let i = 0; i < siteLayers.length; i++) {
           if (disposed || generation !== historyUpdateGeneration) return;
@@ -938,13 +939,22 @@ export default defineComponent({
           const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
           const ownerLayer = ownerLayers[owner.ownerText] ?? ownerLayers['Unclaimed'];
           if (!owner.visible || !ownerLayer || !siteTypeIsVisible(site)) {
-            if (item.layerGroup.hasLayer(marker)) item.layerGroup.removeLayer(marker);
+            if (item.layerGroup.hasLayer(marker)) {
+              item.layerGroup.removeLayer(marker);
+              siteMembershipChanged = true;
+            }
           } else {
             if (item.layerGroup !== ownerLayer) {
-              item.layerGroup.removeLayer(marker);
+              if (item.layerGroup.hasLayer(marker)) {
+                item.layerGroup.removeLayer(marker);
+              }
               item.layerGroup = ownerLayer;
+              siteMembershipChanged = true;
             }
-            if (!ownerLayer.hasLayer(marker)) ownerLayer.addLayer(marker);
+            if (!ownerLayer.hasLayer(marker)) {
+              ownerLayer.addLayer(marker);
+              siteMembershipChanged = true;
+            }
             const nextColor = colorForSite(site, owner.color);
             // Avoid redrawing unchanged Canvas shapes on each history step.
             if (marker.options.color !== nextColor) {
@@ -956,7 +966,9 @@ export default defineComponent({
       } finally {
         if (generation === historyUpdateGeneration) {
           historyBusy.value = false;
-          syncTileBadges();
+          // Leave count markers in place when the year only changed colors
+          // or ownership details, avoiding visible badge blinking on replay.
+          if (siteMembershipChanged) syncTileBadges();
         }
       }
     };
