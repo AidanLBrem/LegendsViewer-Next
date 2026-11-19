@@ -47,6 +47,14 @@ describe('historical atlas political influence', () => {
     expect(weighted!.nation[cell]).toBe(1);
   });
 
+  it('lets a city of 10,000 win a tile seven steps away against a town of 100 five steps away', async () => {
+    const grid = await createTerritoryGrid(64, 32, [
+      { x: 20.5, y: 12.5, nationId: 1, color: '#c00', population: 10000 },
+      { x: 32.5, y: 12.5, nationId: 2, color: '#00c', population: 100 },
+    ]);
+    expect(grid!.nation[12 * 64 + 27]).toBe(1);
+  });
+
   it('reinforces borders when several nearby settlements share an owner', async () => {
     const rival = { x: 26, y: 16, nationId: 2, color: '#0000cc' };
     const friend = (x: number) => ({ x, y: 16, nationId: 1, color: '#cc0000' });
