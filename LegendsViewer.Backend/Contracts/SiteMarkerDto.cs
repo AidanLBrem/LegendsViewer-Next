@@ -11,7 +11,7 @@ public class SiteMarkerDto
     public SiteMarkerDto(Site site)
     {
         Entity? currentOwner = site.CurrentOwner;
-        Entity? currentNation = currentOwner?.CurrentCiv ?? currentOwner;
+        Entity? currentNation = currentOwner?.MapNation;
         Entity? originNation = site.OriginNation;
 
         Id = site.Id;
