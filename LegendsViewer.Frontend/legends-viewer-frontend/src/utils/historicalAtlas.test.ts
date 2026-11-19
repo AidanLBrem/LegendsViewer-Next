@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createTerritoryGrid, getTerritorySeeds, isOceanTile, territoryGridToDataUrl, isWarInYear,
+  createTerritoryGrid, getTerritorySeeds, getNecromancerNationIds, getTerritoryNationAtTile,
+  isOceanTile, territoryGridToDataUrl, isWarInYear,
   isBattleInYear, isSiteConquestInYear, getWarfareChangeYears
 } from './historicalAtlas';
 
@@ -90,6 +91,68 @@ describe('historical atlas political influence', () => {
     expect(getTerritorySeeds([firstCamp, secondCamp], 30, 100)).toEqual([]);
     expect(getTerritorySeeds([firstCamp, secondCamp], 50, 100)).toHaveLength(2);
     expect(getTerritorySeeds([firstCamp, secondCamp], 80, 100)).toEqual([]);
+  });
+
+  it('recognizes independent necromancer tower factions without hiding conquering civilizations', () => {
+    const tower = {
+      type: 'Tower',
+      ownerId: 10, ownerEntityType: 'SiteGovernment',
+      ownerHistory: [
+        { ownerId: 10, ownerEntityType: 'SiteGovernment', startYear: 1, endYear: 40 },
+        { ownerId: 20, ownerEntityType: 'Civilization', startYear: 40, endYear: -1 },
+      ],
+    };
+    const towns = { type: 'Town', ownerId: 30, ownerEntityType: 'SiteGovernment' };
+    expect([...getNecromancerNationIds([tower, towns])]).toEqual([10]);
+  });
+
+  it('filters one-site minor powers without hiding their sites or larger factions', () => {
+    const sites = [
+      { coordinates: [{ x: 2, y: 3 }], ownerId: 1, ownerText: 'Minor Kingdom', ownerEntityType: 'Civilization', color: '#111111' },
+      { coordinates: [{ x: 5, y: 6 }], ownerId: 2, ownerText: 'Major Kingdom', ownerEntityType: 'Civilization', color: '#222222' },
+      { coordinates: [{ x: 6, y: 6 }], ownerId: 2, ownerText: 'Major Kingdom', ownerEntityType: 'Civilization', color: '#222222' },
+      { coordinates: [{ x: 7, y: 7 }], ownerId: 3, ownerText: 'Tower Faction', ownerEntityType: 'SiteGovernment', color: '#333333' },
+      { coordinates: [{ x: 8, y: 8 }], ownerId: 3, ownerText: 'Tower Faction', ownerEntityType: 'SiteGovernment', color: '#333333' },
+    ];
+    const excludedNationIds = new Set([3]);
+    expect(getTerritorySeeds(sites, 100, 100)).toHaveLength(5);
+    const filtered = getTerritorySeeds(sites, 100, 100, () => true, {
+      filterMinorPowers: true, excludedNationIds
+    });
+    expect(filtered.map(seed => seed.nationId)).toEqual([2, 2]);
+  });
+
+  it('counts sites historically rather than using current ownership when filtering minor powers', () => {
+    const faction = { ownerId: 7, ownerEntityType: 'Civilization', ownerText: 'Minor Kingdom', color: '#777777' };
+    const siteA = { coordinates: [{ x: 3, y: 3 }],
+      ownerHistory: [{ ...faction, startYear: 10, endYear: -1, startCause: 'founded' }] };
+    const siteB = { coordinates: [{ x: 8, y: 8 }],
+      ownerHistory: [{ ...faction, startYear: 50, endYear: -1, startCause: 'founded' }] };
+    expect(getTerritorySeeds([siteA, siteB], 25, 100, () => true, {
+      filterMinorPowers: true
+    })).toEqual([]);
+    expect(getTerritorySeeds([siteA, siteB], 60, 100, () => true, {
+      filterMinorPowers: true
+    })).toHaveLength(2);
+  });
+
+  it('resolves clicked tile controllers at raster scale and excludes oceans', () => {
+    const grid = {
+      width: 2, height: 2,
+      nation: new Int32Array([7, -1, 8, 9]),
+      colors: new Map<number, string>(),
+    };
+    const width = 4;
+    const height = 4;
+    const oceanMask = new Uint8Array(Math.ceil(width * height / 8));
+    const oceanIndex = 1 * width + 1;
+    oceanMask[oceanIndex >> 3] |= 1 << (oceanIndex & 7);
+    expect(getTerritoryNationAtTile(grid, width, height, 0, 0, oceanMask)).toBe(7);
+    expect(getTerritoryNationAtTile(grid, width, height, 1, 1, oceanMask)).toBeNull();
+    expect(getTerritoryNationAtTile(grid, width, height, 3, 0, oceanMask)).toBeNull();
+    expect(getTerritoryNationAtTile(grid, width, height, 0, 3, oceanMask)).toBe(8);
+    expect(getTerritoryNationAtTile(grid, width, height, 3, 3, oceanMask)).toBe(9);
+    expect(getTerritoryNationAtTile(grid, width, height, 4, 0, oceanMask)).toBeNull();
   });
 
   it('excludes ocean settlements as influence seeds, but keeps inland sites', async () => {
