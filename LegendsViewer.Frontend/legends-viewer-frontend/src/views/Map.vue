@@ -13,10 +13,12 @@
         <label><input type="checkbox" v-model="showMonasteries" :disabled="!historyReady" /> Monasteries</label>
         <label><input type="checkbox" v-model="showCamps" :disabled="!historyReady" /> Camps</label>
         <label><input type="checkbox" v-model="showCaves" :disabled="!historyReady" /> Caves</label>
+        <label><input type="checkbox" v-model="showNecromancers" :disabled="!historyReady" /> Show necromancers</label>
       </div>
       <div class="site-visibility-options atlas-options" role="group" aria-label="Historical atlas overlays">
         <strong>Historical atlas</strong>
         <label><input type="checkbox" v-model="showEstimatedTerritories" :disabled="!historyReady" /> Estimated territories</label>
+        <label><input type="checkbox" v-model="filterMinorPowers" :disabled="!historyReady" /> Filter minor powers (≤1 site)</label>
         <label><input type="checkbox" v-model="showHistoricalBattles" :disabled="!historyReady" /> Battles / sieges</label>
         <label><input type="checkbox" v-model="showHistoricalCampaigns" :disabled="!historyReady" /> War campaigns</label>
         <label><input type="checkbox" v-model="showHistoricalSiteOutcomes" :disabled="!historyReady" /> Conquests / raids</label>
@@ -77,6 +79,10 @@ import {
   createTerritoryGrid,
   territoryGridToDataUrl,
   getTerritorySeeds,
+  getNecromancerNationIds,
+  getTerritoryNationAtTile,
+  isOceanTile,
+  type TerritoryGrid,
   getWarfareChangeYears,
   isBattleInYear,
   isWarInYear,
@@ -664,19 +670,50 @@ function wireInternalLinks(container: HTMLElement, router: Router): void {
 
 
 
+interface NominalTerritoryInfo {
+  ownerId: number | null;
+  ownerLink?: string;
+  ocean: boolean;
+}
+
+function withNominalController(
+  content: HTMLElement, territory: NominalTerritoryInfo | null, router: Router, year: number
+): HTMLElement {
+  if (!territory) return content;
+
+  const header = document.createElement('div');
+  header.className = 'nominal-territory-info';
+  const title = document.createElement('strong');
+  title.textContent = `Nominal controller (estimated, year ${year})`;
+  header.appendChild(title);
+  if (territory.ownerId != null) {
+    if (territory.ownerLink) appendRichContent(header, territory.ownerLink);
+    else header.append(`Faction #${territory.ownerId}`);
+  } else {
+    header.append(territory.ocean ? 'Ocean (no estimated territory)' : 'No estimated controller');
+  }
+  wireInternalLinks(header, router);
+  content.prepend(header);
+  return content;
+}
+
 function createUnifiedPickerPopup(
-  items: MapTileItem[], router: Router, selectedYear: number, presentYear: number
+  items: MapTileItem[], router: Router, selectedYear: number, presentYear: number,
+  territory: NominalTerritoryInfo | null = null
 ): HTMLElement {
   if (items.length === 1) {
     const single = items[0];
     if (single.type === 'battle') {
-      return createBattlePopup(single.data as BattleMapMarkerDto, router);
+      return withNominalController(createBattlePopup(single.data as BattleMapMarkerDto, router),
+        territory, router, selectedYear);
     }
     if (single.type === 'war') {
-      return createWarPopup(single.data as WarMapOverlayDto, router);
+      return withNominalController(createWarPopup(single.data as WarMapOverlayDto, router),
+        territory, router, selectedYear);
     }
     if (single.type === 'conquest') {
-      return createSiteConquestPopup(single.data as SiteConquestMapMarkerDto, router);
+      return withNominalController(createSiteConquestPopup(single.data as SiteConquestMapMarkerDto, router),
+        territory, router, selectedYear);
     }
   }
 
@@ -731,7 +768,7 @@ function createUnifiedPickerPopup(
     container.appendChild(itemEl);
   }
 
-  return container;
+  return withNominalController(container, territory, router, selectedYear);
 }
 
 function addCustomControl(
@@ -958,6 +995,8 @@ export default defineComponent({
     const showMonasteries = ref(true);
     const showCamps = ref(true);
     const showCaves = ref(true);
+    const showNecromancers = ref(true);
+    const filterMinorPowers = ref(false);
     const showEstimatedTerritories = ref(true);
     const showHistoricalBattles = ref(true);
     const showHistoricalCampaigns = ref(true);
@@ -983,6 +1022,9 @@ export default defineComponent({
     let historicalWarfareData: WarfareMapDto | null = null;
     let historicalDataLoading = false;
     let territorySnapshotKey = '';
+    let activeTerritoryGrid: TerritoryGrid | null = null;
+    let activeTerritoryOwners = new Map<number, string>();
+    let necromancerNationIds = new Set<number>();
     let oceanMask: Uint8Array | null = null;
     let territoryChangeYears: number[] = [];
     let ownerVisibilityVersion = 0;
@@ -995,6 +1037,12 @@ export default defineComponent({
         showCamps: showCamps.value,
         showCaves: showCaves.value,
       });
+
+    const siteOwnerIsVisible = (
+      site: SiteMarker, owner: ReturnType<typeof getSiteOwnerAtYear>
+    ): boolean =>
+      siteTypeIsVisible(site) &&
+      (showNecromancers.value || owner.ownerId == null || !necromancerNationIds.has(owner.ownerId));
 
     const colorForSite = (site: SiteMarker, ownerColor = site.color): string => {
       if (siteColorMode.value === 'origin') {
@@ -1073,6 +1121,8 @@ export default defineComponent({
       if (!map || disposed) return;
       if (!showEstimatedTerritories.value) {
         if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
+        activeTerritoryGrid = null;
+        activeTerritoryOwners.clear();
         territorySnapshotKey = '';
         return;
       }
@@ -1081,12 +1131,15 @@ export default defineComponent({
       const height = worldStore.world?.height ?? 0;
       if (!width || !height || !oceanMask) {
         if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
+        activeTerritoryGrid = null;
+        activeTerritoryOwners.clear();
         return;
       }
       const year = selectedYear.value;
       const key = [
         territoryBoundaryYear(year), ownerVisibilityVersion,
-        showMonasteries.value, showCamps.value, showCaves.value
+        showMonasteries.value, showCamps.value, showCaves.value,
+        showNecromancers.value, filterMinorPowers.value
       ].join(':');
       if (key === territorySnapshotKey && territoryOverlay.value) {
         if (!map.hasLayer(territoryOverlay.value)) territoryOverlay.value.addTo(map);
@@ -1099,9 +1152,23 @@ export default defineComponent({
         site => {
           const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
           const layer = ownerLayers[owner.ownerText];
-          return siteTypeIsVisible(site as SiteMarker) && !!layer && map.hasLayer(layer);
+          return siteOwnerIsVisible(site as SiteMarker, owner) && !!layer && map.hasLayer(layer);
+        },
+        {
+          filterMinorPowers: filterMinorPowers.value,
+          excludedNationIds: showNecromancers.value ? undefined : necromancerNationIds,
         }
       );
+      const includedNationIds = new Set(seeds.map(seed => seed.nationId));
+      const ownerLinks = new Map<number, string>();
+      for (const site of sites) {
+        const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
+        if (owner.ownerId != null && includedNationIds.has(owner.ownerId) &&
+            !ownerLinks.has(owner.ownerId)) {
+          ownerLinks.set(owner.ownerId, owner.owner);
+        }
+        if (ownerLinks.size === includedNationIds.size) break;
+      }
       const grid = await createTerritoryGrid(
         width, height, seeds, yieldToBrowser,
         () => disposed || generation !== historyUpdateGeneration || !showEstimatedTerritories.value,
@@ -1110,6 +1177,8 @@ export default defineComponent({
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
       const image = territoryGridToDataUrl(grid, oceanMask, width, height);
+      activeTerritoryGrid = grid;
+      activeTerritoryOwners = ownerLinks;
       if (!territoryOverlay.value) {
         const bounds: L.LatLngBoundsExpression = [[0, 0], [height * 8, width * 8]];
         territoryOverlay.value = L.imageOverlay(image, bounds, {
@@ -1211,7 +1280,7 @@ export default defineComponent({
           const { marker, site, item } = siteLayers[i];
           const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
           const ownerLayer = ownerLayers[owner.ownerText] ?? ownerLayers['Unclaimed'];
-          if (!owner.visible || !ownerLayer || !siteTypeIsVisible(site)) {
+          if (!owner.visible || !ownerLayer || !siteOwnerIsVisible(site, owner)) {
             if (item.layerGroup.hasLayer(marker)) {
               item.layerGroup.removeLayer(marker);
               siteMembershipChanged = true;
@@ -1256,7 +1325,8 @@ export default defineComponent({
     watch(
       [
         selectedYear, siteColorMode, showMonasteries, showCamps, showCaves,
-        showEstimatedTerritories, showHistoricalBattles, showHistoricalCampaigns,
+        showNecromancers, filterMinorPowers, showEstimatedTerritories,
+        showHistoricalBattles, showHistoricalCampaigns,
         showHistoricalSiteOutcomes
       ],
       () => { void applyHistoryYear(); }
@@ -1273,6 +1343,23 @@ export default defineComponent({
 
     const tileItemsMap = new Map<string, MapTileItem[]>();
 
+    const getNominalControllerAtTile = (x: number, y: number): NominalTerritoryInfo | null => {
+      const map = leafletMap.value;
+      const width = worldStore.world?.width ?? 0;
+      const height = worldStore.world?.height ?? 0;
+      if (!map || !showEstimatedTerritories.value || !territoryOverlay.value ||
+          !map.hasLayer(territoryOverlay.value) || !activeTerritoryGrid || !width || !height) {
+        return null;
+      }
+
+      const ownerId = getTerritoryNationAtTile(activeTerritoryGrid, width, height, x, y, oceanMask);
+      return {
+        ownerId,
+        ownerLink: ownerId == null ? undefined : activeTerritoryOwners.get(ownerId),
+        ocean: isOceanTile(oceanMask, width, x, y),
+      };
+    };
+
     const getActiveItemsAtTile = (x: number, y: number): MapTileItem[] => {
       if (!leafletMap.value) return [];
       const key = coordinateKey(x, y);
@@ -1287,7 +1374,8 @@ export default defineComponent({
       if ('bindPopup' in marker && typeof (marker as any).bindPopup === 'function') {
         (marker as any).bindPopup(() => {
           const activeItems = getActiveItemsAtTile(x, y);
-          return createUnifiedPickerPopup(activeItems, router, selectedYear.value, historyMaxYear.value);
+          return createUnifiedPickerPopup(activeItems, router, selectedYear.value, historyMaxYear.value,
+            getNominalControllerAtTile(x, y));
         }, { minWidth: 220 });
       }
     };
@@ -1524,10 +1612,12 @@ export default defineComponent({
         }
       }
 
-      if (items.length === 0) return;
+      const territory = getNominalControllerAtTile(tileX, tileY);
+      if (items.length === 0 && !territory) return;
       L.popup({ minWidth: 220 })
-        .setLatLng(toLatLng(selectedX, selectedY))
-        .setContent(createUnifiedPickerPopup(items, router, selectedYear.value, historyMaxYear.value))
+        .setLatLng(items.length ? toLatLng(selectedX, selectedY) : event.latlng)
+        .setContent(createUnifiedPickerPopup(items, router, selectedYear.value, historyMaxYear.value,
+          territory))
         .openOn(map);
     };
 
@@ -1822,6 +1912,8 @@ export default defineComponent({
           territoryOverlay.value = null;
         }
         territorySnapshotKey = '';
+        activeTerritoryGrid = null;
+        activeTerritoryOwners.clear();
         if (historicalWarfareLayer.value) {
           leafletMap.value.removeLayer(historicalWarfareLayer.value);
           historicalWarfareLayer.value.clearLayers();
@@ -1874,6 +1966,7 @@ export default defineComponent({
         // Skip Vue's deep proxies while iterating over potentially tens of
         // thousands of exported sites and polygon coordinates.
         const markers = toRaw(worldStore.world.siteMarkers ?? []) as SiteMarker[];
+        necromancerNationIds = getNecromancerNationIds(markers);
         territoryChangeYears = getOwnershipChangeYears(markers, historyMaxYear.value);
         ownershipChangeYears = [...territoryChangeYears];
 
@@ -1927,7 +2020,7 @@ export default defineComponent({
             };
             siteLayers.push({ marker, site: siteMarker, item });
             registerTileItem(item);
-            if (initialOwner.visible && siteTypeIsVisible(siteMarker)) {
+            if (initialOwner.visible && siteOwnerIsVisible(siteMarker, initialOwner)) {
               initialLayer.addLayer(marker);
             }
 
@@ -2013,6 +2106,8 @@ export default defineComponent({
       showMonasteries,
       showCamps,
       showCaves,
+      showNecromancers,
+      filterMinorPowers,
       showEstimatedTerritories,
       showHistoricalBattles,
       showHistoricalCampaigns,
@@ -2035,6 +2130,15 @@ export default defineComponent({
 </script>
 
 <style>
+.nominal-territory-info {
+  border-bottom: 1px solid #7775;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+}
+.nominal-territory-info strong {
+  display: block;
+  margin-bottom: 4px;
+}
 .map-container {
   height: 880px;
   width: 100%;
