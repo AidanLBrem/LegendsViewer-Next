@@ -38,15 +38,32 @@ public class SiteConquered : EventCollection
             }
         }
 
+        // The collection's XML often omits site_id even though its child
+        // event identifies the attacked or captured site. Recover it here so
+        // existing war links and legacy site lists do not silently omit it.
+        Site ??= Events.Select(worldEvent => worldEvent switch
+        {
+            SiteTakenOver e => e.Site,
+            NewSiteLeader e => e.Site,
+            SiteSurrendered e => e.Site,
+            DestroyedSite e => e.Site,
+            HfDestroyedSite e => e.Site,
+            PlunderedSite e => e.Site,
+            AttackedSite e => e.Site,
+            ReclaimSite e => e.Site,
+            _ => null
+        }).FirstOrDefault(site => site != null);
+
         if (Events.OfType<PlunderedSite>().Any())
         {
             ConquerType = SiteConqueredType.Pillaging;
         }
-        else if (Events.OfType<DestroyedSite>().Any())
+        else if (Events.OfType<DestroyedSite>().Any() || Events.OfType<HfDestroyedSite>().Any())
         {
             ConquerType = SiteConqueredType.Destruction;
         }
-        else if (Events.OfType<NewSiteLeader>().Any() || Events.OfType<SiteTakenOver>().Any())
+        else if (Events.OfType<NewSiteLeader>().Any() || Events.OfType<SiteTakenOver>().Any() ||
+                 Events.OfType<SiteSurrendered>().Any())
         {
             ConquerType = SiteConqueredType.Conquest;
         }
