@@ -37,8 +37,17 @@ public class WarfareSiteOutcomesDto
                 continue;
             }
 
-            bool actionByAttacker = IsSameSide(conquest.Attacker, attacker);
-            bool actionByDefender = IsSameSide(conquest.Attacker, defender);
+            // Exact faction identity takes precedence over shared ancestry.
+            // Opposing rebel groups may belong to the same parent nation.
+            bool exactAttacker = attacker != null && conquest.Attacker == attacker;
+            bool exactDefender = defender != null && conquest.Attacker == defender;
+            bool actionByAttacker = exactAttacker && !exactDefender;
+            bool actionByDefender = exactDefender && !exactAttacker;
+            if (!exactAttacker && !exactDefender)
+            {
+                actionByAttacker = IsSameSide(conquest.Attacker, attacker);
+                actionByDefender = IsSameSide(conquest.Attacker, defender);
+            }
 
             // Some site events omit the attacking party. The defending party
             // can still identify the opposing side when both war sides exist.
