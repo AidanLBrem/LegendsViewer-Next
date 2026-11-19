@@ -83,6 +83,7 @@ public class SiteConquered : EventCollection
             War? war = ParentCollection as War;
             if (war != null)
             {
+                war.RegisterOpponents(Attacker, Defender);
                 war.DeathCount += Events.OfType<HfDied>().Count();
             }
 
