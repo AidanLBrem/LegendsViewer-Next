@@ -243,7 +243,7 @@ const terrainCosts: Record<string, readonly number[]> = {
   dwarf:    [1, 1,   2.2, 1.5, Infinity, 2,   1.5, 2.2, 1.15, 1,   Infinity],
   elf:      [1, 2.4, 1,   1.8, Infinity, 1.2, 1.6, 2.4, 1.1,  1.3, Infinity],
   human:    [1, 2,   1.4, 1.6, Infinity, 1.6, 1.6, 2.3, 1,    1.1, Infinity],
-  goblin:   [1, 1.3, 1.4, 1.5, Infinity, 1.5, 1.5, 2.1, 1.15, 1,   Infinity],
+  goblin:   [1, 1.3, 1.4, 1.5, Infinity, 1.0, 1.5, 2.1, 1.15, 1,   Infinity],
   kobold:   [1, 1.8, 1.1, 1.6, Infinity, 1.2, 1.7, 2.3, 1.3,  1.1, Infinity],
   other:    [1, 1.8, 1.4, 1.6, Infinity, 1.5, 1.5, 2.2, 1,    1.2, Infinity],
 };

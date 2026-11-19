@@ -6,7 +6,7 @@ import {
 } from './historicalAtlas';
 
 describe('historical atlas political influence', () => {
-  it.each([[1, 'Dwarves', 'Elf'], [2, 'Elves', 'Dwarf']])(
+  it.each([[1, 'Dwarves', 'Elf'], [2, 'Elves', 'Dwarf'], [5, 'Goblins', 'Human']])(
     'carries the cost of crossing region type %i onto the plains beyond',
     async (region, adapted, other) => {
       const terrain = new Uint8Array(24 * 12);
