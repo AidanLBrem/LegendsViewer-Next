@@ -146,6 +146,19 @@ public class Battle : EventCollection, IHasComplexSubtype
 
     public ChartDataDto DeathsByRace => BuildDeathsByRaceChart(Deaths);
 
+    // The pre-casualty army compositions are the already aggregated
+    // combatants: reported squads plus distinct named historical figures.
+    // Their summed counts reconcile with AttackerCount / DefenderCount.
+    public ChartDataDto AttackerInitialArmyByRace => BuildDeathsByRaceChart(Attackers
+        .Where(squad => squad.Numbers > 0)
+        .GroupBy(squad => squad.Race)
+        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Numbers))));
+
+    public ChartDataDto DefenderInitialArmyByRace => BuildDeathsByRaceChart(Defenders
+        .Where(squad => squad.Numbers > 0)
+        .GroupBy(squad => squad.Race)
+        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Numbers))));
+
     public ChartDataDto AttackerDeathsByRace => BuildDeathsByRaceChart(Attackers
         .Where(squad => squad.Deaths > 0)
         .GroupBy(squad => squad.Race)
