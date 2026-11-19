@@ -190,6 +190,13 @@ function createBattlePopupElement(battle: BattleMapMarkerDto): HTMLElement {
     titleDiv.innerHTML = `<i class="mdi mdi-sword-cross" style="color: ${color}; margin-right: 4px; font-size: 16px;"></i><a href="/battle/${battle.id}">${battle.name}</a>`;
   }
 
+  if (battle.isSiege) {
+    const siegeBadge = document.createElement('span');
+    siegeBadge.style.cssText = 'background: #475569; color: white; border-radius: 4px; padding: 2px 6px; font-size: 10px; margin-left: 6px;';
+    siegeBadge.textContent = 'Site assault / siege';
+    titleDiv.appendChild(siegeBadge);
+  }
+
   if (battle.isActive) {
     const badge = document.createElement('span');
     badge.style.cssText = 'background: #e53935; color: white; border-radius: 4px; padding: 2px 6px; font-size: 10px; margin-left: 6px;';
@@ -479,7 +486,7 @@ function renderBattleMarker(
     className: 'battle-marker-icon',
     html: `
       <div style="background: rgba(18, 18, 18, 0.95); border: 3px solid ${color}; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.85);">
-        <i class="mdi mdi-sword-cross" style="font-size: 20px; color: #ffffff; line-height: 1;"></i>
+        <i class="mdi ${battle.isSiege ? 'mdi-shield-sword' : 'mdi-sword-cross'}" style="font-size: 20px; color: #ffffff; line-height: 1;"></i>
       </div>
     `,
     iconSize: [32, 32],
@@ -1149,11 +1156,14 @@ export default defineComponent({
       if (historicalDataLoading || historicalWarfareData || !historyReady.value ||
         !atlasEventsEnabled() || disposed) return;
       historicalDataLoading = true;
+      const generation = renderGeneration;
       historicalStatus.value = 'Loading recorded wars, battles, and conquests...';
       try {
         const data = await mapStore.loadWarfareMap(false) as WarfareMapDto | null;
-        if (disposed || !data) {
-          if (!disposed) historicalStatus.value = 'Historical warfare data unavailable.';
+        if (disposed || generation !== renderGeneration || !data) {
+          if (!disposed && generation === renderGeneration) {
+            historicalStatus.value = 'Historical warfare data unavailable.';
+          }
           return;
         }
         historicalWarfareData = data;
@@ -1355,6 +1365,9 @@ export default defineComponent({
           maxZoom: 2,
           preferCanvas: true
         });
+        const territoryPane = leafletMap.value.createPane('territoryPane');
+        territoryPane.style.zIndex = '350';
+        territoryPane.style.pointerEvents = 'none';
         // Do not mutate marker layers in response to their own overlay events.
         // Visibility changes are handled explicitly by the owner controls.
         leafletMap.value.on('zoomend', syncTileBadges);
@@ -1764,6 +1777,17 @@ export default defineComponent({
           leafletMap.value.removeLayer(siteCountLayer.value as unknown as Layer);
           siteCountLayer.value = null;
         }
+        if (territoryOverlay.value) {
+          leafletMap.value.removeLayer(territoryOverlay.value);
+          territoryOverlay.value = null;
+        }
+        territorySnapshotKey = '';
+        if (historicalWarfareLayer.value) {
+          leafletMap.value.removeLayer(historicalWarfareLayer.value);
+          historicalWarfareLayer.value.clearLayers();
+          historicalWarfareLayer.value = null;
+        }
+        historicalWarfareData = null;
         if (warfareLayer.value && leafletMap.value.hasLayer(warfareLayer.value)) {
           leafletMap.value.removeLayer(warfareLayer.value);
         }
@@ -1805,11 +1829,13 @@ export default defineComponent({
         }
 
         warfareLayer.value = new L.LayerGroup();
+        historicalWarfareLayer.value = new L.LayerGroup().addTo(leafletMap.value);
 
         // Skip Vue's deep proxies while iterating over potentially tens of
         // thousands of exported sites and polygon coordinates.
         const markers = toRaw(worldStore.world.siteMarkers ?? []) as SiteMarker[];
-        ownershipChangeYears = getOwnershipChangeYears(markers, historyMaxYear.value);
+        territoryChangeYears = getOwnershipChangeYears(markers, historyMaxYear.value);
+        ownershipChangeYears = [...territoryChangeYears];
 
         // An ownerless site remains selectable, so it needs its own
         // layer regardless of whether any current site is unclaimed.
@@ -1900,6 +1926,10 @@ export default defineComponent({
           isRenderingSites = false;
           mapProgress.value = '';
           syncTileBadges();
+          if (historyReady.value && !disposed) {
+            void applyHistoryYear();
+            void loadHistoricalWarfare();
+          }
         }
       }
     };
