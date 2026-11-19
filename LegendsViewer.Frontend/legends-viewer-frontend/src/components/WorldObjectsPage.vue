@@ -78,7 +78,12 @@
                     </v-row>
                 </template>
                 <v-card-text>
-                    <v-data-table-server v-model:items-per-page="store.objectsPerPage" :headers="tableHeaders"
+                    <div v-if="isWarfareOverview" class="text-caption mb-2">
+                        Atk = attacking side; Def = defending side. Site counts represent
+                        recorded gains, losses and plunderings. Click a column heading to sort all results.
+                    </div>
+                    <v-data-table-server v-model:items-per-page="store.objectsPerPage"
+                        :class="{ 'warfare-overview-table': isWarfareOverview }" :headers="tableHeaders"
                         :items="store.objects" :items-length="store.objectsTotalFilteredItems" :search="searchString"
                         :loading="store.isLoading" item-value="id" :items-per-page-options="store.itemsPerPageOptions"
                         @update:options="loadWorldObjects">
@@ -106,7 +111,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { LoadItemsOptionsWithSearch, TableHeader } from '../types/legends';
+import { LoadItemsOptionsWithSearch, LoadItemsSortOption, TableHeader } from '../types/legends';
 import type { FilterOperator, FilterRuleDto } from '../stores/worldObjectStores'; // Adjust the path as needed
 
 const props = defineProps({
@@ -153,6 +158,8 @@ const searchString = ref("")
 const filters = ref<FilterRuleDto[]>([]);
 const draftFilters = ref<FilterRuleDto[]>([]);
 const showFilterPopup = ref(false)
+const activeSort = ref<LoadItemsSortOption[]>([]);
+const isWarfareOverview = props.tableHeaders.some(header => header.key === 'attackerSitesGained');
 
 const applyFilters = () => {
     filters.value = [...draftFilters.value];
@@ -209,11 +216,12 @@ const getOperatorString = (operator: FilterOperator | undefined) => {
 }
 
 const loadWorldObjects = async ({ page, itemsPerPage, sortBy, search }: LoadItemsOptionsWithSearch) => {
+    activeSort.value = [...sortBy];
     await props.store.loadOverview(page, itemsPerPage, sortBy, search, filters.value)
 }
 
 // Load initial data when component mounts
-loadWorldObjects({ page: 1, itemsPerPage: props.store.objectEventsPerPage, sortBy: [], search: searchString.value })
+loadWorldObjects({ page: 1, itemsPerPage: props.store.objectsPerPage, sortBy: activeSort.value, search: searchString.value })
 
 watch(searchString, () => {
     loadWorldObjects({ page: 1, itemsPerPage: props.store.objectEventsPerPage, sortBy: [], search: searchString.value })
@@ -224,6 +232,18 @@ watch(filters, () => {
 </script>
 
 <style scoped>
+:deep(.warfare-overview-table .v-table__wrapper) {
+    overflow-x: auto;
+}
+
+:deep(.warfare-overview-table .v-table__wrapper table) {
+    min-width: 1950px;
+}
+
+:deep(.warfare-overview-table th) {
+    white-space: nowrap;
+}
+
 .multiline-subtitle {
     white-space: normal;
 }
