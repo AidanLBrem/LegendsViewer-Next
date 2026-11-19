@@ -57,6 +57,30 @@ public class War : EventCollection, IHasComplexSubtype
         return "Participant (side unspecified)";
     }
 
+    // Battle and conquest records are useful fallbacks when a war's roster
+    // is absent or incomplete. A battle's local attacker is not necessarily
+    // on the war's aggressor side, so infer only from an already known side.
+    public void RegisterOpponents(Entity? attacker, Entity? defender)
+    {
+        bool? KnownSide(Entity? entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            bool isAttacker = AttackingParticipants.Any(member =>
+                member == entity || member.CurrentCiv == entity.CurrentCiv && entity.CurrentCiv != null);
+            bool isDefender = DefendingParticipants.Any(member =>
+                member == entity || member.CurrentCiv == entity.CurrentCiv && entity.CurrentCiv != null);
+            return isAttacker == isDefender ? null : isAttacker;
+        }
+
+        bool? attackerSide = KnownSide(attacker);
+        bool? defenderSide = KnownSide(defender);
+        RegisterParticipant(attacker, attackerSide ?? (defenderSide.HasValue ? !defenderSide.Value : null));
+        RegisterParticipant(defender, defenderSide ?? (attackerSide.HasValue ? !attackerSide.Value : null));
+    }
+
     public void RegisterParticipant(Entity? participant, bool? attackingSide = null)
     {
         if (participant == null)
@@ -84,8 +108,8 @@ public class War : EventCollection, IHasComplexSubtype
             if (!entity.Wars.Contains(this))
             {
                 entity.Wars.Add(this);
+                entity.AddEventCollection(this);
             }
-            entity.AddEventCollection(this);
         }
     }
 
