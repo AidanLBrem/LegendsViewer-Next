@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SiteWithOwnershipHistory } from '../utils/siteHistory';
+import { getTerritorySeeds, type AtlasSite } from '../utils/historicalAtlas';
 import {
   buildNationExpansionHistory,
   listHistoricalNations,
@@ -64,5 +65,22 @@ describe('nation expansion timeline', () => {
     expect(nationExpansionAtYear(history, 0).sites).toBe(1);
     expect(history.peakSites).toBe(1);
     expect(nationExpansionChartPath(history, 0)).toBeTruthy();
+  });
+});
+
+describe('historical territory sizing', () => {
+  it('uses present population only for the current map, not earlier estimates', () => {
+    const site: AtlasSite = {
+      ownerId: 1, owner: 'Dwarves', ownerText: 'Dwarves', color: '#333333',
+      populationCount: 15000,
+      residentRace: 'Dwarf',
+      coordinates: [{ x: 5, y: 5 }],
+      ownerHistory: [{
+        startYear: 10, ownerId: 1, owner: 'Dwarves', ownerText: 'Dwarves',
+        color: '#333333', startCause: 'founded',
+      }],
+    };
+    expect(getTerritorySeeds([site], 50, 100)[0].population).toBeUndefined();
+    expect(getTerritorySeeds([site], 100, 100)[0].population).toBe(15000);
   });
 });
