@@ -14562,6 +14562,8 @@ export interface components {
             deathsByRace?: components["schemas"]["ChartDataDto"];
             attackerDeathsByRace?: components["schemas"]["ChartDataDto"];
             defenderDeathsByRace?: components["schemas"]["ChartDataDto"];
+            attackerInitialArmyByRace?: components["schemas"]["ChartDataDto"];
+            defenderInitialArmyByRace?: components["schemas"]["ChartDataDto"];
             readonly siteOutcomes?: components["schemas"]["WarfareSiteOutcomesDto"];
             /** Format: int32 */
             attackerDeathCount?: number;
@@ -15829,6 +15831,12 @@ export interface components {
             attackerDeathCount?: number;
             /** Format: int32 */
             defenderDeathCount?: number;
+            /** Format: int32 */
+            attackerBattleDeployments?: number;
+            /** Format: int32 */
+            defenderBattleDeployments?: number;
+            attackerDeploymentsByRace?: components["schemas"]["ChartDataDto"];
+            defenderDeploymentsByRace?: components["schemas"]["ChartDataDto"];
             readonly siteOutcomes?: components["schemas"]["WarfareSiteOutcomesDto"];
             readonly miscList?: components["schemas"]["ListItemDto"][] | null;
             readonly notableDeathLinks?: string[] | null;
@@ -15943,6 +15951,10 @@ export interface components {
             attackerDeathCount?: number | null;
             /** Format: int32 */
             defenderDeathCount?: number | null;
+            /** Format: int32 */
+            attackerTroopCount?: number | null;
+            /** Format: int32 */
+            defenderTroopCount?: number | null;
             /** Format: int32 */
             attackerSitesGainedCount?: number | null;
             /** Format: int32 */
