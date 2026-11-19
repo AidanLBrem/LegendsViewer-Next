@@ -59,7 +59,7 @@ const siteGroups = computed(() => rows.value.flatMap(row => [
 ]).filter(group => group.links.length > 0).concat(
     props.siteOutcomes?.unattributed?.length
         ? [{ key: 'unattributed', title: 'Unattributed site events',
-             links: props.siteOutcomes.unattributed }]
+             links: props.siteOutcomes?.unattributed ?? [] }]
         : []
 ));
 
