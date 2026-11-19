@@ -1,5 +1,6 @@
 using LegendsViewer.Backend.Extensions;
 using LegendsViewer.Backend.Legends.Enums;
+using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.Extensions;
 using LegendsViewer.Backend.Legends.Various;
 using LegendsViewer.Backend.Legends.WorldObjects;
@@ -32,6 +33,30 @@ public class SiteMarkerDto
             .OrderBy(period => period.StartYear < 0 ? 0 : period.StartYear)
             .Select(period => new SiteOwnershipPeriodDto(period))
             .ToList();
+
+        // Ownership ending is not necessarily the destruction of a site:
+        // abandonment, takeover and loss of an owner can leave it standing.
+        // Export explicit lifecycle evidence for historical map visibility.
+        CreatedYear = site.Events.OfType<CreatedSite>()
+            .Where(e => e.Year >= 0)
+            .Select(e => (int?)e.Year)
+            .Min() ?? site.OwnerHistory
+                .Where(period => period.StartYear >= 0 &&
+                    (period.StartCause?.Contains("found", StringComparison.OrdinalIgnoreCase) == true ||
+                     period.StartCause?.Contains("construct", StringComparison.OrdinalIgnoreCase) == true))
+                .Select(period => (int?)period.StartYear)
+                .Min();
+
+        DestroyedYears = site.Events.OfType<DestroyedSite>()
+            .Select(e => e.Year)
+            .Concat(site.Events.OfType<HfDestroyedSite>().Select(e => e.Year))
+            .Concat(site.OwnerHistory
+                .Where(period => period.EndCause?.Contains("destroy", StringComparison.OrdinalIgnoreCase) == true)
+                .Select(period => period.EndYear))
+            .Where(year => year >= 0)
+            .Distinct()
+            .OrderBy(year => year)
+            .ToList();
     }
 
     public int Id { get; set; }
@@ -49,6 +74,8 @@ public class SiteMarkerDto
     public SiteType Type { get; set; }
     public List<Location> Coordinates { get; set; }
     public List<SiteOwnershipPeriodDto> OwnerHistory { get; set; }
+    public int? CreatedYear { get; set; }
+    public List<int> DestroyedYears { get; set; }
 }
 
 // The timeline uses the same parent-faction identity and palette as the
@@ -68,6 +95,7 @@ public class SiteOwnershipPeriodDto
         ActualOwner = actualOwner?.ToLink();
         Color = nation?.LineColor.ToRgbaString() ?? "#666";
         StartCause = period.StartCause;
+        EndCause = period.EndCause;
     }
 
     public int StartYear { get; set; }
@@ -79,4 +107,5 @@ public class SiteOwnershipPeriodDto
     public string? ActualOwner { get; set; }
     public string Color { get; set; }
     public string? StartCause { get; set; }
+    public string? EndCause { get; set; }
 }
