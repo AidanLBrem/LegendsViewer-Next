@@ -268,6 +268,53 @@ public class WarfareSiteOutcomesTests
     }
 
     [TestMethod]
+    public void WarOutcomes_UseEnclosingConquestWhenChildNamesUnrelatedSubsidiary()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Entity subsidiary = new([], world) { Id = 750, Name = "Unlinked Garrison" };
+        Site town = new([], world) { Id = 751, Name = "Captured by Allied Garrison" };
+
+        SiteConquered conquest = AddOutcome(world, setup.War, 752,
+            setup.Attacker, setup.Defender, town, SiteConqueredType.Conquest);
+        conquest.Events.Add(new SiteTakenOver([], world)
+        {
+            Site = town, Attacker = subsidiary, Defender = setup.Defender
+        });
+
+        var outcomes = setup.War.SiteOutcomes;
+        Assert.AreEqual(1, outcomes.AttackerGained.Count);
+        Assert.AreEqual(1, outcomes.DefenderLost.Count);
+        Assert.AreEqual(0, outcomes.Unattributed.Count);
+    }
+
+    [TestMethod]
+    public void SiteConquered_ResolvesMissingSiteFromImportedChildAttack()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Site town = new([], world) { Id = 760, Name = "Town with Only Child Site ID" };
+        world.Sites.Add(town);
+
+        var attack = new AttackedSite([
+            P("id", "761"),
+            P("site_id", "760"),
+            P("attacker_civ_id", setup.Attacker.Id.ToString()),
+            P("defender_civ_id", setup.Defender.Id.ToString())
+        ], world);
+        world.Events.Add(attack);
+
+        var conquest = new SiteConquered([
+            P("id", "762"),
+            P("event", "761"),
+            P("attacking_enid", setup.Attacker.Id.ToString()),
+            P("defending_enid", setup.Defender.Id.ToString())
+        ], world);
+
+        Assert.AreSame(town, conquest.Site);
+    }
+
+    [TestMethod]
     public void WarOutcomes_DeduplicateSiteWhenCollectionAndEventDescribeSameCapture()
     {
         var setup = CreateWar();
