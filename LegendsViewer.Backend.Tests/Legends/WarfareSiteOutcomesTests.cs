@@ -201,8 +201,10 @@ public class WarfareSiteOutcomesTests
         Assert.AreEqual(4, overview.DefenderSitesLostCount);
 
         // The battle sees only its own reclamation, not unrelated war events.
-        Assert.AreEqual(1, nestedBattle.SiteOutcomes.DefenderGained.Count);
-        Assert.AreEqual(0, nestedBattle.SiteOutcomes.AttackerGained.Count);
+        // Battle roles reverse relative to the war: its attacker is the
+        // war's defender, so battle-side labels must follow the battle.
+        Assert.AreEqual(1, nestedBattle.SiteOutcomes.AttackerGained.Count);
+        Assert.AreEqual(0, nestedBattle.SiteOutcomes.DefenderGained.Count);
     }
 
     [TestMethod]
