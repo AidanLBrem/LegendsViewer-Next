@@ -200,44 +200,60 @@ public class WarfareSiteOutcomesDto
             switch (e)
             {
                 case SiteTakenOver take:
-                    Apply(take.Site ?? fallbackSite, take.Attacker ?? fallbackActor,
-                        take.Defender ?? fallbackVictim, Action.Conquest);
+                    Apply(take.Site ?? fallbackSite, Choose(take.Attacker, fallbackActor),
+                        Choose(take.Defender, fallbackVictim), Action.Conquest);
                     return true;
                 case NewSiteLeader leader:
-                    Apply(leader.Site ?? fallbackSite, leader.Attacker ?? fallbackActor,
-                        leader.Defender ?? fallbackVictim, Action.Conquest);
+                    Apply(leader.Site ?? fallbackSite, Choose(leader.Attacker, fallbackActor),
+                        Choose(leader.Defender, fallbackVictim), Action.Conquest);
                     return true;
                 case SiteSurrendered surrender:
-                    Apply(surrender.Site ?? fallbackSite, surrender.Attacker ?? fallbackActor,
-                        surrender.Defender ?? fallbackVictim, Action.Conquest);
+                    Apply(surrender.Site ?? fallbackSite, Choose(surrender.Attacker, fallbackActor),
+                        Choose(surrender.Defender, fallbackVictim), Action.Conquest);
                     return true;
                 case DestroyedSite destroyed:
-                    Apply(destroyed.Site ?? fallbackSite, destroyed.Attacker ?? fallbackActor,
-                        destroyed.Defender ?? destroyed.SiteEntity ?? fallbackVictim, Action.Destruction);
+                    Apply(destroyed.Site ?? fallbackSite, Choose(destroyed.Attacker, fallbackActor),
+                        Choose(destroyed.Defender ?? destroyed.SiteEntity, fallbackVictim), Action.Destruction);
                     return true;
                 case HfDestroyedSite hfDestroyed:
                     Apply(hfDestroyed.Site ?? fallbackSite, fallbackActor,
                         hfDestroyed.DefenderCiv ?? hfDestroyed.SiteCiv ?? fallbackVictim, Action.Destruction);
                     return true;
                 case PlunderedSite plunder:
-                    Apply(plunder.Site ?? fallbackSite, plunder.Attacker ?? fallbackActor,
-                        plunder.Defender ?? plunder.SiteEntity ?? fallbackVictim, Action.Plunder);
+                    Apply(plunder.Site ?? fallbackSite, Choose(plunder.Attacker, fallbackActor),
+                        Choose(plunder.Defender ?? plunder.SiteEntity, fallbackVictim), Action.Plunder);
                     return true;
                 case ReclaimSite reclaim:
-                    Apply(reclaim.Site ?? fallbackSite, reclaim.Civ ?? reclaim.SiteEntity ?? fallbackActor,
+                    Apply(reclaim.Site ?? fallbackSite, Choose(reclaim.Civ ?? reclaim.SiteEntity, fallbackActor),
                         null, Action.Gain);
                     return true;
                 case SiteAbandoned abandoned:
                     Apply(abandoned.Site ?? fallbackSite, null,
-                        abandoned.Civ ?? abandoned.SiteEntity ?? fallbackVictim, Action.Loss);
+                        Choose(abandoned.Civ ?? abandoned.SiteEntity, fallbackVictim), Action.Loss);
                     return true;
                 case SiteDied died:
                     Apply(died.Site ?? fallbackSite, null,
-                        died.Civ ?? died.SiteEntity ?? fallbackVictim, Action.Loss);
+                        Choose(died.Civ ?? died.SiteEntity, fallbackVictim), Action.Loss);
                     return true;
                 default:
                     return false;
             }
+        }
+
+        private Entity? Choose(Entity? fromEvent, Entity? fromCollection)
+        {
+            if (fromEvent == null) return fromCollection;
+
+            // In some exports an event names only a subsidiary or mercenary
+            // while the enclosing collection identifies the war participant.
+            // Do not discard that stronger affiliation evidence.
+            if (SideOf(fromEvent) == 0 && fromCollection != null &&
+                SideOf(fromCollection) != 0)
+            {
+                return fromCollection;
+            }
+
+            return fromEvent;
         }
 
         public void Apply(Site? site, Entity? actor, Entity? victim, Action action)
