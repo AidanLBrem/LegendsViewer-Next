@@ -114,6 +114,14 @@ public class Battle : EventCollection, IHasComplexSubtype
                 Title = "Defender site outcomes",
                 Subtitle = $"Gained: {sites.DefenderGained.Count:N0} | Lost: {sites.DefenderLost.Count:N0} | Plundered: {sites.DefenderPlundered.Count:N0}"
             });
+            if (sites.Unattributed.Count > 0)
+            {
+                list.Add(new ListItemDto
+                {
+                    Title = "Other or unattributed site changes",
+                    Subtitle = $"{sites.Unattributed.Count:N0} unique sites affected by records with uncertain participants"
+                });
+            }
             return list;
         }
     }
