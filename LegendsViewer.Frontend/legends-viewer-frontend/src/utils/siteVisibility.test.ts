@@ -2,30 +2,48 @@ import { describe, expect, it } from 'vitest';
 import { isSiteTypeVisible } from './siteVisibility';
 
 describe('site type visibility', () => {
-  const allVisible = { showMonasteries: true, showCamps: true };
+  const allVisible = { showMonasteries: true, showCamps: true, showCaves: true };
 
   it('shows all site types by default', () => {
     expect(isSiteTypeVisible('Monastery', allVisible)).toBe(true);
     expect(isSiteTypeVisible('Camp', allVisible)).toBe(true);
+    expect(isSiteTypeVisible('Cave', allVisible)).toBe(true);
     expect(isSiteTypeVisible('Tower', allVisible)).toBe(true);
   });
 
   it('hides monasteries without hiding camps or necromancer towers', () => {
-    const options = { showMonasteries: false, showCamps: true };
+    const options = { showMonasteries: false, showCamps: true, showCaves: true };
     expect(isSiteTypeVisible('Monastery', options)).toBe(false);
     expect(isSiteTypeVisible('Camp', options)).toBe(true);
     expect(isSiteTypeVisible('Tower', options)).toBe(true);
   });
 
   it('hides camps without hiding monasteries', () => {
-    const options = { showMonasteries: true, showCamps: false };
+    const options = { showMonasteries: true, showCamps: false, showCaves: true };
     expect(isSiteTypeVisible('Camp', options)).toBe(false);
     expect(isSiteTypeVisible('Monastery', options)).toBe(true);
     expect(isSiteTypeVisible('Town', options)).toBe(true);
   });
 
+  it('hides caves independently of camps, monasteries and other sites', () => {
+    const options = { showMonasteries: true, showCamps: true, showCaves: false };
+    expect(isSiteTypeVisible('Cave', options)).toBe(false);
+    expect(isSiteTypeVisible('Camp', options)).toBe(true);
+    expect(isSiteTypeVisible('Monastery', options)).toBe(true);
+    expect(isSiteTypeVisible('Lair', options)).toBe(true);
+    expect(isSiteTypeVisible('Tower', options)).toBe(true);
+  });
+
+  it('can hide monasteries, camps and caves simultaneously', () => {
+    const options = { showMonasteries: false, showCamps: false, showCaves: false };
+    expect(isSiteTypeVisible('Monastery', options)).toBe(false);
+    expect(isSiteTypeVisible('Camp', options)).toBe(false);
+    expect(isSiteTypeVisible('Cave', options)).toBe(false);
+    expect(isSiteTypeVisible('Fortress', options)).toBe(true);
+  });
+
   it('can hide both while leaving other and unknown types visible', () => {
-    const options = { showMonasteries: false, showCamps: false };
+    const options = { showMonasteries: false, showCamps: false, showCaves: true };
     expect(isSiteTypeVisible('Monastery', options)).toBe(false);
     expect(isSiteTypeVisible('Camp', options)).toBe(false);
     expect(isSiteTypeVisible('Fortress', options)).toBe(true);
