@@ -1,6 +1,7 @@
 using LegendsViewer.Backend.Contracts;
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.EventCollections;
+using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Extensions;
 using LegendsViewer.Backend.Legends.Extensions;
 using LegendsViewer.Backend.Legends.Interfaces;
@@ -301,6 +302,8 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
             StartYear = battle.StartYear,
             EndYear = battle.EndYear,
             IsActive = battle.EndYear == -1 || (parentWar != null && parentWar.EndYear == -1),
+            IsSiege = battle.Site != null || battle.Conquering != null ||
+                battle.Events.OfType<AttackedSite>().Any(),
             DeathCount = battle.DeathCount,
             AttackerDeathCount = battle.AttackerDeathCount,
             DefenderDeathCount = battle.DefenderDeathCount,
