@@ -96,7 +96,7 @@ public class WarfareSiteOutcomesTests
             P("aggressor_ent_id", "1"), P("defender_ent_id", "2")
         ], world);
         var ranked = new[] { quietWar, war }
-            .SortByProperty("attackerSitesGained", "desc").ToList();
+            .SortByProperty("attackerSitesGainedCount", "desc").ToList();
         Assert.AreSame(war, ranked[0]);
         Assert.AreSame(quietWar, ranked[1]);
     }
@@ -134,7 +134,7 @@ public class WarfareSiteOutcomesTests
 
         Battle quietBattle = new([P("id", "21"), P("war_eventcol", "10")], world);
         var ranked = new[] { quietBattle, battle }
-            .SortByProperty("defenderSitesLost", "desc").ToList();
+            .SortByProperty("defenderSitesLostCount", "desc").ToList();
         Assert.AreSame(battle, ranked[0]);
         Assert.AreSame(quietBattle, ranked[1]);
     }
