@@ -37,15 +37,19 @@ public class SiteMarkerDto
         // Ownership ending is not necessarily the destruction of a site:
         // abandonment, takeover and loss of an owner can leave it standing.
         // Export explicit lifecycle evidence for historical map visibility.
-        CreatedYear = site.Events.OfType<CreatedSite>()
+        int? eventCreationYear = site.Events.OfType<CreatedSite>()
             .Where(e => e.Year >= 0)
             .Select(e => (int?)e.Year)
-            .Min() ?? site.OwnerHistory
-                .Where(period => period.StartYear >= 0 &&
-                    (period.StartCause?.Contains("found", StringComparison.OrdinalIgnoreCase) == true ||
-                     period.StartCause?.Contains("construct", StringComparison.OrdinalIgnoreCase) == true))
-                .Select(period => (int?)period.StartYear)
-                .Min();
+            .Min();
+        int? ownerFoundingYear = site.OwnerHistory
+            .Where(period => period.StartYear >= 0 &&
+                (period.StartCause?.Contains("found", StringComparison.OrdinalIgnoreCase) == true ||
+                 period.StartCause?.Contains("construct", StringComparison.OrdinalIgnoreCase) == true))
+            .Select(period => (int?)period.StartYear)
+            .Min();
+        CreatedYear = eventCreationYear.HasValue && ownerFoundingYear.HasValue
+            ? Math.Min(eventCreationYear.Value, ownerFoundingYear.Value)
+            : eventCreationYear ?? ownerFoundingYear;
 
         DestroyedYears = site.Events.OfType<DestroyedSite>()
             .Select(e => e.Year)
