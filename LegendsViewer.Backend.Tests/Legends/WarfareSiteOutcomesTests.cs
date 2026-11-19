@@ -268,6 +268,54 @@ public class WarfareSiteOutcomesTests
     }
 
     [TestMethod]
+    public void WarOutcomes_FindConquestLinkedOnlyThroughItsWarBattle()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Site target = new([], world) { Id = 740, Name = "Recovered War Battle Town" };
+        var battle = new Battle([
+            P("id", "741"),
+            P("war_eventcol", setup.War.Id.ToString())
+        ], world)
+        {
+            Attacker = setup.Attacker,
+            Defender = setup.Defender
+        };
+        world.EventCollections.Add(battle);
+        setup.War.EventCollections.Add(battle);
+
+        // No war_eventcol or war.EventCollections membership on this
+        // conquest: the only connection is its linked battle.
+        var conquest = new SiteConquered([P("id", "742")], world)
+        {
+            Attacker = setup.Attacker,
+            Defender = setup.Defender,
+            ConquerType = SiteConqueredType.Conquest,
+            Site = target,
+            Battle = battle
+        };
+        world.EventCollections.Add(conquest);
+
+        // An unrelated faction's conquest should not leak into this war
+        // even if the importer matched the same preceding battle by ID.
+        Entity thirdParty = new([], world) { Id = 743, Name = "Independent Kingdom" };
+        var unrelated = new SiteConquered([P("id", "744")], world)
+        {
+            Attacker = thirdParty,
+            Defender = thirdParty,
+            ConquerType = SiteConqueredType.Conquest,
+            Site = new Site([], world) { Id = 745, Name = "Unrelated Site" },
+            Battle = battle
+        };
+        world.EventCollections.Add(unrelated);
+
+        var outcomes = setup.War.SiteOutcomes;
+        Assert.AreEqual(1, outcomes.AttackerGained.Count);
+        Assert.AreEqual(1, outcomes.DefenderLost.Count);
+        Assert.IsTrue(outcomes.AttackerGained.Single().Contains("Recovered War Battle Town"));
+    }
+
+    [TestMethod]
     public void WarOutcomes_UseEnclosingConquestWhenChildNamesUnrelatedSubsidiary()
     {
         var setup = CreateWar();
