@@ -23,10 +23,17 @@ public class NationSiteColorTests
         var tower = new Site([], world) { Id = 10, SiteType = LegendsViewer.Backend.Legends.Enums.SiteType.Tower };
         var secondTower = new Site([], world) { Id = 11, SiteType = LegendsViewer.Backend.Legends.Enums.SiteType.Tower };
 
+        var firstMountainHall = new Site([], world) { Id = 12, Coordinates = [new Location(10, 10)] };
+        var secondMountainHall = new Site([], world) { Id = 13, Coordinates = [new Location(12, 12)] };
+        tower.Coordinates.Add(new Location(11, 10));
+        secondTower.Coordinates.Add(new Location(13, 12));
+
         world.Entities.AddRange([dwarvesA, dwarvesB, necromancers, otherNecromancers]);
         tower.OwnerHistory.Add(new OwnerPeriod(tower, necromancers, 15, "founded"));
         secondTower.OwnerHistory.Add(new OwnerPeriod(secondTower, otherNecromancers, 18, "founded"));
-        world.Sites.AddRange([tower, secondTower]);
+        firstMountainHall.OwnerHistory.Add(new OwnerPeriod(firstMountainHall, dwarvesA, 10, "founded"));
+        secondMountainHall.OwnerHistory.Add(new OwnerPeriod(secondMountainHall, dwarvesB, 11, "founded"));
+        world.Sites.AddRange([tower, secondTower, firstMountainHall, secondMountainHall]);
 
         typeof(World).GetMethod("GenerateCivColors", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(world, null);
@@ -89,7 +96,7 @@ public class NationSiteColorTests
         Assert.AreNotEqual(marker.Color, marker.OriginColor);
     }
     [TestMethod]
-    public void GenerateCivColors_MoreThanSixThousandNations_NeverLoopsAndRemainsUnique()
+    public void GenerateCivColors_MoreThanSixThousandNations_ReusesPaletteWithoutCollisionLoops()
     {
         using World world = new();
         for (int i = 0; i < 7000; i++)
@@ -105,8 +112,34 @@ public class NationSiteColorTests
         typeof(World).GetMethod("GenerateCivColors", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(world, null);
 
-        Assert.AreEqual(world.Entities.Count,
-            world.Entities.Select(entity => entity.LineColor.ToArgb()).Distinct().Count());
+        Assert.IsTrue(world.Entities.All(entity => entity.LineColor != Color.Empty));
+        Assert.IsTrue(world.Entities.Select(entity => entity.LineColor.ToArgb()).Distinct().Count() < world.Entities.Count);
+    }
+
+    [TestMethod]
+    public void GenerateCivColors_NearbyNationsWithSamePreferredColor_GetDifferentColors()
+    {
+        using World world = new();
+        var north = new Entity([], world) { Id = 24, Name = "North", IsCiv = true };
+        var south = new Entity([], world) { Id = 48, Name = "South", IsCiv = true };
+        var farAway = new Entity([], world) { Id = 72, Name = "Far Away", IsCiv = true };
+        var northernSite = new Site([], world) { Id = 1, Coordinates = [new Location(10, 10)] };
+        var southernSite = new Site([], world) { Id = 2, Coordinates = [new Location(12, 11)] };
+        var distantSite = new Site([], world) { Id = 3, Coordinates = [new Location(1000, 1000)] };
+
+        northernSite.OwnerHistory.Add(new OwnerPeriod(northernSite, north, 10, "founded"));
+        southernSite.OwnerHistory.Add(new OwnerPeriod(southernSite, south, 11, "founded"));
+        distantSite.OwnerHistory.Add(new OwnerPeriod(distantSite, farAway, 12, "founded"));
+        world.Entities.AddRange([north, south, farAway]);
+        world.Sites.AddRange([northernSite, southernSite, distantSite]);
+
+        typeof(World).GetMethod("GenerateCivColors", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(world, null);
+
+        Assert.AreNotEqual(north.LineColor.ToArgb(), south.LineColor.ToArgb());
+        // Global uniqueness is not required: this nation is well outside the
+        // local neighborhood and may reuse the same palette color as North.
+        Assert.AreEqual(north.LineColor.ToArgb(), farAway.LineColor.ToArgb());
     }
 
     [TestMethod]
