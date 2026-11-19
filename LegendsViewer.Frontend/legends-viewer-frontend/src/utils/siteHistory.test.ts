@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getOwnershipChangeYears,
   getSiteOwnerAtYear,
+  getTimelineMaxYear,
   stepOwnershipChange,
   type SiteWithOwnershipHistory,
 } from './siteHistory';
@@ -69,6 +70,25 @@ describe('map history stepping', () => {
     expect(getSiteOwnerAtYear(otherTower, 60, 100).ownerId).toBe(42);
     expect(getSiteOwnerAtYear(necromancer, 60, 100).currentOwnerId).toBe(4201);
     expect(getSiteOwnerAtYear(otherTower, 60, 100).currentOwnerId).toBe(4202);
+  });
+
+  it('recovers year 0/0 from historical ownership dates in old world responses', () => {
+    // Imported worlds previously sent currentYear=0, which disabled Play
+    // and incorrectly discarded every owner change after year zero.
+    const maximum = getTimelineMaxYear(0, [contestedSite]);
+    expect(maximum).toBe(70);
+    expect(getOwnershipChangeYears([contestedSite], maximum)).toEqual([0, 10, 30, 70]);
+    expect(stepOwnershipChange(0, 1, getOwnershipChangeYears([contestedSite], maximum))).toBe(10);
+  });
+
+  it('respects a newer world year and ignores unknown or negative dates', () => {
+    const site: SiteWithOwnershipHistory = {
+      ownerHistory: [{ startYear: -1, endYear: -1 }],
+    };
+    expect(getTimelineMaxYear(250, [contestedSite])).toBe(250);
+    expect(getTimelineMaxYear(undefined, [site])).toBe(0);
+    expect(getTimelineMaxYear(Number.NaN, [site])).toBe(0);
+    expect(getTimelineMaxYear(0, [{ ownerHistory: [{ startYear: 100, endYear: 150 }] }])).toBe(150);
   });
 
   it('deduplicates and orders ownership starts and ends for event stepping', () => {
