@@ -19,6 +19,8 @@ export interface NationCulturePeriod {
     harshEdictsIssued: number;
     harshEdictsRevoked: number;
     expansionPerCentury: number;
+    settlementExpansionPerCentury: number;
+    conquestPerCentury: number;
     offensiveOperationsPerCentury: number;
     plundersPerCentury: number;
     diplomacyPerCentury: number;
@@ -68,7 +70,9 @@ export const cultureWindows = [
 ];
 
 export const cultureDimensionDescriptions: Record<string, string> = {
-    expansionPerCentury: 'Recorded conquests and settlements founded per 100 observed years; reclaims are not new expansion.',
+    expansionPerCentury: 'Combined territorial expansion: settlements founded plus sites conquered per 100 observed years; reclamations are excluded.',
+    settlementExpansionPerCentury: 'Settlements founded by the civilization per 100 observed years, excluding conquered or reclaimed sites.',
+    conquestPerCentury: 'Sites taken over or conquered by the civilization per 100 observed years, excluding settlements founded or reclaimed.',
     offensiveOperationsPerCentury: 'Recorded attacks on sites and offensive field battles per 100 observed years. These are engagements, not necessarily new wars.',
     plundersPerCentury: 'Recorded site plunderings by this civilization per 100 observed years.',
     diplomacyPerCentury: 'Accepted peace offers and alliances formed per 100 observed years; not a measure of all diplomatic activity.',
