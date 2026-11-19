@@ -6,6 +6,7 @@ export interface SiteOwnershipPeriod {
   owner?: string | null;
   ownerText?: string | null;
   ownerId?: number | null;
+  ownerEntityType?: string | null;
   currentOwnerId?: number | null;
   actualOwner?: string | null;
   color?: string | null;
@@ -20,6 +21,7 @@ export interface SiteWithOwnershipHistory {
   owner?: string | null;
   ownerText?: string | null;
   ownerId?: number | null;
+  ownerEntityType?: string | null;
   currentOwnerId?: number | null;
   color?: string | null;
 }
@@ -29,6 +31,7 @@ export interface HistoricalSiteOwner {
   owner: string;
   ownerText: string;
   ownerId: number | null;
+  ownerEntityType: string | null;
   currentOwnerId: number | null;
   actualOwner: string | null;
   color: string;
@@ -127,6 +130,7 @@ export function getSiteOwnerAtYear(
     owner: site.owner ?? 'Others',
     ownerText: site.ownerText ?? 'Others',
     ownerId: site.ownerId ?? null,
+    ownerEntityType: site.ownerEntityType ?? null,
     currentOwnerId: site.currentOwnerId ?? null,
     actualOwner: null,
     color: site.color ?? '#666',
@@ -163,6 +167,7 @@ export function getSiteOwnerAtYear(
       owner: 'Unclaimed',
       ownerText: 'Unclaimed',
       ownerId: null,
+      ownerEntityType: null,
       currentOwnerId: null,
       actualOwner: null,
       color: '#666',
@@ -176,6 +181,7 @@ export function getSiteOwnerAtYear(
     owner: active.owner ?? 'Unclaimed',
     ownerText: active.ownerText ?? 'Unclaimed',
     ownerId: active.ownerId ?? null,
+    ownerEntityType: active.ownerEntityType ?? null,
     currentOwnerId: active.currentOwnerId ?? null,
     actualOwner: active.actualOwner ?? null,
     color: active.color ?? '#666',
