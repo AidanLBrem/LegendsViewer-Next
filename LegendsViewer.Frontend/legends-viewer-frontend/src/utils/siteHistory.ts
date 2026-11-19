@@ -102,8 +102,8 @@ export function getTimelineMaxYear(
   currentYear: number | null | undefined,
   sites: readonly SiteWithOwnershipHistory[]
 ): number {
-  let latest = Number.isFinite(currentYear)
-    ? Math.max(0, Math.floor(currentYear ?? 0))
+  let latest = typeof currentYear === 'number' && Number.isFinite(currentYear)
+    ? Math.max(0, Math.floor(currentYear))
     : 0;
 
   for (const site of sites) {
