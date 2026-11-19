@@ -7,12 +7,17 @@ export interface AtlasCoordinate { x?: number; y?: number }
 export interface AtlasSite extends SiteWithOwnershipHistory {
   coordinates?: AtlasCoordinate[] | null;
   type?: string | null;
+  // From the optional sites-and-pops export; a current snapshot rather
+  // than a reconstructed population for each historical year.
+  populationCount?: number | null;
 }
 export interface TerritorySeed {
   x: number;
   y: number;
   nationId: number;
   color: string;
+  population?: number;
+  coordinateCount?: number;
 }
 
 export interface TerritorySeedOptions {
@@ -74,10 +79,17 @@ export function getTerritorySeeds(
     if (options.filterMinorPowers && (siteCounts.get(owner.ownerId!) ?? 0) <= 1) continue;
     if (options.excludedNationIds?.has(owner.ownerId!)) continue;
     if (!includeSite(site)) continue;
-    for (const location of site.coordinates ?? []) {
-      if (location.x == null || location.y == null ||
-        !Number.isFinite(location.x) || !Number.isFinite(location.y)) continue;
-      seeds.push({ x: location.x, y: location.y, nationId: owner.ownerId!, color: owner.color });
+    const locations = (site.coordinates ?? []).filter(location =>
+      location.x != null && location.y != null &&
+      Number.isFinite(location.x) && Number.isFinite(location.y));
+    const population = site.populationCount;
+    for (const location of locations) {
+      seeds.push({
+        x: location.x!, y: location.y!, nationId: owner.ownerId!, color: owner.color,
+        ...(population != null && Number.isFinite(population) && population > 0
+          ? { population } : {}),
+        ...(locations.length > 1 ? { coordinateCount: locations.length } : {}),
+      });
     }
   }
   return seeds;
@@ -126,9 +138,12 @@ export function getTerritoryNationAtTile(
 
 export type YieldToBrowser = () => Promise<void>;
 
-// Bounded-resolution, bounded-influence *approximation* of settlement
-// territory; the game does not provide political borders in legends exports.
-// Spatial buckets prevent scanning every world site for every raster cell.
+// Bounded, population-weighted approximation of territorial influence.
+// Each settlement contributes a smooth, limited-radius influence field.
+// Fields belonging to the same nation add together, so adjacent population
+// centers reinforce each other instead of being treated as isolated points.
+// The world export does not contain political borders or historical
+// populations; these fields are estimates using the imported site snapshot.
 export async function createTerritoryGrid(
   width: number,
   height: number,
@@ -144,92 +159,97 @@ export async function createTerritoryGrid(
   const colors = new Map<number, string>();
   if (width <= 0 || height <= 0) return { width: rasterWidth, height: rasterHeight, nation, colors };
 
-  const radius = Math.max(7, Math.min(140, Math.hypot(width, height) * 0.045));
-  const radiusSquared = radius * radius;
-
-  // Jump-flood the settlement seeds on a resolution-capped grid. Unlike
-  // testing every site against every cell, this has bounded O(pixels log pixels)
-  // cost even when thousands of settlements cluster in one province.
-  const validSeeds: TerritorySeed[] = [];
-  let nearest = new Int32Array(rasterWidth * rasterHeight);
-  nearest.fill(-1);
+  const baseRadius = Math.max(7, Math.min(140, Math.hypot(width, height) * 0.045));
+  const groups = new Map<number, TerritorySeed[]>();
   for (const seed of seeds) {
-    if (seed.x < 0 || seed.x >= width || seed.y < 0 || seed.y >= height) continue;
+    if (!Number.isFinite(seed.x) || !Number.isFinite(seed.y) ||
+        seed.x < 0 || seed.x >= width || seed.y < 0 || seed.y >= height) continue;
     if (isOceanTile(oceanMask, width, Math.floor(seed.x), Math.floor(seed.y))) continue;
+    const group = groups.get(seed.nationId);
+    if (group) group.push(seed);
+    else groups.set(seed.nationId, [seed]);
     colors.set(seed.nationId, seed.color);
-    const px = Math.min(rasterWidth - 1, Math.floor(seed.x * rasterWidth / width));
-    const py = Math.min(rasterHeight - 1, Math.floor(seed.y * rasterHeight / height));
-    const cell = py * rasterWidth + px;
-    const old = nearest[cell];
-    const distance = (seed.x - (px + 0.5) * width / rasterWidth) ** 2 +
-      (seed.y - (py + 0.5) * height / rasterHeight) ** 2;
-    const oldDistance = old < 0 ? Infinity :
-      (validSeeds[old].x - (px + 0.5) * width / rasterWidth) ** 2 +
-      (validSeeds[old].y - (py + 0.5) * height / rasterHeight) ** 2;
-    if (distance < oldDistance || (distance === oldDistance &&
-      (old < 0 || seed.nationId < validSeeds[old].nationId))) {
-      nearest[cell] = validSeeds.length;
-    }
-    validSeeds.push(seed);
   }
-  if (validSeeds.length === 0) {
-    return { width: rasterWidth, height: rasterHeight, nation, colors };
-  }
+  if (groups.size === 0) return { width: rasterWidth, height: rasterHeight, nation, colors };
 
-  const maxDimension = Math.max(rasterWidth, rasterHeight);
-  let step = 1;
-  while (step < maxDimension) step *= 2;
+  // Reuse a single accumulator for every nation. A generation-stamp array
+  // and list of touched cells avoids both a map per pixel and a full-grid
+  // scan for every faction (important for worlds with many minor powers).
+  const bestStrength = new Float32Array(nation.length);
+  const accumulated = new Float32Array(nation.length);
+  const stamps = new Uint32Array(nation.length);
+  const touched: number[] = [];
+  let stamp = 0;
+  let groupsProcessed = 0;
+  const pixelWidth = width / rasterWidth;
+  const pixelHeight = height / rasterHeight;
 
-  for (step = Math.floor(step / 2); step >= 1; step = Math.floor(step / 2)) {
-    let next = new Int32Array(rasterWidth * rasterHeight);
-    next.fill(-1);
-    for (let py = 0; py < rasterHeight; py++) {
+  for (const [nationId, nationSeeds] of groups) {
+    if (cancelled()) return null;
+    stamp++;
+    touched.length = 0;
+
+    for (let i = 0; i < nationSeeds.length; i++) {
       if (cancelled()) return null;
-      const y = (py + 0.5) * height / rasterHeight;
-      for (let px = 0; px < rasterWidth; px++) {
-        const x = (px + 0.5) * width / rasterWidth;
-        const pos = py * rasterWidth + px;
-        let nearestSeed = nearest[pos];
-        let bestDistance = nearestSeed < 0 ? Infinity :
-          (validSeeds[nearestSeed].x - x) ** 2 + (validSeeds[nearestSeed].y - y) ** 2;
-        for (let dy = -step; dy <= step; dy += step) {
-          const ny = py + dy;
-          if (ny < 0 || ny >= rasterHeight) continue;
-          for (let dx = -step; dx <= step; dx += step) {
-            const nx = px + dx;
-            if (nx < 0 || nx >= rasterWidth) continue;
-            const candidate = nearest[ny * rasterWidth + nx];
-            if (candidate < 0) continue;
-            const seed = validSeeds[candidate];
-            const distance = (seed.x - x) ** 2 + (seed.y - y) ** 2;
-            if (distance < bestDistance ||
-              (distance === bestDistance && nearestSeed >= 0 &&
-                seed.nationId < validSeeds[nearestSeed].nationId)) {
-              nearestSeed = candidate;
-              bestDistance = distance;
-            }
+      const seed = nationSeeds[i];
+      // Log scaling gives large cities more reach without allowing one
+      // enormous settlement to overpower an entire surrounding region.
+      // Unknown population has the same weight as a single ordinary site.
+      const population = Number.isFinite(seed.population) ? Math.max(0, seed.population!) : 0;
+      const populationScale = Math.log10(1 + population / 100);
+      const weight = (1 + Math.min(2.4, populationScale * 0.55)) /
+        Math.max(1, seed.coordinateCount ?? 1);
+      const radius = baseRadius * (1 + Math.min(0.45, populationScale * 0.12));
+      const radiusSquared = radius * radius;
+      const minX = Math.max(0, Math.ceil((seed.x - radius) / pixelWidth - 0.5));
+      const maxX = Math.min(rasterWidth - 1, Math.floor((seed.x + radius) / pixelWidth - 0.5));
+      const minY = Math.max(0, Math.ceil((seed.y - radius) / pixelHeight - 0.5));
+      const maxY = Math.min(rasterHeight - 1, Math.floor((seed.y + radius) / pixelHeight - 0.5));
+
+      for (let py = minY; py <= maxY; py++) {
+        const dy = (py + 0.5) * pixelHeight - seed.y;
+        const dySquared = dy * dy;
+        if (dySquared >= radiusSquared) continue;
+        for (let px = minX; px <= maxX; px++) {
+          const dx = (px + 0.5) * pixelWidth - seed.x;
+          const distanceSquared = dx * dx + dySquared;
+          if (distanceSquared >= radiusSquared) continue;
+          const falloff = 1 - distanceSquared / radiusSquared;
+          const contribution = weight * falloff * falloff;
+          const cell = py * rasterWidth + px;
+          if (stamps[cell] !== stamp) {
+            stamps[cell] = stamp;
+            accumulated[cell] = contribution;
+            touched.push(cell);
+          } else {
+            accumulated[cell] += contribution;
           }
         }
-        next[pos] = nearestSeed;
       }
-      if (py % 32 === 31) await yieldToBrowser();
+      if (i % 32 === 31) await yieldToBrowser();
     }
-    nearest = next;
+
+    for (const cell of touched) {
+      const strength = accumulated[cell];
+      if (strength > bestStrength[cell] + 1e-6 ||
+          (Math.abs(strength - bestStrength[cell]) <= 1e-6 &&
+           (nation[cell] < 0 || nationId < nation[cell]))) {
+        bestStrength[cell] = strength;
+        nation[cell] = nationId;
+      }
+    }
+    if (++groupsProcessed % 16 === 0) await yieldToBrowser();
   }
 
-  for (let py = 0; py < rasterHeight; py++) {
-    if (cancelled()) return null;
-    const y = (py + 0.5) * height / rasterHeight;
-    for (let px = 0; px < rasterWidth; px++) {
-      const x = (px + 0.5) * width / rasterWidth;
-      const pos = py * rasterWidth + px;
-      const seedIndex = nearest[pos];
-      if (seedIndex < 0) continue;
-      const seed = validSeeds[seedIndex];
-      const distance = (seed.x - x) ** 2 + (seed.y - y) ** 2;
-      if (distance <= radiusSquared) nation[pos] = seed.nationId;
+  // When rival fields overlap a settlement's exact world tile, preserve
+  // recorded ownership at that location instead of obscuring the site
+  // beneath a stronger neighbor's estimated surrounding territory.
+  for (const [nationId, nationSeeds] of groups) {
+    for (const seed of nationSeeds) {
+      const px = Math.min(rasterWidth - 1, Math.floor(seed.x / pixelWidth));
+      const py = Math.min(rasterHeight - 1, Math.floor(seed.y / pixelHeight));
+      nation[py * rasterWidth + px] = nationId;
     }
-    if (py % 32 === 31) await yieldToBrowser();
   }
   return { width: rasterWidth, height: rasterHeight, nation, colors };
 }
