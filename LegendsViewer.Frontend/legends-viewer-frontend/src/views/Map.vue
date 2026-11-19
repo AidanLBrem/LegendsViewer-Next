@@ -1346,6 +1346,10 @@ export default defineComponent({
           const id = getTerritoryNationAtTile(grid, width, height, x, y, oceanMask);
           if (id != null) landTiles.set(id, (landTiles.get(id) ?? 0) + 1);
         }
+        if (y % 32 === 31) {
+          await yieldToBrowser();
+          if (disposed || generation !== historyUpdateGeneration) return;
+        }
       }
       territoryLandTiles.value = landTiles;
       clearTerritoryTip();
