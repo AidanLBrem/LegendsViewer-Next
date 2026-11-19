@@ -431,7 +431,7 @@ function createMarker(siteType: SiteType, siteColor: string | null | undefined, 
   const config = siteTypeMarkers[siteType];
   const color = siteColor ?? config?.color ?? "#666"
   const size = config?.size ?? 3;
-  const options = { pane: 'overlayPane', color: color, renderer };
+  const options = { pane: 'overlayPane', color: color, renderer, interactive: false };
   switch (config?.shape) {
     case 'circle':
       return L.circle(latlng, { ...options, radius: size });
@@ -460,7 +460,7 @@ function createPolygon(center: L.LatLngExpression, sides: number, size: number, 
     ]
     vertices.push(vertex);
   }
-  return L.polygon(vertices, { pane: 'overlayPane', color, renderer });
+  return L.polygon(vertices, { pane: 'overlayPane', color, renderer, interactive: false });
 }
 
 function createStar(center: L.LatLngExpression, points: number, outer: number, inner: number, color: string, renderer: L.Renderer): L.Polygon {
@@ -474,7 +474,7 @@ function createStar(center: L.LatLngExpression, points: number, outer: number, i
     ]
     vertices.push(vertex);
   }
-  return L.polygon(vertices, { pane: 'overlayPane', color, renderer });
+  return L.polygon(vertices, { pane: 'overlayPane', color, renderer, interactive: false });
 }
 
 function coordinateKey(x: number, y: number): string {
@@ -921,6 +921,7 @@ export default defineComponent({
         // Do not mutate marker layers in response to their own overlay events.
         // Visibility changes are handled explicitly by the owner controls.
         leafletMap.value.on('zoomend', syncTileBadges);
+        leafletMap.value.on('click', selectSiteAtMapClick);
 
         // ResizeObserver callbacks calling invalidateSize can create a
         // resize/invalidate/resize feedback cycle on some layouts.
@@ -977,6 +978,62 @@ export default defineComponent({
       const scale = 8;
       const height = worldStore.world?.height ?? 0;
       return [(height - y) * scale - 0.5 * scale, x * scale + 0.5 * scale];
+    };
+
+    // Canvas-drawn sites are often smaller than a screen pixel at overview
+    // zoom. Resolve clicks using the world tile grid, not vector hit testing.
+    const selectSiteAtMapClick = (event: L.LeafletMouseEvent) => {
+      const map = leafletMap.value;
+      if (!map || isRenderingSites || disposed) return;
+
+      // Let independently interactive warfare markers handle their own clicks.
+      const source = (event as L.LeafletMouseEvent & { sourceTarget?: L.Evented }).sourceTarget;
+      if (source && source !== map) return;
+
+      const width = worldStore.world?.width ?? 0;
+      const height = worldStore.world?.height ?? 0;
+      const scale = 8;
+      const tileX = Math.floor(event.latlng.lng / scale);
+      const tileY = Math.floor(height - event.latlng.lat / scale);
+      if (tileX < 0 || tileX >= width || tileY < 0 || tileY >= height) return;
+
+      let selectedX = tileX;
+      let selectedY = tileY;
+      let items = getActiveItemsAtTile(tileX, tileY);
+
+      // At low zoom, allow a short screen-space click tolerance around a
+      // site rather than forcing the user to hit a 1-2 px world tile.
+      if (items.length === 0) {
+        const pixelsPerTile = scale * Math.pow(2, map.getZoom());
+        const tileRadius = Math.min(10, Math.ceil(10 / pixelsPerTile));
+        let closestDistance = Number.POSITIVE_INFINITY;
+        for (let dy = -tileRadius; dy <= tileRadius; dy++) {
+          for (let dx = -tileRadius; dx <= tileRadius; dx++) {
+            const x = tileX + dx;
+            const y = tileY + dy;
+            if (x < 0 || x >= width || y < 0 || y >= height) continue;
+
+            const candidates = getActiveItemsAtTile(x, y);
+            if (candidates.length === 0) continue;
+
+            const center = toLatLng(x, y);
+            const distance = map.latLngToContainerPoint(center)
+              .distanceTo(map.latLngToContainerPoint(event.latlng));
+            if (distance <= 10 && distance < closestDistance) {
+              closestDistance = distance;
+              selectedX = x;
+              selectedY = y;
+              items = candidates;
+            }
+          }
+        }
+      }
+
+      if (items.length === 0) return;
+      L.popup({ minWidth: 220 })
+        .setLatLng(toLatLng(selectedX, selectedY))
+        .setContent(createUnifiedPickerPopup(items, router))
+        .openOn(map);
     };
 
     const handleObjectFocus = async (type: string, id: number) => {
@@ -1397,6 +1454,7 @@ export default defineComponent({
       recolorGeneration++;
       window.removeEventListener('resize', onWindowResize);
       if (leafletMap.value) {
+        leafletMap.value.off('click', selectSiteAtMapClick);
         leafletMap.value.remove();
       }
     });
