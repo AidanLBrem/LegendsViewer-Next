@@ -231,14 +231,14 @@ public class World : IDisposable, IWorld
         HashSet<Entity> nations = new(Entities.Where(entity => entity.IsCiv));
         foreach (Site site in Sites)
         {
-            Entity? owner = site.CurrentOwner;
-            if (owner != null && owner.CurrentCiv == null)
+            Entity? ownerNation = site.CurrentOwner?.MapNation;
+            if (ownerNation != null)
             {
-                nations.Add(owner);
+                nations.Add(ownerNation);
             }
 
             Entity? origin = site.OriginNation;
-            if (origin != null && origin.CurrentCiv == null)
+            if (origin != null)
             {
                 nations.Add(origin);
             }
@@ -272,8 +272,7 @@ public class World : IDisposable, IWorld
                 occupied.Add(cell, owners);
             }
 
-            Entity? currentOwner = site.CurrentOwner;
-            Entity? currentNation = currentOwner?.CurrentCiv ?? currentOwner;
+            Entity? currentNation = site.CurrentOwner?.MapNation;
             if (currentNation != null && neighbors.ContainsKey(currentNation))
             {
                 owners.Add(currentNation);
@@ -366,16 +365,13 @@ public class World : IDisposable, IWorld
             MainRaces.TryAdd(races[i], Formatting.HsvToColor((i * goldenAngle) % 360, 0.65, 0.95));
         }
 
-        // Subsidiary groups inherit their nation's color unless they are themselves
-        // independent site-owning factions with an assigned color.
-        foreach (Entity civ in Entities.Where(entity => entity.IsCiv))
+        // Subsidiaries of an independent faction (such as a necromancer's
+        // separate holdings) share that faction's color too.
+        foreach (Entity entity in Entities)
         {
-            foreach (Entity childGroup in civ.Groups)
+            if (!nations.Contains(entity))
             {
-                if (!nations.Contains(childGroup))
-                {
-                    childGroup.LineColor = civ.LineColor;
-                }
+                entity.LineColor = entity.MapNation.LineColor;
             }
         }
 
