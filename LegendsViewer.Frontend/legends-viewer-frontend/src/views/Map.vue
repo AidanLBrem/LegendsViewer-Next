@@ -10,26 +10,26 @@
         <span aria-hidden="true">{{ siteColorsExpanded ? '▾' : '▸' }}</span>
       </button>
       <div id="site-color-panel-content" v-show="siteColorsExpanded" class="site-color-selector__body">
-      <label for="site-color-mode">Color by</label>
-      <select id="site-color-mode" v-model="siteColorMode">
-        <option value="current">Owner in selected year</option>
-        <option value="origin">Origin nation</option>
-      </select>
-      <div class="site-visibility-options" role="group" aria-label="Visible site types">
-        <label><input type="checkbox" v-model="showMonasteries" :disabled="!historyReady" /> Monasteries</label>
-        <label><input type="checkbox" v-model="showCamps" :disabled="!historyReady" /> Camps</label>
-        <label><input type="checkbox" v-model="showCaves" :disabled="!historyReady" /> Caves</label>
-        <label><input type="checkbox" v-model="showNecromancers" :disabled="!historyReady" /> Show necromancers</label>
-      </div>
-      <div class="site-visibility-options atlas-options" role="group" aria-label="Historical atlas overlays">
-        <strong>Historical atlas</strong>
-        <label><input type="checkbox" v-model="showEstimatedTerritories" :disabled="!historyReady" /> Estimated territories</label>
-        <label><input type="checkbox" v-model="showBorderLines" :disabled="!historyReady || !showEstimatedTerritories" /> Show border lines</label>
-        <label><input type="checkbox" v-model="filterMinorPowers" :disabled="!historyReady" /> Filter minor powers (≤1 site)</label>
-        <label><input type="checkbox" v-model="showHistoricalBattles" :disabled="!historyReady" /> Battles / sieges</label>
-        <label><input type="checkbox" v-model="showHistoricalCampaigns" :disabled="!historyReady" /> War campaigns</label>
-        <label><input type="checkbox" v-model="showHistoricalSiteOutcomes" :disabled="!historyReady" /> Conquests / raids</label>
-      </div>
+        <label for="site-color-mode">Color by</label>
+        <select id="site-color-mode" v-model="siteColorMode">
+          <option value="current">Owner in selected year</option>
+          <option value="origin">Origin nation</option>
+        </select>
+        <div class="site-visibility-options" role="group" aria-label="Visible site types">
+          <label><input type="checkbox" v-model="showMonasteries" :disabled="!historyReady" /> Monasteries</label>
+          <label><input type="checkbox" v-model="showCamps" :disabled="!historyReady" /> Camps</label>
+          <label><input type="checkbox" v-model="showCaves" :disabled="!historyReady" /> Caves</label>
+          <label><input type="checkbox" v-model="showNecromancers" :disabled="!historyReady" /> Show necromancers</label>
+        </div>
+        <div class="site-visibility-options atlas-options" role="group" aria-label="Historical atlas overlays">
+          <strong>Historical atlas</strong>
+          <label><input type="checkbox" v-model="showEstimatedTerritories" :disabled="!historyReady" /> Estimated territories</label>
+          <label><input type="checkbox" v-model="showBorderLines" :disabled="!historyReady || !showEstimatedTerritories" /> Show border lines</label>
+          <label><input type="checkbox" v-model="filterMinorPowers" :disabled="!historyReady" /> Filter minor powers (≤1 site)</label>
+          <label><input type="checkbox" v-model="showHistoricalBattles" :disabled="!historyReady" /> Battles / sieges</label>
+          <label><input type="checkbox" v-model="showHistoricalCampaigns" :disabled="!historyReady" /> War campaigns</label>
+          <label><input type="checkbox" v-model="showHistoricalSiteOutcomes" :disabled="!historyReady" /> Conquests / raids</label>
+        </div>
       </div>
     </div>
     <section v-if="historyReady" class="history-stepper" aria-label="Map history">
