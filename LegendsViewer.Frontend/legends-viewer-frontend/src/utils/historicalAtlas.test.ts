@@ -210,6 +210,44 @@ describe('historical atlas political influence', () => {
     }
   });
 
+  it('can hide border lines without changing territory colors or ownership', () => {
+    const grid = {
+      width: 2,
+      height: 1,
+      nation: new Int32Array([3, 4]),
+      colors: new Map([[3, '#112233'], [4, '#445566']]),
+    };
+    const images: Uint8ClampedArray[] = [];
+    vi.stubGlobal('document', {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          createImageData: (width: number, height: number) => ({
+            data: new Uint8ClampedArray(width * height * 4),
+          }),
+          putImageData: (image: { data: Uint8ClampedArray }) => {
+            images.push(new Uint8ClampedArray(image.data));
+          },
+        }),
+        toDataURL: () => 'data:image/png;base64,',
+      }),
+    });
+    try {
+      territoryGridToDataUrl(grid);
+      territoryGridToDataUrl(grid, undefined, grid.width, grid.height, false);
+      const withBorders = images[0];
+      const withoutBorders = images[1];
+      // A new faction begins at pixel 1, which is outlined by default.
+      expect([...withBorders.slice(4, 8)]).toEqual([22, 26, 28, 190]);
+      expect([...withoutBorders.slice(4, 8)]).toEqual([68, 85, 102, 142]);
+      expect([...withoutBorders.slice(0, 4)]).toEqual([17, 34, 51, 142]);
+      expect(grid.nation).toEqual(new Int32Array([3, 4]));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('cancels during a large territory raster pass', async () => {
     let called = 0;
     const grid = await createTerritoryGrid(
