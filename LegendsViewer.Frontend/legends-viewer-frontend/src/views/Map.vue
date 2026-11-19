@@ -10,6 +10,35 @@
         <option value="origin">Origin nation</option>
       </select>
     </div>
+    <section v-if="historyReady" class="history-stepper" aria-label="Map history">
+      <div class="history-stepper__title">
+        <strong>History</strong>
+        <span>Year {{ selectedYear.toLocaleString() }}</span>
+      </div>
+      <div class="history-stepper__actions">
+        <button type="button" title="Previous ownership change" aria-label="Previous ownership change"
+          :disabled="selectedYear <= 0" @click="jumpToHistoryChange(-1)">⏮</button>
+        <button type="button" title="Previous year" aria-label="Previous year"
+          :disabled="selectedYear <= 0" @click="stepHistoryYear(-1)">−1</button>
+        <button type="button" :aria-label="historyPlaying ? 'Pause history' : 'Play history'"
+          :disabled="historyMaxYear === 0" @click="toggleHistoryPlayback">
+          {{ historyPlaying ? 'Pause' : 'Play' }}
+        </button>
+        <button type="button" title="Next year" aria-label="Next year"
+          :disabled="selectedYear >= historyMaxYear" @click="stepHistoryYear(1)">+1</button>
+        <button type="button" title="Next ownership change" aria-label="Next ownership change"
+          :disabled="selectedYear >= historyMaxYear" @click="jumpToHistoryChange(1)">⏭</button>
+        <button type="button" title="Return to the latest year" aria-label="Return to present"
+          :disabled="selectedYear >= historyMaxYear" @click="goToPresent">Present</button>
+      </div>
+      <input class="history-stepper__range" type="range" min="0" :max="historyMaxYear" step="1"
+        :value="selectedYear" :aria-valuetext="'Year ' + selectedYear"
+        aria-label="Historical year" @input="onHistorySliderInput" />
+      <div class="history-stepper__limits">
+        <span>0</span><span>{{ historyMaxYear.toLocaleString() }}</span>
+      </div>
+      <small>Site ownership timeline. Terrain and warfare overlays remain present-day.</small>
+    </section>
   </div>
 </template>
 
@@ -23,9 +52,15 @@ import 'leaflet/dist/leaflet.css';
 import { components } from '../generated/api-schema'; // Import from the OpenAPI schema
 
 import type { WarfareMapDto, WarMapOverlayDto, BattleMapMarkerDto } from '../types/legends';
+import {
+  getSiteOwnerAtYear,
+  getOwnershipChangeYears,
+  stepOwnershipChange,
+  type SiteWithOwnershipHistory,
+} from '../utils/siteHistory';
 
 export type SiteType = components['schemas']['SiteType'];
-type SiteMarker = components['schemas']['SiteMarkerDto'];
+type SiteMarker = components['schemas']['SiteMarkerDto'] & SiteWithOwnershipHistory;
 
 export type MapTileItemType = 'site' | 'war' | 'battle';
 
@@ -504,7 +539,9 @@ function wireInternalLinks(container: HTMLElement, router: Router): void {
 
 
 
-function createUnifiedPickerPopup(items: MapTileItem[], router: Router): HTMLElement {
+function createUnifiedPickerPopup(
+  items: MapTileItem[], router: Router, selectedYear: number, presentYear: number
+): HTMLElement {
   if (items.length === 1) {
     const single = items[0];
     if (single.type === 'battle') {
@@ -538,8 +575,17 @@ function createUnifiedPickerPopup(items: MapTileItem[], router: Router): HTMLEle
       itemEl.append(document.createElement('br'));
       itemEl.append(marker.typeAsString ?? 'Unknown');
       itemEl.append(document.createElement('br'), document.createElement('br'));
-      appendRichContent(itemEl, marker.owner ?? 'Others');
-      if (marker.originOwnerId != null && marker.originOwnerId !== marker.ownerId) {
+      const owner = getSiteOwnerAtYear(marker, selectedYear, presentYear);
+      itemEl.append(document.createTextNode(`Owner in year ${selectedYear}: `));
+      appendRichContent(itemEl, owner.owner);
+      if (owner.actualOwner && owner.currentOwnerId !== owner.ownerId) {
+        itemEl.append(document.createElement('br'), 'Actual holder: ');
+        appendRichContent(itemEl, owner.actualOwner);
+      }
+      if (owner.startCause) {
+        itemEl.append(document.createElement('br'), `Change: ${owner.startCause}`);
+      }
+      if (marker.originOwnerId != null && marker.originOwnerId !== owner.ownerId) {
         itemEl.append(document.createElement('br'), 'Origin: ');
         appendRichContent(itemEl, marker.originOwner ?? marker.originOwnerText);
       }
