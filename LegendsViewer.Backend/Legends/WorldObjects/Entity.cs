@@ -464,6 +464,10 @@ public class Entity : WorldObject, IHasCoordinates
     public List<HistoricalFigure> AllLeaders => Leaders.SelectMany(l => l).ToList();
     public List<string> AllLeaderLinks => AllLeaders.ConvertAll(x => x.ToLink(true, this));
 
+    // This expands every resident into a separate string and can allocate
+    // millions of entries when serializing a populous civilization. The API
+    // exposes the compact Populations race/count pairs instead.
+    [JsonIgnore]
     public List<string> PopulationsAsList
     {
         get
