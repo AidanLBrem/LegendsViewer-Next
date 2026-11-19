@@ -264,8 +264,8 @@ public class World : IDisposable, IWorld
             }
 
             Location position = site.Coordinates[0];
-            var cell = ((int)Math.Floor(position.X / (double)cellSize),
-                        (int)Math.Floor(position.Y / (double)cellSize));
+            var cell = (X: (int)Math.Floor(position.X / (double)cellSize),
+                        Y: (int)Math.Floor(position.Y / (double)cellSize));
             if (!occupied.TryGetValue(cell, out HashSet<Entity>? owners))
             {
                 owners = [];
@@ -333,7 +333,7 @@ public class World : IDisposable, IWorld
                 .Select(entity => assigned[entity])
                 .ToList();
 
-            int preferred = (int)((uint)nation.Id % paletteSize);
+            int preferred = (int)((uint)nation.Id % (uint)paletteSize);
             int bestIndex = preferred;
             int bestDistance = -1;
             for (int offset = 0; offset < paletteSize; offset++)
