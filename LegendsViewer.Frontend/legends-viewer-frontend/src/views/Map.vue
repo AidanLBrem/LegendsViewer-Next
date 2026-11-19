@@ -23,7 +23,7 @@
         <label><input type="checkbox" v-model="showHistoricalBattles" :disabled="!historyReady" /> Battles / sieges</label>
         <label><input type="checkbox" v-model="showHistoricalCampaigns" :disabled="!historyReady" /> War campaigns</label>
         <label><input type="checkbox" v-model="showHistoricalSiteOutcomes" :disabled="!historyReady" /> Conquests / raids</label>
-        <small>Territory borders are estimates from settlement locations, not recorded boundaries. Click any map tile to inspect nominal control.</small>
+        <small>Estimated territories combine settlement populations and nearby sites. Population is from the imported snapshot, not a historical census. Click a map tile to inspect nominal control.</small>
       </div>
     </div>
     <section v-if="historyReady" class="history-stepper" aria-label="Map history">
