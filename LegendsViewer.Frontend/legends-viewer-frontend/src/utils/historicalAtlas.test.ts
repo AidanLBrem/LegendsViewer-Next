@@ -267,6 +267,17 @@ describe('historical atlas political influence', () => {
     expect([...grid.nation]).toEqual([1, 1, 2, -1, -1]);
   });
 
+  it('does not treat adjacent political claims on disconnected land as one territory', () => {
+    const grid = {
+      width: 3, height: 1,
+      nation: new Int32Array([4, 4, 4]),
+      colors: new Map<number, string>(),
+      sourceComponents: new Int32Array([1, 1, 2]),
+    };
+    pruneUnanchoredClaims(grid, new Uint8Array([1, 0, 0]));
+    expect([...grid.nation]).toEqual([4, 4, -1]);
+  });
+
   it('checks exact land ownership even if the influence grid is downsampled', () => {
     const width = 4, height = 2;
     const water = new Uint8Array(Math.ceil(width * height / 8));
