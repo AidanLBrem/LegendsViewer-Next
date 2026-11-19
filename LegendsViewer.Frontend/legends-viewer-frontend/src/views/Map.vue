@@ -746,6 +746,12 @@ function createUnifiedPickerPopup(
       else itemEl.append('Unknown site');
       itemEl.append(document.createElement('br'));
       itemEl.append(marker.typeAsString ?? 'Unknown');
+      itemEl.append(document.createElement('br'));
+      itemEl.append(document.createTextNode('Population (imported snapshot): '));
+      const population = marker.populationCount;
+      itemEl.append(population != null && Number.isFinite(population) && population >= 0
+        ? Math.round(population).toLocaleString('en-US')
+        : 'Unavailable (no site-population data)');
       itemEl.append(document.createElement('br'), document.createElement('br'));
       const owner = getSiteOwnerAtYear(marker, selectedYear, presentYear);
       itemEl.append(document.createTextNode(`Owner in year ${selectedYear}: `));
