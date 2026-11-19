@@ -84,6 +84,7 @@ import { components } from '../generated/api-schema'; // Import from the OpenAPI
 import type { WarfareMapDto, WarMapOverlayDto, BattleMapMarkerDto, SiteConquestMapMarkerDto } from '../types/legends';
 import {
   createTerritoryGrid,
+  buildLandComponents,
   territoryGridToDataUrl,
   getTerritorySeeds,
   getNecromancerNationIds,
@@ -1066,6 +1067,7 @@ export default defineComponent({
     let activeTerritoryOwners = new Map<number, string>();
     let necromancerNationIds = new Set<number>();
     let oceanMask: Uint8Array | null = null;
+    let landComponents: Int32Array | null = null;
     let territoryChangeYears: number[] = [];
     let ownerVisibilityVersion = 0;
 
@@ -1212,7 +1214,7 @@ export default defineComponent({
       const grid = await createTerritoryGrid(
         width, height, seeds, yieldToBrowser,
         () => disposed || generation !== historyUpdateGeneration || !showEstimatedTerritories.value,
-        oceanMask
+        oceanMask, landComponents ?? undefined
       );
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
@@ -1222,7 +1224,7 @@ export default defineComponent({
       if (!territoryOverlay.value) {
         const bounds: L.LatLngBoundsExpression = [[0, 0], [height * 8, width * 8]];
         territoryOverlay.value = L.imageOverlay(image, bounds, {
-          pane: 'territoryPane', interactive: false, opacity: 0.75
+          pane: 'territoryPane', interactive: false, opacity: 0.90
         });
       } else {
         territoryOverlay.value.setUrl(image);
@@ -1543,6 +1545,7 @@ export default defineComponent({
         // The terrain mask comes from the actual overworld region data,
         // not from colors in the exported map image.
         oceanMask = null;
+        landComponents = null;
         try {
           const maskResponse = await fetch('http://localhost:15421/api/WorldMap/ocean-mask');
           if (!maskResponse.ok) {
@@ -1554,6 +1557,9 @@ export default defineComponent({
           }
           if (disposed) return;
           oceanMask = mask;
+          // Cache land connectivity once per imported world, rather than
+          // reflooding every year of historical territory playback.
+          landComponents = buildLandComponents(width, height, mask);
         } catch (error) {
           // Keep the rest of the map usable without showing misleading
           // territory over oceans when the terrain service is unavailable.
