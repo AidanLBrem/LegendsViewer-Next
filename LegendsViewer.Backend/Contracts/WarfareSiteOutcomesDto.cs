@@ -264,6 +264,16 @@ public class WarfareSiteOutcomesDto
             int victimSide = SideOf(victim);
             bool recorded = false;
 
+            // A conquest in an explicitly associated war sometimes records
+            // only the losing faction. With exactly two known war sides and no
+            // named third party, the opposite belligerent is the captor.
+            // Do not make this inference for destruction, abandonment or a
+            // specifically named but unrelated attacker.
+            if (action == Action.Conquest && actor == null && victimSide != 0)
+            {
+                actorSide = victimSide == 1 ? 2 : 1;
+            }
+
             // An explicitly named third-party attacker is not automatically
             // a victory for either war side, even when its victim is one of
             // the two belligerents.
