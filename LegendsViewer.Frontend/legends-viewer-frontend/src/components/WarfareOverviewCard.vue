@@ -56,7 +56,12 @@ const siteGroups = computed(() => rows.value.flatMap(row => [
     { key: row.side + '-gained', title: row.side + ' gained', links: row.gained },
     { key: row.side + '-lost', title: row.side + ' lost', links: row.lost },
     { key: row.side + '-plundered', title: row.side + ' plundered', links: row.plundered },
-]).filter(group => group.links.length > 0));
+]).filter(group => group.links.length > 0).concat(
+    props.siteOutcomes?.unattributed?.length
+        ? [{ key: 'unattributed', title: 'Unattributed site events',
+             links: props.siteOutcomes.unattributed }]
+        : []
+));
 
 function lossPercentage(deaths: number, deployed: number): string {
     return deployed > 0 ? `${(100 * deaths / deployed).toFixed(1)}%` : '—';
@@ -109,7 +114,10 @@ function lossPercentage(deaths: number, deployed: number): string {
             </div>
             <div class="text-caption mt-1">
                 Conquest changes possession; destruction counts as a site lost, not gained.
-                Plundering does not count as conquest.
+                Plundering does not count as conquest. Counts represent distinct sites
+                in each category, including sites changing hands more than once.
+                Events involving unknown or third-party factions are listed separately
+                instead of being credited to the wrong war side.
             </div>
             <div v-if="siteGroups.length" class="warfare-site-links mt-3">
                 <details v-for="group in siteGroups" :key="group.key">
