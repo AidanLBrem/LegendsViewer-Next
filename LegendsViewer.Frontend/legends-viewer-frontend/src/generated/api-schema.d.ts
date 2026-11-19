@@ -15859,6 +15859,7 @@ export interface components {
             defenderGained?: string[] | null;
             defenderLost?: string[] | null;
             defenderPlundered?: string[] | null;
+            unattributed?: string[] | null;
         };
         WorldConstruction: {
             /** Format: int32 */
