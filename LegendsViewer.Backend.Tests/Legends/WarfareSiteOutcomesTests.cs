@@ -403,6 +403,16 @@ public class WarfareSiteOutcomesTests
         Assert.AreEqual(0, outcomes.DefenderLost.Count);
         Assert.AreEqual(1, outcomes.Unattributed.Count);
         Assert.IsTrue(outcomes.Unattributed.Single().Contains("Third Party Victory"));
+        Assert.AreEqual(1, new WorldObjectDto(setup.War).UnattributedSitesCount);
+
+        War other = new([
+            P("id", "902"), P("name", "Unrelated War"),
+            P("aggressor_ent_id", setup.Attacker.Id.ToString()),
+            P("defender_ent_id", setup.Defender.Id.ToString())
+        ], world);
+        var sorted = new[] { other, setup.War }
+            .SortByProperty("unattributedSitesCount", "desc").ToList();
+        Assert.AreSame(setup.War, sorted[0]);
     }
 
     [TestMethod]
