@@ -8,6 +8,7 @@ namespace LegendsViewer.Backend.Contracts;
 public sealed class NationCulturePeriodDto
 {
     public int WindowYears { get; set; }
+    public string Character { get; set; } = "";
     public int StartYear { get; set; }
     public int EndYear { get; set; }
     public int ObservedYears { get; set; }
@@ -203,9 +204,23 @@ public sealed class NationCultureProfileDto
             int peace = Count("peace");
             int alliances = Count("alliance");
             int upheavals = Count("upheaval");
+            string character = conquests >= 2 && conquests >= 2 * settlements
+                ? "Conquest-oriented"
+                : settlements >= 2 && settlements >= 2 * conquests
+                    ? "Settlement-oriented"
+                    : offense >= 3 && offense > Count("defensive")
+                        ? "Offensively active"
+                        : Count("defensive") >= 3 && Count("defensive") > offense
+                            ? "Defensively engaged"
+                            : peace + alliances >= 2 && peace + alliances >= offense
+                                ? "Diplomatically active"
+                                : entries.Count > 0
+                                    ? "Mixed recorded activity"
+                                    : "Insufficient recorded activity";
             return new NationCulturePeriodDto
             {
                 WindowYears = windowYears,
+                Character = character,
                 StartYear = start,
                 EndYear = currentYear,
                 ObservedYears = duration,
@@ -230,16 +245,6 @@ public sealed class NationCultureProfileDto
         }
 
         var all = Period(0);
-        string character = all.Conquests > all.SettlementsFounded && all.Conquests > 0
-            ? "Conquest-oriented"
-            : all.SettlementsFounded > all.Conquests && all.SettlementsFounded > 0
-                ? "Settlement-oriented"
-                : all.OffensiveOperations > all.DefensiveOperations && all.OffensiveOperations > 0
-                    ? "Offensively active"
-                    : all.PeaceAgreements + all.Alliances > 0
-                        ? "Diplomatically active"
-                        : "Insufficient recorded activity";
-
         var byDecade = facts.GroupBy(f => f.Year / 10 * 10)
             .ToDictionary(g => g.Key, g => g.ToList());
         var timeline = new List<NationCultureTimelineDto>();
@@ -261,7 +266,7 @@ public sealed class NationCultureProfileDto
         {
             EntityId = nation.Id,
             CurrentYear = currentYear,
-            Character = character,
+            Character = all.Character,
             WorshippedDeities = nation.Worshipped.Count,
             Periods = [all, Period(100), Period(25)],
             Timeline = timeline,
