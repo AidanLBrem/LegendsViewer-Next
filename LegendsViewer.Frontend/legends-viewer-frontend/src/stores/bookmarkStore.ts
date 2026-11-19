@@ -8,6 +8,18 @@ export type Bookmark = components['schemas']['Bookmark'];
 // Track in-flight requests to handle race conditions
 let currentRequestId = 0;
 
+function describeLoadError(error: unknown): string {
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const details = error as { detail?: unknown; message?: unknown; title?: unknown; type?: unknown };
+    for (const value of [details.detail, details.message, details.title, details.type]) {
+      if (typeof value === 'string' && value.trim()) return value;
+    }
+  }
+  return 'Failed to load the world. Check the backend console for details.';
+}
+
 export const useBookmarkStore = defineStore('bookmark', {
   state: () => ({
     bookmarks: [] as Bookmark[],
@@ -43,9 +55,22 @@ export const useBookmarkStore = defineStore('bookmark', {
         this.isLoadingNewWorld = true;
       }
 
-      const { data, error } = await client.POST("/api/Bookmark/loadByFullPath", {
-        body: filePath.replace("{TIMESTAMP}", latestTimestamp), // Send the filePath as raw text
-      });
+      let response;
+      try {
+        response = await client.POST("/api/Bookmark/loadByFullPath", {
+          body: filePath.replace("{TIMESTAMP}", latestTimestamp),
+        });
+      } catch (err) {
+        if (requestId === currentRequestId) {
+          existingBookmark = this.bookmarks.find(bookmark => bookmark.filePath === filePath);
+          if (existingBookmark) existingBookmark.state = 'Default';
+          this.isLoadingNewWorld = false;
+          this.bookmarkError = describeLoadError(err);
+          console.error('World loading request failed:', err);
+        }
+        return;
+      }
+      const { data, error } = response;
 
       // Check if this response is still the latest request (race condition fix)
       if (requestId !== currentRequestId) {
@@ -59,7 +84,7 @@ export const useBookmarkStore = defineStore('bookmark', {
           existingBookmark.state = 'Default';
         }
         this.isLoadingNewWorld = false;
-        this.bookmarkError = error.title ?? error.type ?? '';
+        this.bookmarkError = describeLoadError(error);
       } else if (data) {
         const newBookmark = data as Bookmark;
         if (newBookmark.worldName == null || newBookmark.worldName.length == 0) {
@@ -171,14 +196,29 @@ export const useBookmarkStore = defineStore('bookmark', {
         this.isLoadingNewWorld = true;
       }
 
-      const { data, error } = await client.POST("/api/Bookmark/loadByFolderAndFile", {
-        body: folderPath, // Send the filePath as raw text
-        params: {
-          query: {
-            fileName: fileName
-          }
-        },
-      });
+      let response;
+      try {
+        response = await client.POST("/api/Bookmark/loadByFolderAndFile", {
+          body: folderPath,
+          params: {
+            query: {
+              fileName: fileName
+            }
+          },
+        });
+      } catch (err) {
+        if (requestId === currentRequestId) {
+          existingBookmark = this.bookmarks.find(bookmark =>
+            bookmark.filePath?.startsWith(folderPath) &&
+            bookmark.filePath?.endsWith(fileNameWithoutTimestamp));
+          if (existingBookmark) existingBookmark.state = 'Default';
+          this.isLoadingNewWorld = false;
+          this.bookmarkError = describeLoadError(err);
+          console.error('World loading request failed:', err);
+        }
+        return;
+      }
+      const { data, error } = response;
 
       // Check if this response is still the latest request (race condition fix)
       if (requestId !== currentRequestId) {
@@ -193,7 +233,7 @@ export const useBookmarkStore = defineStore('bookmark', {
           existingBookmark.state = 'Default';
         }
         this.isLoadingNewWorld = false;
-        this.bookmarkError = error.title ?? error.type ?? 'Failed to load world';
+        this.bookmarkError = describeLoadError(error);
       } else if (data) {
         const newBookmark = data as Bookmark;
 
