@@ -3,6 +3,7 @@
     <div id="map" style="height: 100%;"></div>
     <div v-if="mapError" class="map-error" role="alert">{{ mapError }}</div>
     <div v-if="mapProgress" class="map-progress" role="status">{{ mapProgress }}</div>
+    <div v-if="ownerLayerNotice" class="map-owner-notice" role="status">{{ ownerLayerNotice }}</div>
     <div class="site-color-selector">
       <label for="site-color-mode">Site colors</label>
       <select id="site-color-mode" v-model="siteColorMode">
@@ -639,6 +640,7 @@ export default defineComponent({
     const siteColorMode = ref<'current' | 'origin'>('current');
     const mapError = ref('');
     const mapProgress = ref('');
+    const ownerLayerNotice = ref('');
     const siteLayers: Array<{ marker: L.Path; site: SiteMarker }> = [];
     const siteRenderer = L.canvas({ padding: 0.3 });
     let renderGeneration = 0;
@@ -1105,6 +1107,7 @@ export default defineComponent({
       const generation = ++renderGeneration;
       isRenderingSites = true;
       mapProgress.value = 'Preparing map markers...';
+      ownerLayerNotice.value = '';
       mapError.value = '';
       try {
         if (currentOverlay.value) {
@@ -1206,7 +1209,21 @@ export default defineComponent({
         }
 
         layersControl['Wars & Battles'] = warfareLayer.value;
-        controlLayers.value = L.control.layers(undefined, layersControl).addTo(leafletMap.value);
+        const layerEntries = Object.entries(layersControl);
+        // Leaflet's standard control creates all labels synchronously. On
+        // large worlds, thousands of labels can freeze the browser even
+        // though the map markers themselves were rendered in batches.
+        const maxListedOwners = 250;
+        const visibleLayers: Record<string, LayerGroup> = {};
+        for (const [name, layer] of layerEntries.slice(0, maxListedOwners)) {
+          visibleLayers[name] = layer;
+        }
+        visibleLayers['Wars & Battles'] = warfareLayer.value;
+        if (layerEntries.length > maxListedOwners + 1) {
+          ownerLayerNotice.value =
+            `Showing the first ${maxListedOwners} owner toggles. All/None still controls every site.`;
+        }
+        controlLayers.value = L.control.layers(undefined, visibleLayers).addTo(leafletMap.value);
 
         // The warfare layer starts unchecked. Load its data only when a user
         // enables it rather than making a potentially huge request on every map open.
@@ -1260,6 +1277,7 @@ export default defineComponent({
       siteColorMode,
       mapError,
       mapProgress,
+      ownerLayerNotice,
     };
   },
 });
@@ -1271,6 +1289,19 @@ export default defineComponent({
   width: 100%;
   position: relative;
   /* Ensure the map and controls are positioned properly */
+}
+
+.map-owner-notice {
+  position: absolute;
+  top: 140px;
+  left: 10px;
+  z-index: 1000;
+  padding: 8px 12px;
+  max-width: 320px;
+  background: rgba(30, 30, 30, 0.85);
+  color: white;
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 .map-progress {
