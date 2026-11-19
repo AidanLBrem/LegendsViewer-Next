@@ -362,6 +362,18 @@ public class WarfareSiteOutcomesDto
             {
                 War? war = FindAncestor<War>(conquest.ParentCollection);
                 Battle? battle = conquest.Battle ?? FindAncestor<Battle>(conquest.ParentCollection);
+
+                // A few exports omit war_eventcol on the conquest but
+                // explicitly associate it with a battle from that war.
+                // The importer also guesses the nearest prior battle, so
+                // require matching belligerents and a compatible date before
+                // treating that inferred battle as evidence of war membership.
+                if (war == null && battle?.ParentCollection is War battleWar &&
+                    ConquestMatchesWar(conquest, battleWar))
+                {
+                    war = battleWar;
+                }
+
                 if (war != null) Add(WarConquests, war, conquest);
                 if (battle != null) Add(BattleConquests, battle, conquest);
             }
@@ -376,6 +388,39 @@ public class WarfareSiteOutcomesDto
                 if (war != null) Add(WarEvents, war, e);
                 if (battle != null) Add(BattleEvents, battle, e);
             }
+        }
+
+        private static bool ConquestMatchesWar(SiteConquered conquest, War war)
+        {
+            if (conquest.StartYear >= 0 &&
+                ((war.StartYear >= 0 && conquest.StartYear < war.StartYear) ||
+                 (war.EndYear >= 0 && conquest.StartYear > war.EndYear)))
+            {
+                return false;
+            }
+
+            static bool IsParticipant(Entity? entity, War war)
+            {
+                if (entity == null) return false;
+                if (entity.EqualsOrParentEquals(war.Attacker) ||
+                    entity.EqualsOrParentEquals(war.Defender))
+                {
+                    return true;
+                }
+
+                Entity? attackerNation = war.Attacker?.MapNation;
+                Entity? defenderNation = war.Defender?.MapNation;
+                if (attackerNation == null || defenderNation == null ||
+                    attackerNation == defenderNation)
+                {
+                    return false;
+                }
+                return entity.MapNation == attackerNation ||
+                       entity.MapNation == defenderNation;
+            }
+
+            return IsParticipant(conquest.Attacker, war) ||
+                   IsParticipant(conquest.Defender, war);
         }
 
         private static T? FindAncestor<T>(EventCollection? collection) where T : EventCollection
