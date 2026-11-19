@@ -9,6 +9,10 @@
         <option value="current">Owner in selected year</option>
         <option value="origin">Origin nation</option>
       </select>
+      <div class="site-visibility-options" role="group" aria-label="Visible site types">
+        <label><input type="checkbox" v-model="showMonasteries" :disabled="!historyReady" /> Monasteries</label>
+        <label><input type="checkbox" v-model="showCamps" :disabled="!historyReady" /> Camps</label>
+      </div>
     </div>
     <section v-if="historyReady" class="history-stepper" aria-label="Map history">
       <div class="history-stepper__title">
@@ -58,6 +62,7 @@ import {
   stepOwnershipChange,
   type SiteWithOwnershipHistory,
 } from '../utils/siteHistory';
+import { isSiteTypeVisible } from '../utils/siteVisibility';
 
 export type SiteType = components['schemas']['SiteType'];
 type SiteMarker = components['schemas']['SiteMarkerDto'] & SiteWithOwnershipHistory;
@@ -823,6 +828,8 @@ export default defineComponent({
     const highlightLayer = shallowRef<LayerGroup | null>(null);
     const siteMarkersMap = new Map<number, { marker: L.Layer; popup: HTMLElement }>();
     const siteColorMode = ref<'current' | 'origin'>('current');
+    const showMonasteries = ref(true);
+    const showCamps = ref(true);
     const mapError = ref('');
     const mapProgress = ref('');
     const historyReady = ref(false);
@@ -842,6 +849,12 @@ export default defineComponent({
     let warfareLoading = false;
 
     const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+    const siteTypeIsVisible = (site: SiteMarker): boolean =>
+      isSiteTypeVisible(site.type, {
+        showMonasteries: showMonasteries.value,
+        showCamps: showCamps.value,
+      });
 
     const colorForSite = (site: SiteMarker, ownerColor = site.color): string => {
       if (siteColorMode.value === 'origin') {
@@ -915,7 +928,7 @@ export default defineComponent({
           const { marker, site, item } = siteLayers[i];
           const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
           const ownerLayer = ownerLayers[owner.ownerText] ?? ownerLayers['Others'];
-          if (!owner.visible || !ownerLayer) {
+          if (!owner.visible || !ownerLayer || !siteTypeIsVisible(site)) {
             if (item.layerGroup.hasLayer(marker)) item.layerGroup.removeLayer(marker);
           } else {
             if (item.layerGroup !== ownerLayer) {
@@ -935,8 +948,10 @@ export default defineComponent({
       }
     };
 
-    watch(selectedYear, () => { void applyHistoryYear(); });
-    watch(siteColorMode, () => { void applyHistoryYear(); });
+    watch(
+      [selectedYear, siteColorMode, showMonasteries, showCamps],
+      () => { void applyHistoryYear(); }
+    );
 
     // This will hold the LayerGroups for different owners
     const ownerLayers: Record<string, LayerGroup> = Object.create(null);
@@ -1545,7 +1560,9 @@ export default defineComponent({
             };
             siteLayers.push({ marker, site: siteMarker, item });
             registerTileItem(item);
-            ownerLayers[ownerText].addLayer(marker);
+            if (siteTypeIsVisible(siteMarker)) {
+              ownerLayers[ownerText].addLayer(marker);
+            }
 
             if (siteMarker.id != null) {
               siteMarkersMap.set(siteMarker.id, { marker, popup: null as any });
@@ -1618,6 +1635,8 @@ export default defineComponent({
     return {
       mapStore,
       siteColorMode,
+      showMonasteries,
+      showCamps,
       mapError,
       mapProgress,
       historyReady,
@@ -1806,6 +1825,25 @@ export default defineComponent({
   border: 1px solid currentColor;
   border-radius: 3px;
   padding: 4px;
+}
+
+.site-visibility-options {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(127, 127, 127, 0.3);
+}
+
+.site-visibility-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.site-visibility-options input {
+  cursor: pointer;
 }
 
 .leaflet-image-layer {
