@@ -79,6 +79,37 @@ public class Site : WorldObject, IHasCoordinates
 
     public List<OwnerPeriod> OwnerHistory { get; set; } = [];
 
+    // The original civilization ID in the legends XML is retained separately
+    // from the site's changing owner.
+    public int? OriginalCivId { get; private set; }
+
+    [JsonIgnore]
+    public Entity? OriginNation
+    {
+        get
+        {
+            // Founding events are more authoritative than current ownership.
+            Entity? foundingOwner = OwnerHistory
+                .Where(period => period.Owner != null &&
+                    period.StartCause?.Contains("found", StringComparison.OrdinalIgnoreCase) == true)
+                .OrderBy(period => period.StartYear < 0 ? int.MaxValue : period.StartYear)
+                .Select(period => period.Owner)
+                .FirstOrDefault();
+
+            Entity? xmlCivilization = OriginalCivId.HasValue ? World?.GetEntity(OriginalCivId.Value) : null;
+            Entity? earliestOwner = OwnerHistory
+                .Where(period => period.Owner != null && period.StartYear >= 0)
+                .OrderBy(period => period.StartYear)
+                .Select(period => period.Owner)
+                .FirstOrDefault();
+
+            Entity? origin = foundingOwner ?? xmlCivilization ?? earliestOwner ??
+                OwnerHistory.FirstOrDefault(period => period.Owner != null)?.Owner;
+
+            return origin?.CurrentCiv ?? origin;
+        }
+    }
+
     public List<SiteProperty> SiteProperties { get; set; } = [];
 
     [JsonIgnore]
@@ -267,6 +298,12 @@ public class Site : WorldObject, IHasCoordinates
                     }
                     break;
                 case "civ_id":
+                    if (int.TryParse(property.Value, out int originalCivId) && originalCivId >= 0)
+                    {
+                        OriginalCivId = originalCivId;
+                    }
+                    property.Known = true;
+                    break;
                 case "cur_owner_id": property.Known = true; break;
                 case "rectangle":
                     char[] delimiterChars = { ':', ',' };
