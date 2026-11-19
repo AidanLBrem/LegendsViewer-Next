@@ -249,7 +249,8 @@ export function territoryGridToDataUrl(
   grid: TerritoryGrid,
   oceanMask?: Uint8Array,
   worldWidth = grid.width,
-  worldHeight = grid.height
+  worldHeight = grid.height,
+  showBorderLines = true
 ): string {
   const canvas = document.createElement('canvas');
   // The influence calculation stays capped at 320² cells, but the rendered
@@ -274,7 +275,8 @@ export function territoryGridToDataUrl(
         if (!cache.has(id)) cache.set(id, rgb(grid.colors.get(id) ?? '#777777'));
         const [r, g, b] = cache.get(id)!;
         const pos = (y * canvas.width + x) * 4;
-        const border = (x > 0 && leftId !== id) || (y > 0 && previousRow[x] !== id);
+        const border = showBorderLines &&
+          ((x > 0 && leftId !== id) || (y > 0 && previousRow[x] !== id));
         pixels.data[pos] = border ? 22 : r;
         pixels.data[pos + 1] = border ? 26 : g;
         pixels.data[pos + 2] = border ? 28 : b;
