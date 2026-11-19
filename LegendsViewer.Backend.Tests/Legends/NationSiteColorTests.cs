@@ -143,6 +143,38 @@ public class NationSiteColorTests
     }
 
     [TestMethod]
+    public void SiteMarker_ExportsChronologicalOwnershipForHistoryStepper()
+    {
+        using World world = new();
+        var founders = new Entity([], world)
+        {
+            Id = 1, Name = "Ancient Kingdom", IsCiv = true, LineColor = Color.Red
+        };
+        var conquerors = new Entity([], world)
+        {
+            Id = 2, Name = "Later Kingdom", IsCiv = true, LineColor = Color.Blue
+        };
+        var site = new Site([], world) { Id = 100, Name = "Border Town" };
+        site.OwnerHistory.Add(new OwnerPeriod(site, conquerors, 50, "conquest"));
+        site.OwnerHistory.Add(new OwnerPeriod(site, founders, 10, "founded")
+        {
+            EndYear = 50
+        });
+
+        var marker = new SiteMarkerDto(site);
+
+        Assert.AreEqual(2, marker.OwnerHistory.Count);
+        Assert.AreEqual(10, marker.OwnerHistory[0].StartYear);
+        Assert.AreEqual(50, marker.OwnerHistory[0].EndYear);
+        Assert.AreEqual(founders.Id, marker.OwnerHistory[0].OwnerId);
+        Assert.AreEqual("founded", marker.OwnerHistory[0].StartCause);
+        Assert.AreNotEqual(marker.OwnerHistory[0].Color, marker.OwnerHistory[1].Color);
+        Assert.AreEqual(50, marker.OwnerHistory[1].StartYear);
+        Assert.AreEqual(conquerors.Id, marker.OwnerHistory[1].OwnerId);
+        Assert.AreEqual(-1, marker.OwnerHistory[1].EndYear);
+    }
+
+    [TestMethod]
     public void SiteMarkers_SubordinateNecromancerSitesUseTheirParentFaction()
     {
         using World world = new();
