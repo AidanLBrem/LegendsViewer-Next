@@ -239,6 +239,15 @@ public class WarfareSiteOutcomesDto
             int victimSide = SideOf(victim);
             bool recorded = false;
 
+            // An explicitly named third-party attacker is not automatically
+            // a victory for either war side, even when its victim is one of
+            // the two belligerents.
+            if (actor != null && actorSide == 0 && action != Action.Loss)
+            {
+                Add(Result.Unattributed, _unattributed, site);
+                return;
+            }
+
             // Two subordinate factions of the same war side exchanging a
             // leader or site are not territorial gains between war sides.
             if (actorSide != 0 && actorSide == victimSide &&
