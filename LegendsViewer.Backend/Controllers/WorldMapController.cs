@@ -1,6 +1,7 @@
 using LegendsViewer.Backend.Contracts;
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.EventCollections;
+using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Extensions;
 using LegendsViewer.Backend.Legends.Extensions;
@@ -120,6 +121,48 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
         }
 
         return dto;
+    }
+
+    // Packed in row-major order (bit y * width + x). This is kept separate
+    // from the world DTO so the map loads it only when territory rendering needs it.
+    [HttpGet("ocean-mask")]
+    public IActionResult GetOceanMask()
+    {
+        int width = _worldDataService.Width;
+        int height = _worldDataService.Height;
+        if (width <= 0 || height <= 0)
+        {
+            return BadRequest("World dimensions are unavailable.");
+        }
+
+        long tileCount = (long)width * height;
+        if (tileCount > int.MaxValue)
+        {
+            return BadRequest("World dimensions exceed the supported mask size.");
+        }
+
+        byte[] mask = new byte[(int)((tileCount + 7) / 8)];
+        foreach (var region in _worldDataService.Regions)
+        {
+            if (region.RegionType != RegionType.Ocean || region.Depth != null)
+            {
+                continue;
+            }
+
+            foreach (var location in region.Coordinates)
+            {
+                if (location.X < 0 || location.X >= width ||
+                    location.Y < 0 || location.Y >= height)
+                {
+                    continue;
+                }
+
+                int index = location.Y * width + location.X;
+                mask[index >> 3] |= (byte)(1 << (index & 7));
+            }
+        }
+
+        return File(mask, "application/octet-stream");
     }
 
     [HttpGet("warfare")]
