@@ -1,5 +1,5 @@
-// Historical ownership snapshot helpers. These are pure so the map can step
-// years without re-fetching world data or recreating its Leaflet layers.
+// Historical sites have two separate timelines: existence and ownership.
+// Losing an owner never implies that the physical site has disappeared.
 export interface SiteOwnershipPeriod {
   startYear?: number;
   endYear?: number;
@@ -10,10 +10,13 @@ export interface SiteOwnershipPeriod {
   actualOwner?: string | null;
   color?: string | null;
   startCause?: string | null;
+  endCause?: string | null;
 }
 
 export interface SiteWithOwnershipHistory {
   ownerHistory?: SiteOwnershipPeriod[] | null;
+  createdYear?: number | null;
+  destroyedYears?: number[] | null;
   owner?: string | null;
   ownerText?: string | null;
   ownerId?: number | null;
@@ -33,10 +36,75 @@ export interface HistoricalSiteOwner {
   startCause: string | null;
 }
 
+function validYear(value: number | null | undefined): value is number {
+  return value != null && Number.isInteger(value) && value >= 0;
+}
+
+function isCreation(cause?: string | null): boolean {
+  return /found|construct/i.test(cause ?? '');
+}
+
+function isDestruction(cause?: string | null): boolean {
+  return /destroy/i.test(cause ?? '');
+}
+
+function isNewSiteAfterDestruction(period: SiteOwnershipPeriod, destroyedYear: number): boolean {
+  if (!validYear(period.startYear)) return false;
+  return period.startYear > destroyedYear ||
+    (period.startYear === destroyedYear &&
+      /reclaim|unretir|found|construct/i.test(period.startCause ?? ''));
+}
+
+function getSiteCreationYear(site: SiteWithOwnershipHistory): number | null {
+  // Prefer the explicit construction date from the backend. If an older
+  // backend omitted it, only actual founding/constructing ownership events
+  // establish a first-appearance date. A conquest does not.
+  if (validYear(site.createdYear)) return site.createdYear;
+  const starts = (site.ownerHistory ?? [])
+    .filter(period => validYear(period.startYear) && isCreation(period.startCause))
+    .map(period => period.startYear!);
+  return starts.length ? Math.min(...starts) : null;
+}
+
+function getSiteDestructionYears(site: SiteWithOwnershipHistory): number[] {
+  const years = new Set<number>();
+  for (const year of site.destroyedYears ?? []) {
+    if (validYear(year)) years.add(year);
+  }
+  // Older backends may not export destroyedYears; endCause is enough to
+  // identify a destroyed site but never treat abandonment as destruction.
+  for (const period of site.ownerHistory ?? []) {
+    if (validYear(period.endYear) && isDestruction(period.endCause)) {
+      years.add(period.endYear);
+    }
+  }
+  return [...years].sort((a, b) => a - b);
+}
+
+export function isSitePresentAtYear(site: SiteWithOwnershipHistory, year: number): boolean {
+  const createdYear = getSiteCreationYear(site);
+  if (createdYear !== null && year < createdYear) return false;
+
+  let lastDestruction = -1;
+  for (const destroyed of getSiteDestructionYears(site)) {
+    if (destroyed > year) break;
+    lastDestruction = destroyed;
+  }
+  if (lastDestruction < 0) return true;
+
+  // A later reclamation or construction restores the site. Owner changes
+  // before destruction cannot revive it.
+  return (site.ownerHistory ?? []).some(period =>
+    validYear(period.startYear) &&
+    period.startYear <= year &&
+    isNewSiteAfterDestruction(period, lastDestruction)
+  );
+}
+
 export function getSiteOwnerAtYear(
   site: SiteWithOwnershipHistory,
   year: number,
-  presentYear: number
+  _presentYear: number
 ): HistoricalSiteOwner {
   const current: HistoricalSiteOwner = {
     visible: true,
@@ -50,27 +118,32 @@ export function getSiteOwnerAtYear(
     startCause: null,
   };
 
-  // Honor the import's current-owner resolution in the latest year. Sites
-  // without usable ownership history cannot be reconstructed retrospectively.
+  if (!isSitePresentAtYear(site, year)) {
+    return { ...current, visible: false };
+  }
+
   const periods = site.ownerHistory ?? [];
-  if (year >= presentYear || periods.length === 0) return current;
+  if (periods.length === 0) {
+    // Without historical records we cannot safely infer past ownership.
+    return current;
+  }
 
   let active: SiteOwnershipPeriod | null = null;
   let activeStart = -1;
   for (const period of periods) {
-    const start = period.startYear == null || period.startYear < 0 ? 0 : period.startYear;
-    const end = period.endYear ?? -1;
-    // A site's ended period stops at the start of the next ownership year.
-    if (year < start || (end >= 0 && year >= end)) continue;
+    const start = validYear(period.startYear) ? period.startYear : 0;
+    if (year < start || (validYear(period.endYear) && year >= period.endYear)) continue;
     if (active === null || start >= activeStart) {
       active = period;
       activeStart = start;
     }
   }
 
+  // An abandoned, withered, or otherwise unoccupied site still exists.
+  // Its owner group changes to Unclaimed; the marker must stay selectable.
   if (!active) {
     return {
-      visible: false,
+      visible: true,
       owner: 'Unclaimed',
       ownerText: 'Unclaimed',
       ownerId: null,
@@ -95,25 +168,19 @@ export function getSiteOwnerAtYear(
   };
 }
 
-// Some legends exports (and older backends) report CurrentYear as zero.
-// Recover the actual timeline extent from dated site ownership records rather
-// than silently constraining every historical event to year 0.
 export function getTimelineMaxYear(
   currentYear: number | null | undefined,
   sites: readonly SiteWithOwnershipHistory[]
 ): number {
-  let latest = typeof currentYear === 'number' && Number.isFinite(currentYear)
-    ? Math.max(0, Math.floor(currentYear))
-    : 0;
-
+  let latest = validYear(currentYear) ? currentYear : 0;
   for (const site of sites) {
+    if (validYear(site.createdYear)) latest = Math.max(latest, site.createdYear);
+    for (const destroyed of getSiteDestructionYears(site)) {
+      latest = Math.max(latest, destroyed);
+    }
     for (const period of site.ownerHistory ?? []) {
-      if (period.startYear != null && Number.isFinite(period.startYear)) {
-        latest = Math.max(latest, Math.floor(period.startYear));
-      }
-      if (period.endYear != null && Number.isFinite(period.endYear)) {
-        latest = Math.max(latest, Math.floor(period.endYear));
-      }
+      if (validYear(period.startYear)) latest = Math.max(latest, period.startYear);
+      if (validYear(period.endYear)) latest = Math.max(latest, period.endYear);
     }
   }
   return latest;
@@ -126,15 +193,16 @@ export function getOwnershipChangeYears(
   const endYear = Math.max(0, Math.floor(presentYear));
   const years = new Set<number>([0, endYear]);
   for (const site of sites) {
-    for (const period of site.ownerHistory ?? []) {
-      for (const year of [period.startYear, period.endYear]) {
-        if (year != null && Number.isInteger(year) && year >= 0 && year <= endYear) {
-          years.add(year);
-        }
-      }
+    const dates = [
+      site.createdYear,
+      ...getSiteDestructionYears(site),
+      ...(site.ownerHistory ?? []).flatMap(period => [period.startYear, period.endYear]),
+    ];
+    for (const year of dates) {
+      if (validYear(year) && year <= endYear) years.add(year);
     }
   }
-  return Array.from(years).sort((a, b) => a - b);
+  return [...years].sort((a, b) => a - b);
 }
 
 export function stepOwnershipChange(
@@ -142,8 +210,6 @@ export function stepOwnershipChange(
   direction: -1 | 1,
   changeYears: readonly number[]
 ): number {
-  // Lower/upper-bound searches keep event navigation fast even in worlds with
-  // hundreds of thousands of ownership changes.
   let low = 0;
   let high = changeYears.length;
   if (direction === 1) {
