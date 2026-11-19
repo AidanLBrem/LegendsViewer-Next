@@ -825,10 +825,17 @@ export default defineComponent({
     const siteColorMode = ref<'current' | 'origin'>('current');
     const mapError = ref('');
     const mapProgress = ref('');
-    const siteLayers: Array<{ marker: L.Path; site: SiteMarker }> = [];
+    const historyReady = ref(false);
+    const historyMaxYear = ref(0);
+    const selectedYear = ref(0);
+    const historyPlaying = ref(false);
+    const historyBusy = ref(false);
+    let ownershipChangeYears: number[] = [];
+    let historyTimer: ReturnType<typeof setInterval> | null = null;
+    let historyUpdateGeneration = 0;
+    const siteLayers: Array<{ marker: L.Path; site: SiteMarker; item: MapTileItem }> = [];
     const siteRenderer = L.canvas({ padding: 0.3 });
     let renderGeneration = 0;
-    let recolorGeneration = 0;
     let isRenderingSites = false;
     let disposed = false;
     let warfareLoaded = false;
@@ -836,24 +843,100 @@ export default defineComponent({
 
     const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
-    const colorForSite = (site: SiteMarker): string => {
+    const colorForSite = (site: SiteMarker, ownerColor = site.color): string => {
       if (siteColorMode.value === 'origin') {
         return site.originColor || '#666';
       }
-      return siteTypeMarkers[site.type ?? 'Unknown']?.color ?? site.color ?? '#666';
+      return siteTypeMarkers[site.type ?? 'Unknown']?.color ?? ownerColor ?? '#666';
     };
 
-    watch(siteColorMode, () => {
-      const generation = ++recolorGeneration;
-      void (async () => {
-        for (let i = 0; i < siteLayers.length; i++) {
-          if (disposed || generation !== recolorGeneration) return;
-          const { marker, site } = siteLayers[i];
-          marker.setStyle({ color: colorForSite(site) });
-          if (i % 250 === 249) await yieldToBrowser();
+    const stopHistoryPlayback = () => {
+      if (historyTimer !== null) {
+        clearInterval(historyTimer);
+        historyTimer = null;
+      }
+      historyPlaying.value = false;
+    };
+
+    const stepHistoryYear = (direction: -1 | 1) => {
+      stopHistoryPlayback();
+      selectedYear.value = Math.max(0, Math.min(historyMaxYear.value, selectedYear.value + direction));
+    };
+
+    const jumpToHistoryChange = (direction: -1 | 1) => {
+      stopHistoryPlayback();
+      selectedYear.value = stepOwnershipChange(selectedYear.value, direction, ownershipChangeYears);
+    };
+
+    const goToPresent = () => {
+      stopHistoryPlayback();
+      selectedYear.value = historyMaxYear.value;
+    };
+
+    const onHistorySliderInput = (event: Event) => {
+      stopHistoryPlayback();
+      selectedYear.value = Math.max(0, Math.min(historyMaxYear.value,
+        Number((event.target as HTMLInputElement).value)));
+    };
+
+    const toggleHistoryPlayback = () => {
+      if (historyPlaying.value) {
+        stopHistoryPlayback();
+        return;
+      }
+      if (selectedYear.value >= historyMaxYear.value) selectedYear.value = 0;
+      historyPlaying.value = true;
+      historyTimer = setInterval(() => {
+        if (disposed || !historyReady.value) {
+          stopHistoryPlayback();
+          return;
         }
-      })();
-    });
+        if (historyBusy.value) return;
+        const next = stepOwnershipChange(selectedYear.value, 1, ownershipChangeYears);
+        if (next <= selectedYear.value) {
+          stopHistoryPlayback();
+        } else {
+          selectedYear.value = next;
+        }
+      }, 650);
+    };
+
+    // Change existing Canvas marker colors/owner layers in place. Avoid
+    // recreating the world map and cancel stale updates while scrubbing.
+    const applyHistoryYear = async () => {
+      if (!historyReady.value || disposed) return;
+      const generation = ++historyUpdateGeneration;
+      const year = selectedYear.value;
+      historyBusy.value = true;
+      leafletMap.value?.closePopup();
+      try {
+        for (let i = 0; i < siteLayers.length; i++) {
+          if (disposed || generation !== historyUpdateGeneration) return;
+          const { marker, site, item } = siteLayers[i];
+          const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
+          const ownerLayer = ownerLayers[owner.ownerText] ?? ownerLayers['Others'];
+          if (!owner.visible || !ownerLayer) {
+            if (item.layerGroup.hasLayer(marker)) item.layerGroup.removeLayer(marker);
+          } else {
+            if (item.layerGroup !== ownerLayer) {
+              item.layerGroup.removeLayer(marker);
+              item.layerGroup = ownerLayer;
+            }
+            if (!ownerLayer.hasLayer(marker)) ownerLayer.addLayer(marker);
+            marker.setStyle({ color: colorForSite(site, owner.color) });
+          }
+          if (i % 200 === 199) await yieldToBrowser();
+        }
+      } finally {
+        if (generation === historyUpdateGeneration) {
+          historyBusy.value = false;
+          syncTileBadges();
+        }
+      }
+    };
+
+    watch(selectedYear, () => { void applyHistoryYear(); });
+    watch(siteColorMode, () => { void applyHistoryYear(); });
 
     // This will hold the LayerGroups for different owners
     const ownerLayers: Record<string, LayerGroup> = Object.create(null);
@@ -867,14 +950,17 @@ export default defineComponent({
       if (!leafletMap.value) return [];
       const key = coordinateKey(x, y);
       const items = tileItemsMap.get(key) ?? [];
-      return items.filter(item => leafletMap.value!.hasLayer(item.layerGroup));
+      return items.filter(item =>
+        leafletMap.value!.hasLayer(item.layerGroup) &&
+        (item.type !== 'site' || item.layerGroup.hasLayer(item.marker))
+      );
     };
 
     const bindTileMarkerPopup = (marker: L.Layer, x: number, y: number) => {
       if ('bindPopup' in marker && typeof (marker as any).bindPopup === 'function') {
         (marker as any).bindPopup(() => {
           const activeItems = getActiveItemsAtTile(x, y);
-          return createUnifiedPickerPopup(activeItems, router);
+          return createUnifiedPickerPopup(activeItems, router, selectedYear.value, historyMaxYear.value);
         }, { minWidth: 220 });
       }
     };
@@ -916,7 +1002,10 @@ export default defineComponent({
 
       if (isMaxZoom) {
         for (const items of tileItemsMap.values()) {
-          const activeItems = items.filter(item => map.hasLayer(item.layerGroup));
+          const activeItems = items.filter(item =>
+            map.hasLayer(item.layerGroup) &&
+            (item.type !== 'site' || item.layerGroup.hasLayer(item.marker))
+          );
 
           if (activeItems.length > 1) {
             const { x, y } = activeItems[0];
@@ -1078,7 +1167,7 @@ export default defineComponent({
       if (items.length === 0) return;
       L.popup({ minWidth: 220 })
         .setLatLng(toLatLng(selectedX, selectedY))
-        .setContent(createUnifiedPickerPopup(items, router))
+        .setContent(createUnifiedPickerPopup(items, router, selectedYear.value, historyMaxYear.value))
         .openOn(map);
     };
 
@@ -1352,6 +1441,9 @@ export default defineComponent({
       if (!width || !height || !base64Image) return;
 
       const generation = ++renderGeneration;
+      historyReady.value = false;
+      historyUpdateGeneration++;
+      stopHistoryPlayback();
       isRenderingSites = true;
       mapProgress.value = 'Preparing map markers...';
       mapError.value = '';
@@ -1497,7 +1589,8 @@ export default defineComponent({
     onBeforeUnmount(() => {
       disposed = true;
       renderGeneration++;
-      recolorGeneration++;
+      historyUpdateGeneration++;
+      stopHistoryPlayback();
       window.removeEventListener('resize', onWindowResize);
       if (leafletMap.value) {
         leafletMap.value.off('click', selectSiteAtMapClick);
@@ -1510,6 +1603,15 @@ export default defineComponent({
       siteColorMode,
       mapError,
       mapProgress,
+      historyReady,
+      historyMaxYear,
+      selectedYear,
+      historyPlaying,
+      stepHistoryYear,
+      jumpToHistoryChange,
+      goToPresent,
+      onHistorySliderInput,
+      toggleHistoryPlayback,
     };
   },
 });
