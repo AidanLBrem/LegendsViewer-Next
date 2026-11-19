@@ -18,26 +18,30 @@ const formatShare = (percentage: number): string =>
 </script>
 
 <template>
-    <v-card title="Population" subtitle="Recorded population by race" variant="text">
+    <v-card title="Population" subtitle="Recorded population by race, from available exports" variant="text">
         <template #prepend>
             <v-icon class="mr-2" icon="mdi-account-group" size="32px" />
         </template>
         <v-card-text>
-            <template v-if="population.races.length > 0">
+            <template v-if="population.combinedRaces.length > 0">
                 <div class="text-h5 font-weight-medium mb-1">
-                    {{ formatCount(population.sitePopulationTotal) }}
+                    {{ formatCount(population.combinedPopulationTotal) }}
                 </div>
-                <div class="text-caption mb-3">Residents counted at the nation's recorded sites</div>
+                <div class="text-caption mb-3">
+                    Combined recorded population estimate (overlapping race records counted once)
+                </div>
                 <v-table class="population-table" density="compact" fixed-header height="340px">
                     <thead>
                         <tr>
                             <th>Race</th>
-                            <th class="text-end">Population</th>
+                            <th class="text-end">Sites</th>
+                            <th class="text-end">Legends Plus</th>
+                            <th class="text-end">Included</th>
                             <th class="text-end">Share</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="row in population.races" :key="row.key">
+                        <tr v-for="row in population.combinedRaces" :key="row.key">
                             <td class="population-race">
                                 <div>{{ row.race }}</div>
                                 <div class="text-caption text-medium-emphasis" v-if="row.classifications.length">
@@ -51,31 +55,41 @@ const formatShare = (percentage: number): string =>
                                     rounded
                                 />
                             </td>
-                            <td class="text-end population-number">{{ formatCount(row.count) }}</td>
+                            <td class="text-end population-number">
+                                {{ row.siteCount !== null ? formatCount(row.siteCount) : '—' }}
+                            </td>
+                            <td class="text-end population-number">
+                                {{ row.legendsPlusCount !== null ? formatCount(row.legendsPlusCount) : '—' }}
+                            </td>
+                            <td class="text-end population-number font-weight-medium">
+                                {{ formatCount(row.count) }}
+                            </td>
                             <td class="text-end">{{ formatShare(row.percentage) }}</td>
                         </tr>
                     </tbody>
                 </v-table>
                 <div class="text-caption mt-2">
-                    Site population is a snapshot from the optional Sites and Populations export.
-                    It is not a historical population graph.
+                    Sites: {{ formatCount(population.sitePopulationTotal) }} residents reported in
+                    <code>world_sites_and_pops.txt</code>.
+                    <template v-if="population.entityPopulationCount !== null">
+                        Legends Plus: {{ formatCount(population.entityPopulationCount) }}
+                        {{ population.entityPopulationRace }} from an
+                        <code>entity_population</code> entry in <code>legends_plus.xml</code>
+                        linked by <code>civ_id</code>.
+                    </template>
+                </div>
+                <div class="text-caption text-medium-emphasis mt-2">
+                    The exports use different population records, which may overlap and are not
+                    synchronized historical censuses.
+                    <template v-if="population.overlappingRaceCount > 0">
+                        Where both sources report the same race, the larger count is used rather
+                        than summing them.
+                    </template>
                 </div>
             </template>
             <div v-else class="text-body-2 text-medium-emphasis">
-                No settlement population counts were imported for this faction.
-                Import the world's Sites and Populations export to see a race breakdown.
-            </div>
-
-            <div v-if="population.entityPopulationCount !== null" class="mt-3 pt-2 population-entity-record">
-                <div class="font-weight-medium">Separate entity population record</div>
-                <div class="text-body-2">
-                    {{ formatCount(population.entityPopulationCount) }}
-                    {{ population.entityPopulationRace }}
-                </div>
-                <div class="text-caption text-medium-emphasis">
-                    From legends_plus. This may use different accounting and is not added
-                    to the site population total.
-                </div>
+                No population counts were imported for this faction.
+                Import <code>legends_plus.xml</code> or the world's Sites and Populations export.
             </div>
         </v-card-text>
     </v-card>
@@ -91,8 +105,5 @@ const formatShare = (percentage: number): string =>
 .population-number {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-}
-.population-entity-record {
-    border-top: 1px solid rgba(127, 127, 127, .25);
 }
 </style>
