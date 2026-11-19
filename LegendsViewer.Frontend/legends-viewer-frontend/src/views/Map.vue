@@ -905,7 +905,9 @@ export default defineComponent({
       }
     };
 
-    let resizeObserver: ResizeObserver | null = null;
+    const onWindowResize = () => {
+      leafletMap.value?.invalidateSize({ pan: false, animate: false });
+    };
 
     const initMap = async () => {
       if (!leafletMap.value) {
@@ -920,19 +922,10 @@ export default defineComponent({
         // Visibility changes are handled explicitly by the owner controls.
         leafletMap.value.on('zoomend', syncTileBadges);
 
-        const mapContainerEl = document.getElementById('map');
-        if (mapContainerEl && typeof window !== 'undefined' && 'ResizeObserver' in window) {
-          let lastWidth = -1;
-          let lastHeight = -1;
-          resizeObserver = new ResizeObserver(entries => {
-            const rect = entries[0]?.contentRect;
-            if (!rect || (rect.width === lastWidth && rect.height === lastHeight)) return;
-            lastWidth = rect.width;
-            lastHeight = rect.height;
-            leafletMap.value?.invalidateSize({ pan: false, animate: false });
-          });
-          resizeObserver.observe(mapContainerEl);
-        }
+        // ResizeObserver callbacks calling invalidateSize can create a
+        // resize/invalidate/resize feedback cycle on some layouts.
+        // A window resize listener cannot retrigger itself this way.
+        window.addEventListener('resize', onWindowResize);
       }
 
       try {
@@ -1402,10 +1395,7 @@ export default defineComponent({
       disposed = true;
       renderGeneration++;
       recolorGeneration++;
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-        resizeObserver = null;
-      }
+      window.removeEventListener('resize', onWindowResize);
       if (leafletMap.value) {
         leafletMap.value.remove();
       }
