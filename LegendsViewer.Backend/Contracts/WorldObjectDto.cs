@@ -24,6 +24,8 @@ public class WorldObjectDto
             DeathCount = war.DeathCount;
             AttackerDeathCount = war.AttackerDeathCount;
             DefenderDeathCount = war.DefenderDeathCount;
+            AttackerTroopCount = war.AttackerBattleDeployments;
+            DefenderTroopCount = war.DefenderBattleDeployments;
             SetSiteCounts(war.SiteOutcomes);
         }
         else if (worldObject is Battle battle)
@@ -31,6 +33,8 @@ public class WorldObjectDto
             DeathCount = battle.DeathCount;
             AttackerDeathCount = battle.AttackerDeathCount;
             DefenderDeathCount = battle.DefenderDeathCount;
+            AttackerTroopCount = battle.AttackerCount;
+            DefenderTroopCount = battle.DefenderCount;
             SetSiteCounts(battle.SiteOutcomes);
         }
     }
@@ -48,6 +52,10 @@ public class WorldObjectDto
     public int? DeathCount { get; set; }
     public int? AttackerDeathCount { get; set; }
     public int? DefenderDeathCount { get; set; }
+    // For battles: starting combatants. For wars: sum of recorded battle
+    // deployments (not unique troops or a war-start snapshot).
+    public int? AttackerTroopCount { get; set; }
+    public int? DefenderTroopCount { get; set; }
 
     public int? AttackerSitesGainedCount { get; set; }
     public int? AttackerSitesLostCount { get; set; }
