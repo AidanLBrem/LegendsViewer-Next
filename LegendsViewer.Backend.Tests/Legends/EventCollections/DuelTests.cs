@@ -1,3 +1,5 @@
+using LegendsViewer.Backend.Legends;
+using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.EventCollections;
 using LegendsViewer.Backend.Legends.Interfaces;
 using LegendsViewer.Backend.Legends.Parser;
@@ -53,6 +55,62 @@ public class DuelTests
         var duel = new Duel(props, _mockWorld.Object);
 
         Assert.IsTrue(duel.Name.Contains("duel"));
+    }
+
+    [TestMethod]
+    public void DuelDeaths_SelectLivingOrUndeadSquadOfSameRace()
+    {
+        using var world = new World();
+        var dwarf = world.GetCreatureInfo("DWARF");
+        var livingAttacker = new HistoricalFigure([], world) { Id = 1, Race = dwarf, Name = "Living attacker" };
+        var undeadAttacker = new HistoricalFigure([], world) { Id = 2, Race = dwarf, Name = "Undead attacker", Skeleton = true };
+        var livingDefender = new HistoricalFigure([], world) { Id = 3, Race = dwarf, Name = "Living defender" };
+        var undeadDefender = new HistoricalFigure([], world) { Id = 4, Race = dwarf, Name = "Undead defender", Skeleton = true };
+        world.HistoricalFigures.AddRange([livingAttacker, undeadAttacker, livingDefender, undeadDefender]);
+
+        var battle = new Battle([
+            new Property { Name = "id", Value = "10" },
+            new Property { Name = "start_year", Value = "100" },
+            new Property { Name = "attacking_hfid", Value = "1" },
+            new Property { Name = "attacking_hfid", Value = "2" },
+            new Property { Name = "defending_hfid", Value = "3" },
+            new Property { Name = "defending_hfid", Value = "4" }
+        ], world);
+        world.EventCollections.Add(battle);
+
+        Assert.AreEqual(2, battle.Attackers.Count);
+        Assert.AreEqual(2, battle.Defenders.Count);
+
+        var attackerDeath = new HfDied([
+            new Property { Name = "id", Value = "101" },
+            new Property { Name = "year", Value = "100" },
+            new Property { Name = "hfid", Value = "1" }
+        ], world);
+        var defenderDeath = new HfDied([
+            new Property { Name = "id", Value = "102" },
+            new Property { Name = "year", Value = "100" },
+            new Property { Name = "hfid", Value = "4" }
+        ], world);
+        world.Events.Add(attackerDeath);
+        world.Events.Add(defenderDeath);
+
+        _ = new Duel([
+            new Property { Name = "id", Value = "11" },
+            new Property { Name = "parent_eventcol", Value = "10" },
+            new Property { Name = "event", Value = "101" }
+        ], world);
+        _ = new Duel([
+            new Property { Name = "id", Value = "12" },
+            new Property { Name = "parent_eventcol", Value = "10" },
+            new Property { Name = "event", Value = "102" }
+        ], world);
+
+        Assert.AreEqual(1, battle.AttackerDeathCount);
+        Assert.AreEqual(1, battle.DefenderDeathCount);
+        Assert.AreEqual(1, battle.Attackers.Single(s => !s.Animated).Deaths);
+        Assert.AreEqual(0, battle.Attackers.Single(s => s.Animated).Deaths);
+        Assert.AreEqual(0, battle.Defenders.Single(s => !s.Animated).Deaths);
+        Assert.AreEqual(1, battle.Defenders.Single(s => s.Animated).Deaths);
     }
 
     [TestMethod]
