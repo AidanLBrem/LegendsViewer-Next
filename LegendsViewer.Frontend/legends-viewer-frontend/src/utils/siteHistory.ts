@@ -55,18 +55,32 @@ function isNewSiteAfterDestruction(period: SiteOwnershipPeriod, destroyedYear: n
       /reclaim|unretir|found|construct/i.test(period.startCause ?? ''));
 }
 
+// Historical site records do not change while a world is loaded.
+// Cache lifecycle dates so replaying thousands of sites never reparses
+// their destruction and founding records on every playback tick.
+const creationYearCache = new WeakMap<SiteWithOwnershipHistory, number | null>();
+const destructionYearCache = new WeakMap<SiteWithOwnershipHistory, number[]>();
+
 function getSiteCreationYear(site: SiteWithOwnershipHistory): number | null {
+  if (creationYearCache.has(site)) return creationYearCache.get(site)!;
   // Prefer the explicit construction date from the backend. If an older
   // backend omitted it, only actual founding/constructing ownership events
   // establish a first-appearance date. A conquest does not.
-  if (validYear(site.createdYear)) return site.createdYear;
+  if (validYear(site.createdYear)) {
+    creationYearCache.set(site, site.createdYear);
+    return site.createdYear;
+  }
   const starts = (site.ownerHistory ?? [])
     .filter(period => validYear(period.startYear) && isCreation(period.startCause))
     .map(period => period.startYear!);
-  return starts.length ? Math.min(...starts) : null;
+  const created = starts.length ? Math.min(...starts) : null;
+  creationYearCache.set(site, created);
+  return created;
 }
 
 function getSiteDestructionYears(site: SiteWithOwnershipHistory): number[] {
+  const cached = destructionYearCache.get(site);
+  if (cached) return cached;
   const years = new Set<number>();
   for (const year of site.destroyedYears ?? []) {
     if (validYear(year)) years.add(year);
@@ -78,7 +92,9 @@ function getSiteDestructionYears(site: SiteWithOwnershipHistory): number[] {
       years.add(period.endYear);
     }
   }
-  return [...years].sort((a, b) => a - b);
+  const destroyed = [...years].sort((a, b) => a - b);
+  destructionYearCache.set(site, destroyed);
+  return destroyed;
 }
 
 export function isSitePresentAtYear(site: SiteWithOwnershipHistory, year: number): boolean {
