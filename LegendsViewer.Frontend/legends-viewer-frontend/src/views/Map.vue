@@ -698,7 +698,7 @@ function withNominalController(
     if (territory.ownerLink) appendRichContent(header, territory.ownerLink);
     else header.append(`Faction #${territory.ownerId}`);
   } else {
-    header.append(territory.ocean ? 'Ocean (no estimated territory)' : 'No estimated controller');
+    header.append(territory.ocean ? 'Water (no estimated territory)' : 'No estimated controller');
   }
   wireInternalLinks(header, router);
   content.prepend(header);
@@ -1542,8 +1542,8 @@ export default defineComponent({
           return;
         }
 
-        // The terrain mask comes from the actual overworld region data,
-        // not from colors in the exported map image.
+        // The water mask (oceans and lakes) comes from overworld regions,
+        // not colors in the exported map image.
         oceanMask = null;
         landComponents = null;
         try {
