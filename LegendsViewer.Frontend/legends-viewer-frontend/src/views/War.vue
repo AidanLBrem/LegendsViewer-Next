@@ -32,6 +32,32 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                     :total-deaths="store.object?.deathCount"
                     :site-outcomes="store.object?.siteOutcomes" />
             </v-col>
+            <v-col v-if="store.object?.attackerDeploymentsByRace?.labels?.length"
+                cols="12" xl="4" lg="6" md="12">
+                <v-card :title="'Attacker Battle Deployments — ' + (store.object?.attackerBattleDeployments ?? 0).toLocaleString()"
+                    subtitle="Troops fielded across recorded battles, by race; repeat participants count again"
+                    height="400" variant="text">
+                    <template #prepend>
+                        <v-icon class="mr-2" icon="mdi-account-group" size="32px" />
+                    </template>
+                    <v-card-text>
+                        <DoughnutChart :chart-data="store.object.attackerDeploymentsByRace" />
+                    </v-card-text>
+                </v-card>
+            </v-col>
+            <v-col v-if="store.object?.defenderDeploymentsByRace?.labels?.length"
+                cols="12" xl="4" lg="6" md="12">
+                <v-card :title="'Defender Battle Deployments — ' + (store.object?.defenderBattleDeployments ?? 0).toLocaleString()"
+                    subtitle="Troops fielded across recorded battles, by race; repeat participants count again"
+                    height="400" variant="text">
+                    <template #prepend>
+                        <v-icon class="mr-2" icon="mdi-account-group" size="32px" />
+                    </template>
+                    <v-card-text>
+                        <DoughnutChart :chart-data="store.object.defenderDeploymentsByRace" />
+                    </v-card-text>
+                </v-card>
+            </v-col>
             <v-col v-if="store.object?.battleGraphData != null" cols="12" xl="4" lg="6" md="12">
                 <ExpandableCard title="Battle Graph" subtitle="Scaled representation of faction roles in battle"
                     icon="mdi-chess-bishop">
