@@ -537,6 +537,10 @@ function createUnifiedPickerPopup(items: MapTileItem[], router: Router): HTMLEle
       itemEl.append(marker.typeAsString ?? 'Unknown');
       itemEl.append(document.createElement('br'), document.createElement('br'));
       appendRichContent(itemEl, marker.owner ?? 'Others');
+      if (marker.originOwnerId != null && marker.originOwnerId !== marker.ownerId) {
+        itemEl.append(document.createElement('br'), 'Origin: ');
+        appendRichContent(itemEl, marker.originOwner ?? marker.originOwnerText);
+      }
     } else if (item.type === 'battle') {
       const battle = item.data as BattleMapMarkerDto;
       itemEl.appendChild(createBattlePopupElement(battle));
