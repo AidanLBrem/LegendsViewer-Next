@@ -18,6 +18,57 @@ describe('historical atlas political influence', () => {
     expect(grid!.nation[0 * grid!.width + 31]).toBe(-1);
   });
 
+  it('pushes a populous settlement farther than an equally distant small settlement', async () => {
+    const sites = [
+      { x: 20, y: 12, nationId: 1, color: '#cc0000', population: 100000 },
+      { x: 32, y: 12, nationId: 2, color: '#0000cc', population: 100 },
+    ];
+    const weighted = await createTerritoryGrid(64, 32, sites);
+    const equal = await createTerritoryGrid(64, 32,
+      sites.map(({ population, ...site }) => site));
+    const cell = 12 * 64 + 26;
+    expect(equal!.nation[cell]).toBe(2);
+    expect(weighted!.nation[cell]).toBe(1);
+  });
+
+  it('reinforces borders when several nearby settlements share an owner', async () => {
+    const rival = { x: 26, y: 16, nationId: 2, color: '#0000cc' };
+    const friend = (x: number) => ({ x, y: 16, nationId: 1, color: '#cc0000' });
+    const single = await createTerritoryGrid(48, 32, [friend(22), rival]);
+    const clustered = await createTerritoryGrid(48, 32, [
+      friend(19), friend(21), friend(22), rival,
+    ]);
+    const disputedTile = 16 * 48 + 24;
+    // The rival is closer than any one town; the combined towns win.
+    expect(single!.nation[disputedTile]).toBe(2);
+    expect(clustered!.nation[disputedTile]).toBe(1);
+  });
+
+  it('includes imported population in seeds without inventing missing counts', () => {
+    const sites = [
+      { coordinates: [{ x: 4, y: 4 }], ownerId: 1, ownerText: 'City-State',
+        color: '#112233', populationCount: 27000 },
+      { coordinates: [{ x: 7, y: 7 }], ownerId: 2, ownerText: 'Unknown Population',
+        color: '#334455' },
+    ];
+    expect(getTerritorySeeds(sites, 100, 100)).toEqual([
+      { x: 4, y: 4, nationId: 1, color: '#112233', population: 27000 },
+      { x: 7, y: 7, nationId: 2, color: '#334455' },
+    ]);
+  });
+
+  it('does not multiply a single site\'s population by its coordinate count', () => {
+    const site = {
+      coordinates: [{ x: 9, y: 9 }, { x: 10, y: 9 }],
+      ownerId: 1, ownerText: 'Twin Tile Settlement',
+      color: '#112233', populationCount: 4000,
+    };
+    expect(getTerritorySeeds([site], 100, 100)).toEqual([
+      { x: 9, y: 9, nationId: 1, color: '#112233', population: 4000, coordinateCount: 2 },
+      { x: 10, y: 9, nationId: 1, color: '#112233', population: 4000, coordinateCount: 2 },
+    ]);
+  });
+
   it('is bounded even for unusually large world maps', async () => {
     const grid = await createTerritoryGrid(1600, 1800, []);
     expect(grid!.width).toBe(320);
