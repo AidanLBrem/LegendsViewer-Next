@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-  createTerritoryGrid, getTerritorySeeds, isWarInYear,
+  createTerritoryGrid, getTerritorySeeds, isOceanTile, territoryGridToDataUrl, isWarInYear,
   isBattleInYear, isSiteConquestInYear, getWarfareChangeYears
 } from './historicalAtlas';
 
@@ -40,6 +40,61 @@ describe('historical atlas political influence', () => {
     };
     const seeds = getTerritorySeeds([site], 50, 120);
     expect(seeds).toEqual([{ x: 5, y: 6, nationId: 5, color: '#445566' }]);
+  });
+
+  it('excludes ocean settlements as influence seeds, but keeps inland sites', async () => {
+    const width = 16;
+    const height = 16;
+    const oceanMask = new Uint8Array(Math.ceil(width * height / 8));
+    const index = 3 * width + 3;
+    oceanMask[index >> 3] |= 1 << (index & 7);
+    expect(isOceanTile(oceanMask, width, 3, 3)).toBe(true);
+    expect(isOceanTile(oceanMask, width, 4, 3)).toBe(false);
+
+    const grid = await createTerritoryGrid(width, height, [
+      { x: 3, y: 3, nationId: 1, color: '#ff0000' },
+      { x: 12, y: 12, nationId: 2, color: '#00ff00' },
+    ], undefined, undefined, oceanMask);
+    expect(grid).not.toBeNull();
+    expect(grid!.colors.has(1)).toBe(false);
+    expect(grid!.nation[12 * grid!.width + 12]).toBe(2);
+  });
+
+  it('renders ocean tiles transparent at exact world resolution, not the coarse influence resolution', () => {
+    const worldWidth = 4;
+    const worldHeight = 2;
+    const oceanMask = new Uint8Array(1);
+    // Coastline at x=1 in the first row and x=3 in the second row.
+    oceanMask[0] = (1 << 1) | (1 << 7);
+    const imageData = { data: new Uint8ClampedArray(worldWidth * worldHeight * 4) };
+    let output: Uint8ClampedArray | undefined;
+    const ctx = {
+      createImageData: () => imageData,
+      putImageData: (data: typeof imageData) => { output = data.data; },
+    };
+    vi.stubGlobal('document', {
+      createElement: () => ({
+        width: 0, height: 0,
+        getContext: () => ctx,
+        toDataURL: () => 'data:image/png;base64,',
+      }),
+    });
+    try {
+      const grid = {
+        width: 2, height: 1,
+        nation: new Int32Array([7, 7]),
+        colors: new Map([[7, '#112233']]),
+      };
+      territoryGridToDataUrl(grid, oceanMask, worldWidth, worldHeight);
+      expect(output).toBeDefined();
+      expect(output![0 * 4 + 3]).toBeGreaterThan(0);
+      expect(output![1 * 4 + 3]).toBe(0);
+      expect(output![2 * 4 + 3]).toBeGreaterThan(0);
+      expect(output![7 * 4 + 3]).toBe(0);
+      expect(output![6 * 4 + 3]).toBeGreaterThan(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('cancels during a large territory raster pass', async () => {
