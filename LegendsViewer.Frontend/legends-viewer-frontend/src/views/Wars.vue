@@ -2,6 +2,7 @@
 import { useWarStore } from '../stores/worldObjectStores';
 import WorldObjectsPage from '../components/WorldObjectsPage.vue';
 import { TableHeader } from '../types/legends';
+import { warfareOverviewHeaders } from '../utils/warfareOverviewHeaders';
 import WarFilter from '../components/filter/WarFilter.vue';
 
 const store = useWarStore();
@@ -17,6 +18,7 @@ const tableHeaders: TableHeader[] = [
     { title: 'Name', key: 'html', align: 'start' },
     { title: 'Type', key: 'type', align: 'start' },
     { title: 'Attacker vs. Defender', key: 'subtype', align: 'start' },
+    ...warfareOverviewHeaders,
     { title: 'Chronicles', key: 'eventCollectionCount', align: 'end' },
     { title: 'Events', key: 'eventCount', align: 'end' },
 ];
