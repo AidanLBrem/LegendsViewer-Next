@@ -1,3 +1,4 @@
+import TinyQueue from 'tinyqueue';
 import {
   getSiteOwnerAtYear,
   type SiteWithOwnershipHistory,
@@ -5,6 +6,8 @@ import {
 
 export interface AtlasCoordinate { x?: number; y?: number }
 export interface AtlasSite extends SiteWithOwnershipHistory {
+  id?: number;
+  name?: string | null;
   coordinates?: AtlasCoordinate[] | null;
   type?: string | null;
   // From the optional sites-and-pops export; a current snapshot rather
@@ -20,6 +23,8 @@ export interface TerritorySeed {
   race?: string;
   population?: number;
   coordinateCount?: number;
+  siteId?: number;
+  siteName?: string;
 }
 
 export interface TerritorySeedOptions {
@@ -89,6 +94,8 @@ export function getTerritorySeeds(
     for (const location of locations) {
       seeds.push({
         x: location.x!, y: location.y!, nationId: owner.ownerId!, color: owner.color,
+        ...(site.id != null ? { siteId: site.id } : {}),
+        ...(site.name ? { siteName: site.name } : {}),
         ...(race ? { race } : {}),
         ...(population != null && Number.isFinite(population) && population > 0
           ? { population } : {}),
@@ -106,6 +113,14 @@ export interface TerritoryGrid {
   colors: Map<number, string>;
   // Which geographic land component produced each winner. Checked at exact
   // world-tile resolution to keep islands separate on downsampled grids.
+  evidence?: {
+    seeds: readonly TerritorySeed[];
+    strongestSeed: Int32Array;
+    strength: Float64Array;
+    runner: Int32Array;
+    runnerStrength: Float64Array;
+    anchors: Uint8Array;
+  };
   sourceComponents?: Int32Array;
   landComponents?: Int32Array;
 }
@@ -248,27 +263,46 @@ const terrainCosts: Record<string, readonly number[]> = {
   other:    [1, 1.8, 1.4, 1.6, Infinity, 1.5, 1.5, 2.2, 1,    1.2, Infinity],
 };
 
-// Integrate the length crossed inside each tile along the site's influence radius.
-// A difficult ridge reduces influence on its far side as well as on the ridge.
-function crossingCost(x: number, y: number, dx: number, dy: number,
-  width: number, tiles: Uint8Array, costs: readonly number[]): number {
-  let col = Math.floor(x);
-  let row = Math.floor(y);
-  const stepX = Math.sign(dx), stepY = Math.sign(dy);
-  const strideX = dx ? 1 / Math.abs(dx) : Infinity;
-  const strideY = dy ? 1 / Math.abs(dy) : Infinity;
-  let nextX = dx ? ((dx > 0 ? col + 1 : col) - x) / dx : Infinity;
-  let nextY = dy ? ((dy > 0 ? row + 1 : row) - y) / dy : Infinity;
-  let total = 0;
-  let t = 0;
-  while (t < 1) {
-    const end = Math.min(nextX, nextY, 1);
-    if (end > t) total += (end - t) * (costs[tiles[row * width + col]] ?? 1);
-    if (end === nextX) { col += stepX; nextX += strideX; }
-    if (end === nextY) { row += stepY; nextY += strideY; }
-    t = end;
+// Search actual world tiles, even when the displayed influence grid is downsampled.
+async function routeDistances(seed: TerritorySeed, radius: number, width: number, height: number,
+  terrain: Uint8Array | undefined, water: Uint8Array | undefined, costs: readonly number[],
+  yieldToBrowser: YieldToBrowser, cancelled: () => boolean) {
+  const sx = Math.floor(seed.x), sy = Math.floor(seed.y);
+  const left = Math.max(0, sx - Math.ceil(radius)), top = Math.max(0, sy - Math.ceil(radius));
+  const right = Math.min(width - 1, sx + Math.ceil(radius)), bottom = Math.min(height - 1, sy + Math.ceil(radius));
+  const stride = right - left + 1;
+  const distances = new Float64Array(stride * (bottom - top + 1)).fill(Infinity);
+  const costAt = (x: number, y: number) => isOceanTile(water, width, x, y)
+    ? Infinity : (costs[terrain?.[y * width + x] ?? 0] ?? 1);
+  const queue = new TinyQueue<{ x: number; y: number; distance: number }>([], (a, b) => a.distance - b.distance);
+  const index = (x: number, y: number) => (y - top) * stride + x - left;
+  distances[index(sx, sy)] = 0;
+  queue.push({ x: sx, y: sy, distance: 0 });
+  let visited = 0;
+  while (queue.length) {
+    const { x, y, distance } = queue.pop()!;
+    if (distance !== distances[index(x, y)]) continue;
+    if (++visited % 4096 === 0) {
+      await yieldToBrowser();
+      if (cancelled()) return null;
+    }
+    const from = costAt(x, y);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if ((!dx && !dy) || nx < left || nx > right || ny < top || ny > bottom) continue;
+        if (dx && dy && (!Number.isFinite(costAt(nx, y)) || !Number.isFinite(costAt(x, ny)))) continue;
+        const length = dx && dy ? Math.SQRT2 : 1;
+        const next = distance + length * (from + costAt(nx, ny)) / 2;
+        const i = index(nx, ny);
+        if (next >= radius || next >= distances[i]) continue;
+        distances[i] = next;
+        queue.push({ x: nx, y: ny, distance: next });
+      }
+    }
   }
-  return total;
+  return (x: number, y: number) => x < left || x > right || y < top || y > bottom
+    ? Infinity : distances[index(x, y)];
 }
 
 export async function createTerritoryGrid(
@@ -329,8 +363,17 @@ export async function createTerritoryGrid(
   // Reuse a single accumulator for every nation. A generation-stamp array
   // and list of touched cells avoids both a map per pixel and a full-grid
   // scan for every faction (important for worlds with many minor powers).
-  const bestStrength = new Float32Array(nation.length);
-  const accumulated = new Float32Array(nation.length);
+  const bestStrength = new Float64Array(nation.length);
+  const runner = new Int32Array(nation.length).fill(-1);
+  const runnerStrength = new Float64Array(nation.length);
+  const strongestSeed = new Int32Array(nation.length).fill(-1);
+  const seedIndex = new Map(seeds.map((seed, index) => [seed, index]));
+  const accumulated = new Float64Array(nation.length);
+  const topContribution = new Float64Array(nation.length);
+  const topSeed = new Int32Array(nation.length);
+  const siteAnchors = new Uint8Array(nation.length);
+  const anchorOwner = new Int32Array(nation.length).fill(-1);
+  const anchorComponent = new Int32Array(nation.length);
   const stamps = new Uint32Array(nation.length);
   const touched: number[] = [];
   let stamp = 0;
@@ -338,66 +381,112 @@ export async function createTerritoryGrid(
   const pixelWidth = width / rasterWidth;
   const pixelHeight = height / rasterHeight;
 
+  for (const { nationId, componentId, sites } of groups.values()) {
+    for (const seed of sites) {
+      const cell = Math.floor(seed.y / pixelHeight) * rasterWidth + Math.floor(seed.x / pixelWidth);
+      siteAnchors[cell] = 1;
+      anchorOwner[cell] = nationId;
+      anchorComponent[cell] = componentId;
+    }
+  }
   for (const { nationId, componentId, sites: nationSeeds } of groups.values()) {
     if (cancelled()) return null;
     stamp++;
     touched.length = 0;
 
-    for (let i = 0; i < nationSeeds.length; i++) {
-      if (cancelled()) return null;
-      const seed = nationSeeds[i];
-      const label = seed.race?.trim().toLowerCase() ?? 'other';
-      const race = Object.prototype.hasOwnProperty.call(raceAliases, label) ? raceAliases[label] : label;
-      const costs = Object.prototype.hasOwnProperty.call(terrainCosts, race) ? terrainCosts[race] : terrainCosts.other;
-      // Log scaling gives large cities more reach without allowing one
-      // enormous settlement to overpower an entire surrounding region.
-      // Unknown population has the same weight as a single ordinary site.
-      const population = Number.isFinite(seed.population) ? Math.max(0, seed.population!) : 0;
-      const populationScale = Math.log10(1 + population / 100);
-      const weight = (1 + Math.min(4.8, populationScale * 1.10)) /
-        Math.max(1, seed.coordinateCount ?? 1);
-      const radius = baseRadius * (1 + Math.min(0.45, populationScale * 0.12));
-      const radiusSquared = radius * radius;
-      const minX = Math.max(0, Math.ceil((seed.x - radius) / pixelWidth - 0.5));
-      const maxX = Math.min(rasterWidth - 1, Math.floor((seed.x + radius) / pixelWidth - 0.5));
-      const minY = Math.max(0, Math.ceil((seed.y - radius) / pixelHeight - 0.5));
-      const maxY = Math.min(rasterHeight - 1, Math.floor((seed.y + radius) / pixelHeight - 0.5));
+    // Sum all coordinates of a multi-tile settlement before ranking contributors.
+    const bySite = new Map<number, TerritorySeed[]>();
+    for (const seed of nationSeeds) {
+      const id = seed.siteId ?? -(seedIndex.get(seed)! + 1);
+      const existing = bySite.get(id);
+      if (existing) existing.push(seed);
+      else bySite.set(id, [seed]);
+    }
+    let processed = 0;
+    for (const site of bySite.values()) {
+      const contributions = new Map<number, number>();
+      for (const seed of site) {
+        if (cancelled()) return null;
 
-      for (let py = minY; py <= maxY; py++) {
-        const dy = (py + 0.5) * pixelHeight - seed.y;
-        const dySquared = dy * dy;
-        if (dySquared >= radiusSquared) continue;
-        for (let px = minX; px <= maxX; px++) {
-          const dx = (px + 0.5) * pixelWidth - seed.x;
-          const distanceSquared = dx * dx + dySquared;
-          if (distanceSquared >= radiusSquared) continue;
-          const cell = py * rasterWidth + px;
-          if (rasterLandComponents && rasterLandComponents[cell] !== componentId) continue;
-          const cost = terrain ? crossingCost(seed.x, seed.y, dx, dy, width, terrain, costs) : 1;
-          const weightedDistance = distanceSquared * cost * cost;
-          if (weightedDistance >= radiusSquared) continue;
-          const falloff = 1 - weightedDistance / radiusSquared;
-          const contribution = weight * falloff * falloff;
-          if (stamps[cell] !== stamp) {
-            stamps[cell] = stamp;
-            accumulated[cell] = contribution;
-            touched.push(cell);
-          } else {
-            accumulated[cell] += contribution;
+        const label = seed.race?.trim().toLowerCase() ?? 'other';
+        const race = Object.prototype.hasOwnProperty.call(raceAliases, label) ? raceAliases[label] : label;
+        const costs = Object.prototype.hasOwnProperty.call(terrainCosts, race) ? terrainCosts[race] : terrainCosts.other;
+        // Log scaling gives large cities more reach without allowing one
+        // enormous settlement to overpower an entire surrounding region.
+        // Unknown population has the same weight as a single ordinary site.
+        const population = Number.isFinite(seed.population) ? Math.max(0, seed.population!) : 0;
+        const populationScale = Math.log10(1 + population / 100);
+        const weight = (1 + Math.min(4.8, populationScale * 1.10)) /
+          Math.max(1, seed.coordinateCount ?? 1);
+        const radius = baseRadius * (1 + Math.min(0.45, populationScale * 0.12));
+        const radiusSquared = radius * radius;
+        const routes = terrain || oceanMask
+          ? await routeDistances(seed, radius, width, height, terrain, oceanMask, costs, yieldToBrowser, cancelled)
+          : undefined;
+        if (routes === null) return null;
+        const extent = routes ? radius + 1 : radius;
+        const minX = Math.max(0, Math.ceil((seed.x - extent) / pixelWidth - 0.5));
+        const maxX = Math.min(rasterWidth - 1, Math.floor((seed.x + extent) / pixelWidth - 0.5));
+        const minY = Math.max(0, Math.ceil((seed.y - extent) / pixelHeight - 0.5));
+        const maxY = Math.min(rasterHeight - 1, Math.floor((seed.y + extent) / pixelHeight - 0.5));
+
+        for (let py = minY; py <= maxY; py++) {
+          const dy = (py + 0.5) * pixelHeight - seed.y;
+          const dySquared = dy * dy;
+          if (!routes && dySquared >= radiusSquared) continue;
+          for (let px = minX; px <= maxX; px++) {
+            const dx = (px + 0.5) * pixelWidth - seed.x;
+            const distanceSquared = dx * dx + dySquared;
+            if (!routes && distanceSquared >= radiusSquared) continue;
+            const cell = py * rasterWidth + px;
+            if (rasterLandComponents && rasterLandComponents[cell] !== componentId) continue;
+            const distance = routes?.(Math.floor((px + 0.5) * pixelWidth), Math.floor((py + 0.5) * pixelHeight));
+            const weightedDistance = distance === undefined ? distanceSquared : distance * distance;
+            if (weightedDistance >= radiusSquared) continue;
+            const falloff = 1 - weightedDistance / radiusSquared;
+            const contribution = weight * falloff * falloff;
+            contributions.set(cell, (contributions.get(cell) ?? 0) + contribution);
           }
         }
+        const anchor = Math.floor(seed.y / pixelHeight) * rasterWidth + Math.floor(seed.x / pixelWidth);
+        if (!contributions.has(anchor)) contributions.set(anchor, 0);
+        if (++processed % 32 === 0) await yieldToBrowser();
       }
-      if (i % 32 === 31) await yieldToBrowser();
+      for (const [cell, contribution] of contributions) {
+        if (stamps[cell] !== stamp) {
+          stamps[cell] = stamp;
+          accumulated[cell] = 0;
+          topContribution[cell] = -1;
+          touched.push(cell);
+        }
+        accumulated[cell] += contribution;
+        if (contribution > topContribution[cell]) {
+          topContribution[cell] = contribution;
+          topSeed[cell] = seedIndex.get(site[0])!;
+        }
+      }
     }
 
     for (const cell of touched) {
+      if (siteAnchors[cell] && componentId !== anchorComponent[cell]) continue;
       const strength = accumulated[cell];
-      if (strength > bestStrength[cell] + 1e-6 ||
-          (Math.abs(strength - bestStrength[cell]) <= 1e-6 &&
-           (nation[cell] < 0 || nationId < nation[cell]))) {
+      const wins = nation[cell] < 0 || anchorOwner[cell] === nationId ||
+        (anchorOwner[cell] !== nation[cell] && (strength > bestStrength[cell] ||
+          (strength === bestStrength[cell] && nationId < nation[cell])));
+      if (wins) {
+        if (nation[cell] >= 0 && (bestStrength[cell] > runnerStrength[cell] || runner[cell] < 0 ||
+            (bestStrength[cell] === runnerStrength[cell] && nation[cell] < runner[cell]))) {
+          runner[cell] = nation[cell];
+          runnerStrength[cell] = bestStrength[cell];
+        }
         bestStrength[cell] = strength;
         nation[cell] = nationId;
+        strongestSeed[cell] = topSeed[cell];
         if (sourceComponents) sourceComponents[cell] = componentId;
+      } else if (runner[cell] < 0 || strength > runnerStrength[cell] ||
+          (strength === runnerStrength[cell] && nationId < runner[cell])) {
+        runner[cell] = nationId;
+        runnerStrength[cell] = strength;
       }
     }
     groupsProcessed++;
@@ -407,21 +496,8 @@ export async function createTerritoryGrid(
     }
   }
 
-  // When rival fields overlap a settlement's exact world tile, preserve
-  // recorded ownership at that location instead of obscuring the site
-  // beneath a stronger neighbor's estimated surrounding territory.
-  const siteAnchors = new Uint8Array(nation.length);
-  for (const { nationId, componentId, sites: nationSeeds } of groups.values()) {
-    for (const seed of nationSeeds) {
-      const px = Math.min(rasterWidth - 1, Math.floor(seed.x / pixelWidth));
-      const py = Math.min(rasterHeight - 1, Math.floor(seed.y / pixelHeight));
-      const cell = py * rasterWidth + px;
-      nation[cell] = nationId;
-      if (sourceComponents) sourceComponents[cell] = componentId;
-      siteAnchors[cell] = 1;
-    }
-  }
   const grid = result();
+  grid.evidence = { seeds, strongestSeed, strength: bestStrength, runner, runnerStrength, anchors: siteAnchors };
   pruneUnanchoredClaims(grid, siteAnchors);
   return grid;
 }

@@ -682,6 +682,36 @@ interface NominalTerritoryInfo {
   ownerId: number | null;
   ownerLink?: string;
   ocean: boolean;
+  evidence?: { settlement: string; strength: number; runner: string | null; runnerStrength: number; anchored: boolean };
+}
+
+function territorySummary(territory: NominalTerritoryInfo, year: number): HTMLElement {
+  const header = document.createElement('div');
+  header.className = 'nominal-territory-info';
+  const title = document.createElement('strong');
+  title.textContent = `Nominal controller (estimated, year ${year})`;
+  header.appendChild(title);
+  if (territory.ownerId == null) {
+    header.append(territory.ocean ? 'Water (no estimated territory)' : 'No estimated controller');
+    return header;
+  }
+  appendRichContent(header, territory.ownerLink ?? `Faction #${territory.ownerId}`);
+  const e = territory.evidence;
+  if (e) {
+    const line = (label: string, link?: string) => {
+      const row = document.createElement('div');
+      row.append(label);
+      if (link) appendRichContent(row, link);
+      header.appendChild(row);
+      return row;
+    };
+    if (e.anchored) line('Recorded settlement ownership takes precedence here.');
+    line(`Combined influence: ${e.strength.toFixed(2)}`);
+    line('Strongest settlement: ', e.settlement);
+    if (e.runner) line('Runner-up: ', e.runner).append(` (${e.runnerStrength.toFixed(2)})`);
+    else line('No competing claim');
+  }
+  return header;
 }
 
 function withNominalController(
@@ -689,17 +719,7 @@ function withNominalController(
 ): HTMLElement {
   if (!territory) return content;
 
-  const header = document.createElement('div');
-  header.className = 'nominal-territory-info';
-  const title = document.createElement('strong');
-  title.textContent = `Nominal controller (estimated, year ${year})`;
-  header.appendChild(title);
-  if (territory.ownerId != null) {
-    if (territory.ownerLink) appendRichContent(header, territory.ownerLink);
-    else header.append(`Faction #${territory.ownerId}`);
-  } else {
-    header.append(territory.ocean ? 'Water (no estimated territory)' : 'No estimated controller');
-  }
+  const header = territorySummary(territory, year);
   wireInternalLinks(header, router);
   content.prepend(header);
   return content;
@@ -1063,6 +1083,9 @@ export default defineComponent({
     let historicalWarfareData: WarfareMapDto | null = null;
     let historicalDataLoading = false;
     let territorySnapshotKey = '';
+    const territoryTip = L.tooltip({ direction: 'top', offset: [0, -8], interactive: false });
+    let hoverKey = '';
+    const clearTerritoryTip = () => { territoryTip.remove(); hoverKey = ''; };
     let activeTerritoryGrid: TerritoryGrid | null = null;
     let activeTerritoryOwners = new Map<number, string>();
     let necromancerNationIds = new Set<number>();
@@ -1164,6 +1187,7 @@ export default defineComponent({
       if (!map || disposed) return;
       if (!showEstimatedTerritories.value) {
         if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
+        clearTerritoryTip();
         activeTerritoryGrid = null;
         activeTerritoryOwners.clear();
         territorySnapshotKey = '';
@@ -1174,6 +1198,7 @@ export default defineComponent({
       const height = worldStore.world?.height ?? 0;
       if (!width || !height || !oceanMask) {
         if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
+        clearTerritoryTip();
         activeTerritoryGrid = null;
         activeTerritoryOwners.clear();
         return;
@@ -1220,6 +1245,7 @@ export default defineComponent({
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
       const image = territoryGridToDataUrl(grid, oceanMask, width, height, showBorderLines.value);
+      clearTerritoryTip();
       activeTerritoryGrid = grid;
       activeTerritoryOwners = ownerLinks;
       if (!territoryOverlay.value) {
@@ -1396,11 +1422,40 @@ export default defineComponent({
       }
 
       const ownerId = getTerritoryNationAtTile(activeTerritoryGrid, width, height, x, y, oceanMask);
+      const grid = activeTerritoryGrid;
+      const cell = Math.floor(y * grid.height / height) * grid.width + Math.floor(x * grid.width / width);
+      const e = grid.evidence;
+      const seed = ownerId != null && e ? e.seeds[e.strongestSeed[cell]] : undefined;
       return {
         ownerId,
+        evidence: seed && e ? {
+          settlement: seed.siteName ?? `Site at (${seed.x}, ${seed.y})`,
+          strength: e.strength[cell],
+          runner: e.runner[cell] < 0 ? null : activeTerritoryOwners.get(e.runner[cell]) ?? `Faction #${e.runner[cell]}`,
+          runnerStrength: e.runnerStrength[cell], anchored: !!e.anchors[cell],
+        } : undefined,
         ownerLink: ownerId == null ? undefined : activeTerritoryOwners.get(ownerId),
         ocean: isOceanTile(oceanMask, width, x, y),
       };
+    };
+
+    const showTerritoryTip = (event: L.LeafletMouseEvent) => {
+      const map = leafletMap.value;
+      if (!map || !showEstimatedTerritories.value || historyBusy.value) {
+        clearTerritoryTip();
+        return;
+      }
+      const x = Math.floor(event.latlng.lng / 8);
+      const y = Math.floor((worldStore.world?.height ?? 0) - event.latlng.lat / 8);
+      const key = `${x},${y},${selectedYear.value}`;
+      if (key !== hoverKey) {
+        const info = getNominalControllerAtTile(x, y);
+        clearTerritoryTip();
+        hoverKey = key;
+        if (info?.ownerId != null) {
+          territoryTip.setLatLng(event.latlng).setContent(territorySummary(info, selectedYear.value)).addTo(map);
+        }
+      } else if (map.hasLayer(territoryTip)) territoryTip.setLatLng(event.latlng);
     };
 
     const getActiveItemsAtTile = (x: number, y: number): MapTileItem[] => {
@@ -1519,6 +1574,8 @@ export default defineComponent({
         // Visibility changes are handled explicitly by the owner controls.
         leafletMap.value.on('zoomend', syncTileBadges);
         leafletMap.value.on('click', selectSiteAtMapClick);
+        leafletMap.value.on('mousemove', showTerritoryTip);
+        leafletMap.value.on('mouseout zoomstart movestart popupopen', clearTerritoryTip);
 
         // ResizeObserver callbacks calling invalidateSize can create a
         // resize/invalidate/resize feedback cycle on some layouts.
@@ -1965,6 +2022,7 @@ export default defineComponent({
           territoryOverlay.value = null;
         }
         territorySnapshotKey = '';
+        clearTerritoryTip();
         activeTerritoryGrid = null;
         activeTerritoryOwners.clear();
         if (historicalWarfareLayer.value) {
