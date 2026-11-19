@@ -638,6 +638,7 @@ function createOwnerLayerControl(
   const rowHeight = 29;
   const viewportHeight = 240;
   const overscan = 3;
+  let detachEvents: (() => void) | null = null;
 
   const ControlClass = L.Control.extend({
     options: { position: 'topright' },
@@ -676,13 +677,14 @@ function createOwnerLayerControl(
       warCheckbox.checked = warfareLayer != null && map.hasLayer(warfareLayer);
       warLabel.append(warCheckbox, document.createTextNode(' Wars & Battles'));
       if (warfareLayer != null) {
+        const warLayer = warfareLayer;
         container.appendChild(warLabel);
         warCheckbox.addEventListener('change', () => {
           if (warCheckbox.checked) {
-            map.addLayer(warfareLayer);
+            map.addLayer(warLayer);
             onWarfareEnabled();
           } else {
-            map.removeLayer(warfareLayer);
+            map.removeLayer(warLayer);
           }
           onVisibilityChanged();
         });
@@ -692,7 +694,6 @@ function createOwnerLayerControl(
       let scheduled = false;
       let frameId = 0;
       const render = () => {
-
         count.textContent = `Showing ${filtered.length.toLocaleString()} of ${owners.length.toLocaleString()}`;
         contents.style.height = `${filtered.length * rowHeight}px`;
         const first = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
@@ -728,8 +729,9 @@ function createOwnerLayerControl(
           render();
         });
       };
-      const onMapLayerChange = (event: L.LayerEvent) => {
-        if (layerIds.has(L.stamp(event.layer)) || event.layer === warfareLayer) {
+      const onMapLayerChange = (event: L.LeafletEvent) => {
+        const layer = (event as L.LayerEvent).layer;
+        if (layer && (layerIds.has(L.stamp(layer)) || layer === warfareLayer)) {
           scheduleRender();
         }
       };
@@ -743,7 +745,7 @@ function createOwnerLayerControl(
       });
       viewport.addEventListener('scroll', scheduleRender, { passive: true });
       map.on('layeradd layerremove', onMapLayerChange);
-      this._removeOwnerLayerEvents = () => {
+      detachEvents = () => {
         map.off('layeradd layerremove', onMapLayerChange);
         cancelAnimationFrame(frameId);
       };
@@ -751,7 +753,8 @@ function createOwnerLayerControl(
       return container;
     },
     onRemove() {
-      this._removeOwnerLayerEvents?.();
+      detachEvents?.();
+      detachEvents = null;
     },
   });
 
