@@ -53,6 +53,7 @@ const countRows = computed(() => {
         { title: 'Settlements founded', count: p.settlementsFounded },
         { title: 'Sites reclaimed', count: p.sitesReclaimed },
         { title: 'Sites lost', count: p.sitesLost },
+        { title: 'Settlements lost in war', count: p.sitesLostInWar },
         { title: 'Offensive operations', count: p.offensiveOperations },
         { title: 'Defensive operations', count: p.defensiveOperations },
         { title: 'Wars initiated', count: p.warsInitiated },
@@ -79,6 +80,7 @@ const categories = [
     { title: 'Harsh laws issued', value: 'harshLaw' },
     { title: 'Harsh laws repealed', value: 'lawRepealed' },
     { title: 'Territorial losses', value: 'loss' },
+    { title: 'Settlements lost in war', value: 'warLoss' },
 ];
 const selectedEvidence = computed<NationCultureEvidence[]>(() => {
     const start = period.value?.startYear ?? 0;
