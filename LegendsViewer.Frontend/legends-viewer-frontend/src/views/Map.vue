@@ -630,7 +630,8 @@ function createOwnerLayerControl(
   map: L.Map,
   ownerLayers: Record<string, L.LayerGroup>,
   warfareLayer: L.LayerGroup | null,
-  onVisibilityChanged: () => void
+  onVisibilityChanged: () => void,
+  onWarfareEnabled: () => void
 ): L.Control {
   const owners = Object.entries(ownerLayers).sort(([a], [b]) => a.localeCompare(b));
   const layerIds = new Set(owners.map(([, layer]) => L.stamp(layer)));
@@ -677,8 +678,12 @@ function createOwnerLayerControl(
       if (warfareLayer != null) {
         container.appendChild(warLabel);
         warCheckbox.addEventListener('change', () => {
-          if (warCheckbox.checked) map.addLayer(warfareLayer);
-          else map.removeLayer(warfareLayer);
+          if (warCheckbox.checked) {
+            map.addLayer(warfareLayer);
+            onWarfareEnabled();
+          } else {
+            map.removeLayer(warfareLayer);
+          }
           onVisibilityChanged();
         });
       }
@@ -844,9 +849,11 @@ export default defineComponent({
       }
     };
 
+    let syncingTileBadges = false;
     const syncTileBadges = () => {
-      if (!leafletMap.value || isRenderingSites) return;
-
+      if (!leafletMap.value || isRenderingSites || syncingTileBadges || disposed) return;
+      syncingTileBadges = true;
+      try {
       const map = leafletMap.value;
       if (!siteCountLayer.value) {
         siteCountLayer.value = new L.LayerGroup();
@@ -890,6 +897,9 @@ export default defineComponent({
           map.removeLayer(countLayer as any);
         }
       }
+      } finally {
+        syncingTileBadges = false;
+      }
     };
 
     let resizeObserver: ResizeObserver | null = null;
@@ -903,17 +913,20 @@ export default defineComponent({
           maxZoom: 2,
           preferCanvas: true
         });
+        // Do not mutate marker layers in response to their own overlay events.
+        // Visibility changes are handled explicitly by the owner controls.
         leafletMap.value.on('zoomend', syncTileBadges);
-        leafletMap.value.on('overlayadd', event => {
-          syncTileBadges();
-          if ('layer' in event && event.layer === warfareLayer.value) void loadWarfareOverlay();
-        });
-        leafletMap.value.on('overlayremove', syncTileBadges);
 
         const mapContainerEl = document.getElementById('map');
         if (mapContainerEl && typeof window !== 'undefined' && 'ResizeObserver' in window) {
-          resizeObserver = new ResizeObserver(() => {
-            leafletMap.value?.invalidateSize();
+          let lastWidth = -1;
+          let lastHeight = -1;
+          resizeObserver = new ResizeObserver(entries => {
+            const rect = entries[0]?.contentRect;
+            if (!rect || (rect.width === lastWidth && rect.height === lastHeight)) return;
+            lastWidth = rect.width;
+            lastHeight = rect.height;
+            leafletMap.value?.invalidateSize({ pan: false, animate: false });
           });
           resizeObserver.observe(mapContainerEl);
         }
@@ -951,7 +964,12 @@ export default defineComponent({
         if (!disposed) {
           if (leafletMap.value) {
             // Add the all/none control only after map initialization.
-            addCustomControl(leafletMap.value, ownerLayers, warfareLayer as any, syncTileBadges);
+            addCustomControl(leafletMap.value, ownerLayers, warfareLayer as any, () => {
+              syncTileBadges();
+              if (warfareLayer.value && leafletMap.value?.hasLayer(warfareLayer.value)) {
+                void loadWarfareOverlay();
+              }
+            });
             leafletMap.value.invalidateSize();
           }
           if (!isRenderingSites) mapProgress.value = '';
@@ -1338,7 +1356,9 @@ export default defineComponent({
         // Every owner is available. Only the visible control rows are
         // mounted at once, so the layer chooser never needs an arbitrary cap.
         controlLayers.value = createOwnerLayerControl(
-          leafletMap.value, ownerLayers, warfareLayer.value, syncTileBadges
+          leafletMap.value, ownerLayers, warfareLayer.value,
+          syncTileBadges,
+          () => { void loadWarfareOverlay(); }
         );
 
         // The warfare layer starts unchecked. Load its data only when a user
