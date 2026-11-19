@@ -238,7 +238,11 @@ export async function createTerritoryGrid(
         nation[cell] = nationId;
       }
     }
-    if (++groupsProcessed % 16 === 0) await yieldToBrowser();
+    groupsProcessed++;
+    if (groupsProcessed % 16 === 0 || groupsProcessed === groups.size) {
+      await yieldToBrowser();
+      if (cancelled()) return null;
+    }
   }
 
   // When rival fields overlap a settlement's exact world tile, preserve
