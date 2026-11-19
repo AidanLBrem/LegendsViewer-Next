@@ -43,22 +43,28 @@ public class FieldBattle : WorldEvent
             }
         }
 
-        Attacker.AddEvent(this);
-        Defender.AddEvent(this);
-        AttackerGeneral.AddEvent(this);
-        DefenderGeneral.AddEvent(this);
-        Region.AddEvent(this);
-        UndergroundRegion.AddEvent(this);
-        if (AttackerMercenaries != Defender && AttackerMercenaries != Attacker)
+        Attacker?.AddEvent(this);
+        if (Defender != Attacker)
+        {
+            Defender?.AddEvent(this);
+        }
+        AttackerGeneral?.AddEvent(this);
+        if (DefenderGeneral != AttackerGeneral)
+        {
+            DefenderGeneral?.AddEvent(this);
+        }
+        Region?.AddEvent(this);
+        UndergroundRegion?.AddEvent(this);
+        if (AttackerMercenaries != null && AttackerMercenaries != Defender && AttackerMercenaries != Attacker)
         {
             AttackerMercenaries.AddEvent(this);
         }
-        if (DefenderMercenaries != Defender && DefenderMercenaries != Attacker)
+        if (DefenderMercenaries != null && DefenderMercenaries != Defender && DefenderMercenaries != Attacker)
         {
             DefenderMercenaries.AddEvent(this);
         }
-        AttackerSupportMercenaries.AddEvent(this);
-        DefenderSupportMercenaries.AddEvent(this);
+        AttackerSupportMercenaries?.AddEvent(this);
+        DefenderSupportMercenaries?.AddEvent(this);
     }
 
     public override string Print(bool link = true, DwarfObject? pov = null)
@@ -69,7 +75,8 @@ public class FieldBattle : WorldEvent
         sb.Append(" attacked ");
         sb.Append(Defender?.ToLink(true, pov));
         sb.Append(" in ");
-        sb.Append(Region?.ToLink(link, pov, this));
+        sb.Append(Region?.ToLink(link, pov, this) ??
+            UndergroundRegion?.ToLink(link, pov, this) ?? "an unknown region");
         sb.Append(". ");
         if (AttackerGeneral != null)
         {
