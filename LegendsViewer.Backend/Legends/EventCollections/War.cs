@@ -28,17 +28,17 @@ public class War : EventCollection, IHasComplexSubtype
     // domain objects lets the existing server-side sorter order all records
     // before pagination rather than just sorting the visible page.
     [JsonIgnore]
-    public int AttackerSitesGained => SiteOutcomes.AttackerGained.Count;
+    public int AttackerSitesGainedCount => SiteOutcomes.AttackerGained.Count;
     [JsonIgnore]
-    public int AttackerSitesLost => SiteOutcomes.AttackerLost.Count;
+    public int AttackerSitesLostCount => SiteOutcomes.AttackerLost.Count;
     [JsonIgnore]
-    public int AttackerSitesPlundered => SiteOutcomes.AttackerPlundered.Count;
+    public int AttackerSitesPlunderedCount => SiteOutcomes.AttackerPlundered.Count;
     [JsonIgnore]
-    public int DefenderSitesGained => SiteOutcomes.DefenderGained.Count;
+    public int DefenderSitesGainedCount => SiteOutcomes.DefenderGained.Count;
     [JsonIgnore]
-    public int DefenderSitesLost => SiteOutcomes.DefenderLost.Count;
+    public int DefenderSitesLostCount => SiteOutcomes.DefenderLost.Count;
     [JsonIgnore]
-    public int DefenderSitesPlundered => SiteOutcomes.DefenderPlundered.Count;
+    public int DefenderSitesPlunderedCount => SiteOutcomes.DefenderPlundered.Count;
 
     public List<ListItemDto> MiscList
     {
