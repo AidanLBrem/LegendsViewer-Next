@@ -109,9 +109,16 @@ public class WarfareSiteOutcomesDto
             // Prefer the actual events when they exist.
             if (!hasConcreteOutcome)
             {
+                // The XML importer sometimes associates a conquest with
+                // the nearest preceding battle by ID. Trust that battle for
+                // site recovery only when both records belong to the same war.
+                Battle? relatedBattle = conquest.Battle;
+                bool sameWar = relatedBattle != null && conquest.ParentCollection is War war &&
+                    relatedBattle.ParentCollection == war;
                 Site? site = conquest.Site ??
                     childEvents.Select(GetSite).FirstOrDefault(x => x != null) ??
-                    conquest.Battle?.GetSubEvents().Select(GetSite).FirstOrDefault(x => x != null);
+                    (sameWar ? relatedBattle!.GetSubEvents()
+                        .Select(GetSite).FirstOrDefault(x => x != null) : null);
                 switch (conquest.ConquerType)
                 {
                     case SiteConqueredType.Conquest:
