@@ -7,6 +7,7 @@ import ExpandableCard from '../components/ExpandableCard.vue';
 import WarfareGraph from '../components/WarfareGraph.vue';
 import MonarchTimeline from '../components/MonarchTimeline.vue';
 import EntityPopulationCard from '../components/EntityPopulationCard.vue';
+import NationCultureCard from '../components/NationCultureCard.vue';
 import { computed, ComputedRef } from 'vue';
 import { LegendLinkListData } from '../types/legends';
 
@@ -47,6 +48,9 @@ const afterLists: ComputedRef<LegendLinkListData[]> = computed(() => [
 <template>
     <WorldObjectPage :store="store" :mapStore="mapStore" :object-type="'entity'">
         <template v-slot:type-specific-before-table>
+            <NationCultureCard
+                v-if="store.object?.id != null && (store.object.isCiv || store.object.type?.toLowerCase() === 'civilization')"
+                :entity-id="store.object.id" />
             <v-col v-if="showPopulation" cols="12" xl="6" lg="6" md="12">
                 <EntityPopulationCard
                     :populations="store.object?.populations"
