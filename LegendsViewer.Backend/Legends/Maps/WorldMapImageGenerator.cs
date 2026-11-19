@@ -45,7 +45,7 @@ public class WorldMapImageGenerator(IWorld worldDataService) : IWorldMapImageGen
         int pixelWidth = _worldDataService.Width * tileSize;
         int pixelHeight = _worldDataService.Height * tileSize;
 
-        SKBitmap worldImage = GenerateBaseMapImage(tileSize, pixelWidth, pixelHeight);
+        using SKBitmap worldImage = GenerateBaseMapImage(tileSize, pixelWidth, pixelHeight);
 
         DrawRegionsAndObjects(worldImage, tileSize, objectWithCoordinates, depth);
 
@@ -70,6 +70,7 @@ public class WorldMapImageGenerator(IWorld worldDataService) : IWorldMapImageGen
         _worldMapMin = null;
         _worldMapMid = null;
         _worldMapMax = null;
+        _exportedWorldMapBitmap?.Dispose();
         _exportedWorldMapBitmap = null;
     }
 
