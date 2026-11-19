@@ -6,6 +6,22 @@ import {
 } from './historicalAtlas';
 
 describe('historical atlas political influence', () => {
+  it.each([[1, 'Dwarves', 'Elf'], [2, 'Elves', 'Dwarf'], [5, 'Goblins', 'Human']])(
+    'carries the cost of crossing region type %i onto the plains beyond',
+    async (region, adapted, other) => {
+      const terrain = new Uint8Array(24 * 12);
+      for (let y = 0; y < 12; y++) terrain.fill(Number(region), y * 24 + 6, y * 24 + 9);
+      const seed = { x: 4.5, y: 5.5, nationId: 1, color: '#999' };
+      async function owner(race: string) {
+        const grid = await createTerritoryGrid(24, 12, [{ ...seed, race }],
+          undefined, undefined, undefined, undefined, terrain);
+        return grid!.nation[5 * 24 + 10];
+      }
+      expect(await owner(String(adapted))).toBe(1);
+      expect(await owner(String(other))).toBe(-1);
+    }
+  );
+
   it('colors nearby cells by the closest dated settlement, not global factions', async () => {
     const grid = await createTerritoryGrid(32, 32, [
       { x: 5, y: 5, nationId: 10, color: '#ff0000' },

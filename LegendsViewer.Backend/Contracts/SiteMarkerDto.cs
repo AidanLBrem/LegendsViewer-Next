@@ -36,6 +36,13 @@ public class SiteMarkerDto
             ? site.Populations.Where(pop => !pop.IsVisitors && pop.Count > 0)
                 .Sum(pop => (long)pop.Count)
             : null;
+        ResidentRace = site.Populations
+            .Where(p => p.Count > 0 && !p.IsVisitors && !p.IsPrisoners && !p.IsSlaves && !p.IsOutcasts)
+            .GroupBy(p => p.Race.NameSingular)
+            .OrderByDescending(group => group.Sum(p => (long)p.Count))
+            .ThenBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => group.Key).FirstOrDefault();
+        OwnerRace = currentNation?.Race.NameSingular;
         OwnerHistory = site.OwnerHistory
             .OrderBy(period => period.StartYear < 0 ? 0 : period.StartYear)
             .Select(period => new SiteOwnershipPeriodDto(period))
@@ -75,6 +82,7 @@ public class SiteMarkerDto
     public string Owner { get; set; }
     public string OwnerText { get; set; }
     public int? OwnerId { get; set; }
+    public string? OwnerRace { get; set; }
     public string? OwnerEntityType { get; set; }
     public int? CurrentOwnerId { get; set; }
     public string Color { get; set; }
@@ -85,6 +93,7 @@ public class SiteMarkerDto
     public string TypeAsString { get; set; }
     public SiteType Type { get; set; }
     public List<Location> Coordinates { get; set; }
+    public string? ResidentRace { get; set; }
     public long? PopulationCount { get; set; }
     public List<SiteOwnershipPeriodDto> OwnerHistory { get; set; }
     public int? CreatedYear { get; set; }
@@ -104,6 +113,7 @@ public class SiteOwnershipPeriodDto
         Owner = nation?.ToLink() ?? "Unclaimed";
         OwnerText = nation?.Name ?? "Unclaimed";
         OwnerId = nation?.Id;
+        OwnerRace = nation?.Race.NameSingular;
         OwnerEntityType = nation?.EntityType.ToString();
         CurrentOwnerId = actualOwner?.Id;
         ActualOwner = actualOwner?.ToLink();
@@ -117,6 +127,7 @@ public class SiteOwnershipPeriodDto
     public string Owner { get; set; }
     public string OwnerText { get; set; }
     public int? OwnerId { get; set; }
+    public string? OwnerRace { get; set; }
     public string? OwnerEntityType { get; set; }
     public int? CurrentOwnerId { get; set; }
     public string? ActualOwner { get; set; }
