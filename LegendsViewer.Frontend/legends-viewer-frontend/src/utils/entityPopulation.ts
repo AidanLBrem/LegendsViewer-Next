@@ -1,7 +1,8 @@
 // A civilization can have population data from two different exports:
 // * Sites and Populations: current residents of its sites, aggregated by race
 // * legends_plus entity_population: a separate entity-level record
-// These sources must never be added together or treated as a historical series.
+// The same race can occur in both reports. Only combine counts for
+// different races; use the larger count when their race records overlap.
 export interface PopulationRecord {
   race?: { id?: string | null; namePlural?: string | null } | null;
   count?: number | null;
@@ -26,9 +27,17 @@ export interface PopulationRaceRow {
   classifications: string[];
 }
 
+export interface CombinedPopulationRaceRow extends PopulationRaceRow {
+  siteCount: number | null;
+  legendsPlusCount: number | null;
+}
+
 export interface NationPopulationSummary {
   sitePopulationTotal: number;
   races: PopulationRaceRow[];
+  combinedPopulationTotal: number;
+  combinedRaces: CombinedPopulationRaceRow[];
+  overlappingRaceCount: number;
   entityPopulationCount: number | null;
   entityPopulationRace: string | null;
 }
@@ -76,12 +85,53 @@ export function summarizeNationPopulation(
     }));
 
   const entityCount = countOrZero(entityPopulation?.count);
+  const entityRace = entityCount
+    ? entityPopulation?.race?.namePlural?.trim() || 'Unknown'
+    : null;
+  const combinedRaces: CombinedPopulationRaceRow[] = races.map(row => ({
+    ...row,
+    siteCount: row.count,
+    legendsPlusCount: null,
+  }));
+
+  if (entityCount && entityRace) {
+    const entityKey = entityPopulation?.race?.id?.trim().toLowerCase();
+    // In older exports, the race identifier may be absent. Fall back to
+    // matching the formatted race name before assuming distinct populations.
+    const match = combinedRaces.find(row =>
+      (entityKey && row.key === entityKey) ||
+      row.race.toLowerCase() === entityRace.toLowerCase());
+
+    if (match) {
+      match.legendsPlusCount = entityCount;
+      match.count = Math.max(match.siteCount ?? 0, entityCount);
+    } else {
+      combinedRaces.push({
+        key: `entity:${entityKey || entityRace.toLowerCase()}`,
+        race: entityRace,
+        count: entityCount,
+        percentage: 0,
+        classifications: [],
+        siteCount: null,
+        legendsPlusCount: entityCount,
+      });
+    }
+  }
+
+  combinedRaces.sort((a, b) => b.count - a.count || a.race.localeCompare(b.race));
+  const combinedPopulationTotal = combinedRaces.reduce((sum, row) => sum + row.count, 0);
+  for (const row of combinedRaces) {
+    row.percentage = combinedPopulationTotal > 0
+      ? row.count / combinedPopulationTotal * 100 : 0;
+  }
   return {
     sitePopulationTotal,
     races,
+    combinedPopulationTotal,
+    combinedRaces,
+    overlappingRaceCount: combinedRaces.filter(row =>
+      row.siteCount !== null && row.legendsPlusCount !== null).length,
     entityPopulationCount: entityCount || null,
-    entityPopulationRace: entityCount
-      ? entityPopulation?.race?.namePlural?.trim() || 'Unknown'
-      : null,
+    entityPopulationRace: entityRace,
   };
 }
