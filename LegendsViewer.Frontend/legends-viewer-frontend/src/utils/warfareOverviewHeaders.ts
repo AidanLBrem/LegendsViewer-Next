@@ -3,6 +3,8 @@ import type { TableHeader } from '../types/legends';
 // These keys are real numeric properties on War and Battle. The overview
 // endpoint sorts the underlying records before applying page limits.
 export const warfareOverviewHeaders: TableHeader[] = [
+    { title: 'Atk troops', key: 'attackerTroopCount', align: 'end' },
+    { title: 'Def troops', key: 'defenderTroopCount', align: 'end' },
     { title: 'Total deaths', key: 'deathCount', align: 'end' },
     { title: 'Atk deaths', key: 'attackerDeathCount', align: 'end' },
     { title: 'Def deaths', key: 'defenderDeathCount', align: 'end' },
