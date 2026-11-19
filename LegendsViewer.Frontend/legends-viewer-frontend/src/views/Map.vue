@@ -851,7 +851,7 @@ function createOwnerLayerControl(
       const warCheckbox = document.createElement('input');
       warCheckbox.type = 'checkbox';
       warCheckbox.checked = warfareLayer != null && map.hasLayer(warfareLayer);
-      warLabel.append(warCheckbox, document.createTextNode(' Wars & Battles'));
+      warLabel.append(warCheckbox, document.createTextNode(' Present-day wars & battles'));
       if (warfareLayer != null) {
         const warLayer = warfareLayer;
         container.appendChild(warLabel);
