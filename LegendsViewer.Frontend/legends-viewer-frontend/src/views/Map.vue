@@ -3,7 +3,6 @@
     <div id="map" style="height: 100%;"></div>
     <div v-if="mapError" class="map-error" role="alert">{{ mapError }}</div>
     <div v-if="mapProgress" class="map-progress" role="status">{{ mapProgress }}</div>
-    <div v-if="ownerLayerNotice" class="map-owner-notice" role="status">{{ ownerLayerNotice }}</div>
     <div class="site-color-selector">
       <label for="site-color-mode">Site colors</label>
       <select id="site-color-mode" v-model="siteColorMode">
@@ -624,6 +623,138 @@ function addCustomControl(
   map.addControl(new customControl());
 }
 
+// Displays every site owner with no cutoff, but renders only the visible
+// checkbox rows. This also avoids Leaflet's standard Layers control repeatedly
+// rebuilding a huge list on each layeradd/layerremove event.
+function createOwnerLayerControl(
+  map: L.Map,
+  ownerLayers: Record<string, L.LayerGroup>,
+  warfareLayer: L.LayerGroup | null,
+  onVisibilityChanged: () => void
+): L.Control {
+  const owners = Object.entries(ownerLayers).sort(([a], [b]) => a.localeCompare(b));
+  const layerIds = new Set(owners.map(([, layer]) => L.stamp(layer)));
+  const rowHeight = 29;
+  const viewportHeight = 240;
+  const overscan = 3;
+
+  const ControlClass = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd() {
+      const container = L.DomUtil.create('div', 'leaflet-control owner-layer-control');
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+
+      const title = document.createElement('strong');
+      title.textContent = 'Site owners';
+      container.appendChild(title);
+
+      const search = document.createElement('input');
+      search.className = 'owner-layer-control__search';
+      search.type = 'search';
+      search.placeholder = `Search ${owners.length.toLocaleString()} owners`;
+      search.setAttribute('aria-label', 'Search site owners');
+      container.appendChild(search);
+
+      const count = document.createElement('div');
+      count.className = 'owner-layer-control__count';
+      container.appendChild(count);
+
+      const viewport = document.createElement('div');
+      viewport.className = 'owner-layer-control__viewport';
+      viewport.style.height = `${viewportHeight}px`;
+      const contents = document.createElement('div');
+      contents.className = 'owner-layer-control__contents';
+      viewport.appendChild(contents);
+      container.appendChild(viewport);
+
+      const warLabel = document.createElement('label');
+      warLabel.className = 'owner-layer-control__war';
+      const warCheckbox = document.createElement('input');
+      warCheckbox.type = 'checkbox';
+      warCheckbox.checked = warfareLayer != null && map.hasLayer(warfareLayer);
+      warLabel.append(warCheckbox, document.createTextNode(' Wars & Battles'));
+      if (warfareLayer != null) {
+        container.appendChild(warLabel);
+        warCheckbox.addEventListener('change', () => {
+          if (warCheckbox.checked) map.addLayer(warfareLayer);
+          else map.removeLayer(warfareLayer);
+          onVisibilityChanged();
+        });
+      }
+
+      let filtered = owners;
+      let scheduled = false;
+      let frameId = 0;
+      const render = () => {
+        if (!viewport.isConnected) return;
+        count.textContent = `Showing ${filtered.length.toLocaleString()} of ${owners.length.toLocaleString()}`;
+        contents.style.height = `${filtered.length * rowHeight}px`;
+        const first = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
+        const last = Math.min(filtered.length, Math.ceil((viewport.scrollTop + viewportHeight) / rowHeight) + overscan);
+        const fragment = document.createDocumentFragment();
+        for (let i = first; i < last; i++) {
+          const [name, layer] = filtered[i];
+          const row = document.createElement('label');
+          row.className = 'owner-layer-control__row';
+          row.style.top = `${i * rowHeight}px`;
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = map.hasLayer(layer);
+          checkbox.addEventListener('change', () => {
+            if (checkbox.checked) map.addLayer(layer);
+            else map.removeLayer(layer);
+            onVisibilityChanged();
+          });
+          const label = document.createElement('span');
+          label.textContent = name;
+          label.title = name;
+          row.append(checkbox, label);
+          fragment.appendChild(row);
+        }
+        contents.replaceChildren(fragment);
+        if (warfareLayer) warCheckbox.checked = map.hasLayer(warfareLayer);
+      };
+      const scheduleRender = () => {
+        if (scheduled) return;
+        scheduled = true;
+        frameId = requestAnimationFrame(() => {
+          scheduled = false;
+          render();
+        });
+      };
+      const onMapLayerChange = (event: L.LayerEvent) => {
+        if (layerIds.has(L.stamp(event.layer)) || event.layer === warfareLayer) {
+          scheduleRender();
+        }
+      };
+      search.addEventListener('input', () => {
+        const term = search.value.trim().toLocaleLowerCase();
+        filtered = term
+          ? owners.filter(([name]) => name.toLocaleLowerCase().includes(term))
+          : owners;
+        viewport.scrollTop = 0;
+        render();
+      });
+      viewport.addEventListener('scroll', scheduleRender, { passive: true });
+      map.on('layeradd layerremove', onMapLayerChange);
+      this._removeOwnerLayerEvents = () => {
+        map.off('layeradd layerremove', onMapLayerChange);
+        cancelAnimationFrame(frameId);
+      };
+      render();
+      return container;
+    },
+    onRemove() {
+      this._removeOwnerLayerEvents?.();
+    },
+  });
+
+  const control = new ControlClass();
+  map.addControl(control);
+  return control;
+}
+
 export default defineComponent({
   setup() {
     const worldStore = useWorldStore();
@@ -640,7 +771,6 @@ export default defineComponent({
     const siteColorMode = ref<'current' | 'origin'>('current');
     const mapError = ref('');
     const mapProgress = ref('');
-    const ownerLayerNotice = ref('');
     const siteLayers: Array<{ marker: L.Path; site: SiteMarker }> = [];
     const siteRenderer = L.canvas({ padding: 0.3 });
     let renderGeneration = 0;
@@ -672,8 +802,8 @@ export default defineComponent({
     });
 
     // This will hold the LayerGroups for different owners
-    const ownerLayers: Record<string, LayerGroup> = {};
-    const controlLayers = shallowRef<L.Control.Layers>();
+    const ownerLayers: Record<string, LayerGroup> = Object.create(null);
+    const controlLayers = shallowRef<L.Control>();
 
     const warfareLayer = shallowRef<LayerGroup | null>(null);
 
@@ -1107,7 +1237,6 @@ export default defineComponent({
       const generation = ++renderGeneration;
       isRenderingSites = true;
       mapProgress.value = 'Preparing map markers...';
-      ownerLayerNotice.value = '';
       mapError.value = '';
       try {
         if (currentOverlay.value) {
@@ -1158,7 +1287,6 @@ export default defineComponent({
           leafletMap.value.fitBounds(bounds);
         }
 
-        const layersControl: Record<string, LayerGroup> = {};
         warfareLayer.value = new L.LayerGroup();
 
         // Skip Vue's deep proxies while iterating over potentially tens of
@@ -1172,7 +1300,6 @@ export default defineComponent({
           const ownerText = siteMarker.ownerText ?? 'Unknown';
           if (!ownerLayers[ownerText]) {
             ownerLayers[ownerText] = new L.LayerGroup();
-            layersControl[siteMarker.owner] = ownerLayers[ownerText];
             ownerLayers[ownerText].addTo(leafletMap.value);
           }
 
@@ -1208,22 +1335,11 @@ export default defineComponent({
           }
         }
 
-        layersControl['Wars & Battles'] = warfareLayer.value;
-        const layerEntries = Object.entries(layersControl);
-        // Leaflet's standard control creates all labels synchronously. On
-        // large worlds, thousands of labels can freeze the browser even
-        // though the map markers themselves were rendered in batches.
-        const maxListedOwners = 250;
-        const visibleLayers: Record<string, LayerGroup> = {};
-        for (const [name, layer] of layerEntries.slice(0, maxListedOwners)) {
-          visibleLayers[name] = layer;
-        }
-        visibleLayers['Wars & Battles'] = warfareLayer.value;
-        if (layerEntries.length > maxListedOwners + 1) {
-          ownerLayerNotice.value =
-            `Showing the first ${maxListedOwners} owner toggles. All/None still controls every site.`;
-        }
-        controlLayers.value = L.control.layers(undefined, visibleLayers).addTo(leafletMap.value);
+        // Every owner is available. Only the visible control rows are
+        // mounted at once, so the layer chooser never needs an arbitrary cap.
+        controlLayers.value = createOwnerLayerControl(
+          leafletMap.value, ownerLayers, warfareLayer.value, syncTileBadges
+        );
 
         // The warfare layer starts unchecked. Load its data only when a user
         // enables it rather than making a potentially huge request on every map open.
@@ -1277,7 +1393,6 @@ export default defineComponent({
       siteColorMode,
       mapError,
       mapProgress,
-      ownerLayerNotice,
     };
   },
 });
@@ -1291,17 +1406,58 @@ export default defineComponent({
   /* Ensure the map and controls are positioned properly */
 }
 
-.map-owner-notice {
-  position: absolute;
-  top: 140px;
-  left: 10px;
-  z-index: 1000;
-  padding: 8px 12px;
-  max-width: 320px;
-  background: rgba(30, 30, 30, 0.85);
-  color: white;
+.owner-layer-control {
+  width: 250px;
+  padding: 10px;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
   border-radius: 4px;
-  pointer-events: none;
+}
+.owner-layer-control__search {
+  display: block;
+  width: 100%;
+  margin: 8px 0 5px;
+  padding: 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: rgb(var(--v-theme-background));
+  color: inherit;
+}
+.owner-layer-control__count {
+  font-size: 11px;
+  margin-bottom: 5px;
+  opacity: 0.8;
+}
+.owner-layer-control__viewport {
+  position: relative;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.owner-layer-control__contents {
+  position: relative;
+}
+.owner-layer-control__row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.owner-layer-control__row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.owner-layer-control__war {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .map-progress {
