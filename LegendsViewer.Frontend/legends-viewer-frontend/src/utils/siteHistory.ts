@@ -95,6 +95,30 @@ export function getSiteOwnerAtYear(
   };
 }
 
+// Some legends exports (and older backends) report CurrentYear as zero.
+// Recover the actual timeline extent from dated site ownership records rather
+// than silently constraining every historical event to year 0.
+export function getTimelineMaxYear(
+  currentYear: number | null | undefined,
+  sites: readonly SiteWithOwnershipHistory[]
+): number {
+  let latest = Number.isFinite(currentYear)
+    ? Math.max(0, Math.floor(currentYear ?? 0))
+    : 0;
+
+  for (const site of sites) {
+    for (const period of site.ownerHistory ?? []) {
+      if (period.startYear != null && Number.isFinite(period.startYear)) {
+        latest = Math.max(latest, Math.floor(period.startYear));
+      }
+      if (period.endYear != null && Number.isFinite(period.endYear)) {
+        latest = Math.max(latest, Math.floor(period.endYear));
+      }
+    }
+  }
+  return latest;
+}
+
 export function getOwnershipChangeYears(
   sites: readonly SiteWithOwnershipHistory[],
   presentYear: number
