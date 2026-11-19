@@ -22,18 +22,33 @@ export function getTerritorySeeds(
   includeSite: (site: AtlasSite) => boolean = () => true
 ): TerritorySeed[] {
   const seeds: TerritorySeed[] = [];
+  const ownedSites: Array<{
+    site: AtlasSite;
+    owner: ReturnType<typeof getSiteOwnerAtYear>;
+  }> = [];
+  const siteCounts = new Map<number, number>();
+
+  // Count actual sites for every owner at the selected historical year,
+  // independently of which site types or owner layers are currently shown.
+  // Counting seeds instead would mistake multiple coordinates for sites.
   for (const site of sites) {
-    if (!includeSite(site)) continue;
-    // Sites without any historical ownership can be shown at the current
-    // year, but must not project modern control centuries into the past.
+    // Do not project today's owner into a year without ownership records.
     if (year < presentYear && !(site.ownerHistory?.length)) continue;
     const owner = getSiteOwnerAtYear(site, year, presentYear);
-    // Do not invent territory from unclaimed or undated ownership.
     if (!owner.visible || owner.ownerId == null || owner.ownerText === 'Unclaimed') continue;
+    ownedSites.push({ site, owner });
+    siteCounts.set(owner.ownerId, (siteCounts.get(owner.ownerId) ?? 0) + 1);
+  }
+
+  for (const { site, owner } of ownedSites) {
+    // A lone nomadic camp is still a selectable, owned site; it just
+    // cannot project a political border onto neighboring map tiles.
+    if (owner.ownerEntityType === 'NomadicGroup' && siteCounts.get(owner.ownerId!) === 1) continue;
+    if (!includeSite(site)) continue;
     for (const location of site.coordinates ?? []) {
       if (location.x == null || location.y == null ||
         !Number.isFinite(location.x) || !Number.isFinite(location.y)) continue;
-      seeds.push({ x: location.x, y: location.y, nationId: owner.ownerId, color: owner.color });
+      seeds.push({ x: location.x, y: location.y, nationId: owner.ownerId!, color: owner.color });
     }
   }
   return seeds;
