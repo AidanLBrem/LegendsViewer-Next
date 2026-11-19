@@ -354,8 +354,8 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         for (int i = 0; i < attackerSquadRaces.Count; i++)
         {
-            int number = attackerSquadNumbers.ElementAtOrDefault(i);
-            int deaths = Math.Min(number, attackerSquadDeaths.ElementAtOrDefault(i));
+            int deaths = attackerSquadDeaths.ElementAtOrDefault(i);
+            int number = Math.Max(attackerSquadNumbers.ElementAtOrDefault(i), deaths);
             int site = i < attackerSquadSite.Count ? attackerSquadSite[i] : -1;
             int population = i < attackerSquadEntityPopulation.Count ? attackerSquadEntityPopulation[i] : -1;
             AttackerSquads.Add(new Squad(attackerSquadRaces[i], number, deaths, site, population));
@@ -363,8 +363,8 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         for (int i = 0; i < defenderSquadRaces.Count; i++)
         {
-            int number = defenderSquadNumbers.ElementAtOrDefault(i);
-            int deaths = Math.Min(number, defenderSquadDeaths.ElementAtOrDefault(i));
+            int deaths = defenderSquadDeaths.ElementAtOrDefault(i);
+            int number = Math.Max(defenderSquadNumbers.ElementAtOrDefault(i), deaths);
             int site = i < defenderSquadSite.Count ? defenderSquadSite[i] : -1;
             int population = i < defenderSquadEntityPopulation.Count ? defenderSquadEntityPopulation[i] : -1;
             DefenderSquads.Add(new Squad(defenderSquadRaces[i], number, deaths, site, population));
