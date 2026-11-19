@@ -48,6 +48,10 @@ public class BattleCasualtyTests
 
         Assert.AreEqual(250, battle.AttackerCount);
         Assert.AreEqual(40, battle.DefenderCount);
+        Assert.AreEqual(250, battle.AttackerInitialArmyByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(40, battle.DefenderInitialArmyByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(250, battle.AttackerTroopCount);
+        Assert.AreEqual(40, battle.DefenderTroopCount);
         Assert.AreEqual(120, battle.AttackerDeathCount);
         Assert.AreEqual(8, battle.DefenderDeathCount);
         Assert.AreEqual(130, battle.AttackersRemainingCount);
@@ -120,6 +124,8 @@ public class BattleCasualtyTests
         war.EventCollections.Add(battle);
 
         Assert.AreEqual(7, battle.AttackerCount);
+        Assert.AreEqual(7, battle.AttackerInitialArmyByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(20, battle.DefenderInitialArmyByRace.Datasets.Single().Data.Sum());
         Assert.AreEqual(7, battle.AttackerDeathCount);
         Assert.AreEqual(0, battle.AttackersRemainingCount);
         Assert.AreEqual(-1, battle.AttackerSquads.Single().Site);
@@ -175,6 +181,72 @@ public class BattleCasualtyTests
         Assert.AreEqual(3, battle.DefenderDeathCount);
         Assert.AreEqual(0, battle.DefendersRemainingCount);
         Assert.AreEqual(3, battle.DeathsByRace.Datasets.Single().Data.Sum());
+    }
+
+    [TestMethod]
+    public void InitialArmyCharts_AggregateMultipleSquadsByRaceWithoutMixingSides()
+    {
+        using var world = new World();
+        Battle battle = new([
+            P("id", "101"),
+            P("attacking_squad_race", "HUMAN"),
+            P("attacking_squad_number", "50"),
+            P("attacking_squad_deaths", "20"),
+            P("attacking_squad_race", "HUMAN"),
+            P("attacking_squad_number", "30"),
+            P("attacking_squad_deaths", "10"),
+            P("attacking_squad_race", "GOBLIN"),
+            P("attacking_squad_number", "25"),
+            P("attacking_squad_deaths", "5"),
+            P("defending_squad_race", "DWARF"),
+            P("defending_squad_number", "70"),
+            P("defending_squad_deaths", "7")
+        ], world);
+
+        Assert.AreEqual(105, battle.AttackerCount);
+        Assert.AreEqual(70, battle.DefenderCount);
+        Assert.AreEqual(2, battle.AttackerInitialArmyByRace.Labels.Count);
+        Assert.AreEqual(105, battle.AttackerInitialArmyByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(80, battle.AttackerInitialArmyByRace.Datasets.Single().Data.Max());
+        Assert.AreEqual(70, battle.DefenderInitialArmyByRace.Datasets.Single().Data.Single());
+        Assert.AreEqual(35, battle.AttackerDeathsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(7, battle.DefenderDeathsByRace.Datasets.Single().Data.Sum());
+    }
+
+    [TestMethod]
+    public void WarDeploymentTotals_MatchRaceChartsAndPreserveWarSidesAcrossBattleRoleReversals()
+    {
+        using var world = new World();
+        War war = CreateWar(world);
+        Battle first = new([
+            P("id", "102"),
+            P("war_eventcol", "10"),
+            P("attacking_squad_race", "HUMAN"),
+            P("attacking_squad_number", "90"),
+            P("defending_squad_race", "DWARF"),
+            P("defending_squad_number", "50")
+        ], world);
+
+        Battle counterattack = new([
+            P("id", "103"),
+            P("war_eventcol", "10"),
+            P("attacking_squad_race", "DWARF"),
+            P("attacking_squad_number", "25"),
+            P("defending_squad_race", "HUMAN"),
+            P("defending_squad_number", "40")
+        ], world);
+        // The war's defending faction launches the second battle.
+        counterattack.Attacker = war.Defender;
+        counterattack.Defender = war.Attacker;
+        war.EventCollections.Add(first);
+        war.EventCollections.Add(counterattack);
+
+        Assert.AreEqual(130, war.AttackerBattleDeployments);
+        Assert.AreEqual(75, war.DefenderBattleDeployments);
+        Assert.AreEqual(130, war.AttackerDeploymentsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(75, war.DefenderDeploymentsByRace.Datasets.Single().Data.Sum());
+        Assert.AreEqual(130, new LegendsViewer.Backend.Contracts.WorldObjectDto(war).AttackerTroopCount);
+        Assert.AreEqual(75, new LegendsViewer.Backend.Contracts.WorldObjectDto(war).DefenderTroopCount);
     }
 
     [TestMethod]
