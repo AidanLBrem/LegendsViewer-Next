@@ -21,6 +21,57 @@ public class War : EventCollection, IHasComplexSubtype
     public int DeathCount { get; set; }
     public int AttackerDeathCount { get; set; }
     public int DefenderDeathCount { get; set; }
+
+    // These are battle deployments, NOT unique soldiers or an independently
+    // recorded army at the start of the war. A soldier appearing in two
+    // battles counts twice. Map local attacking/defending positions back to
+    // the aggressor and defender of the war.
+    public int AttackerBattleDeployments => Battles.Sum(battle =>
+        BattleAttackerIsWarAttacker(battle) ? battle.AttackerCount : battle.DefenderCount);
+    public int DefenderBattleDeployments => Battles.Sum(battle =>
+        BattleAttackerIsWarAttacker(battle) ? battle.DefenderCount : battle.AttackerCount);
+
+    public ChartDataDto AttackerDeploymentsByRace => BuildTroopChart(
+        Battles.SelectMany(battle => BattleAttackerIsWarAttacker(battle)
+            ? battle.Attackers : battle.Defenders));
+
+    public ChartDataDto DefenderDeploymentsByRace => BuildTroopChart(
+        Battles.SelectMany(battle => BattleAttackerIsWarAttacker(battle)
+            ? battle.Defenders : battle.Attackers));
+
+    private bool BattleAttackerIsWarAttacker(Battle battle)
+    {
+        static bool Matches(Entity? participant, Entity? side) =>
+            participant != null && side != null &&
+            (participant.EqualsOrParentEquals(side) || participant.CurrentCiv == side);
+
+        return Matches(battle.Attacker, Attacker) ||
+            (!Matches(battle.Attacker, Defender) &&
+             Matches(battle.Defender, Defender));
+    }
+
+    private ChartDataDto BuildTroopChart(IEnumerable<Battle.Squad> squads)
+    {
+        ChartDataDto chart = new();
+        ChartDatasetDto dataset = new();
+
+        foreach (var group in squads.Where(s => s.Numbers > 0)
+                     .GroupBy(s => s.Race)
+                     .Select(group => new { Race = group.Key, Count = group.Sum(s => s.Numbers) })
+                     .OrderByDescending(x => x.Count))
+        {
+            chart.Labels.Add(group.Race.NamePlural);
+            dataset.Data.Add(group.Count);
+            Color color = World != null && World.MainRaces.TryGetValue(group.Race, out var raceColor)
+                ? raceColor : Color.SlateGray;
+            dataset.BorderColor.Add(color.ToRgbaString());
+            dataset.BackgroundColor.Add(color.ToRgbaString(0.2f));
+        }
+
+        chart.Datasets.Add(dataset);
+        return chart;
+    }
+
     public WarfareSiteOutcomesDto SiteOutcomes =>
         WarfareSiteOutcomesDto.FromConquerings(Conquerings, Attacker, Defender);
 
