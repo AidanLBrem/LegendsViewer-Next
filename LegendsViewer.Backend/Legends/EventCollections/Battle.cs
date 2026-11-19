@@ -572,6 +572,15 @@ public class Battle : EventCollection, IHasComplexSubtype
             (entity.EqualsOrParentEquals(side) || entity.CurrentCiv == side);
     }
 
+    internal bool IsUndeadCombatant(HistoricalFigure figure)
+    {
+        // Reuse the battle's dated classification when attributing duel deaths.
+        // Race alone is no longer unique when living and animated troops coexist.
+        return figure.UndeadTypes.Count > 0
+            ? figure.UndeadTypes.Any(type => type.StartYear <= StartYear)
+            : figure.Skeleton || figure.Zombie || figure.Ghost || figure.Animated;
+    }
+
     private List<Squad> AggregateCombatants(
         IEnumerable<Squad> squads,
         IEnumerable<HistoricalFigure> notableFigures,
@@ -592,11 +601,7 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         foreach (HistoricalFigure figure in notableFigures.Distinct())
         {
-            // Prefer the dated undead history. Older exports sometimes only
-            // expose a current undead flag without a dated conversion.
-            bool undead = figure.UndeadTypes.Count > 0
-                ? figure.UndeadTypes.Any(type => type.StartYear <= StartYear)
-                : figure.Skeleton || figure.Zombie || figure.Ghost || figure.Animated;
+            bool undead = IsUndeadCombatant(figure);
             var key = (figure.Race, undead);
             if (!grouped.TryGetValue(key, out Squad? aggregate))
             {
