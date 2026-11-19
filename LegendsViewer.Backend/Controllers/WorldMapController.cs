@@ -154,6 +154,20 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
             dto.Battles.Add(CreateBattleMapMarkerDto(battle));
         }
 
+        // Historical playback requests all recorded site outcomes. The
+        // present-day overlay remains lightweight and excludes ancient events.
+        if (!activeOnly)
+        {
+            foreach (var eventCollection in _worldDataService.EventCollections.OfType<SiteConquered>())
+            {
+                var eventMarker = CreateSiteConquestMapMarkerDto(eventCollection);
+                if (eventMarker != null)
+                {
+                    dto.SiteConquests.Add(eventMarker);
+                }
+            }
+        }
+
         return dto;
     }
 
@@ -291,6 +305,38 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
             AttackerDeathCount = battle.AttackerDeathCount,
             DefenderDeathCount = battle.DefenderDeathCount,
             Coordinates = battle.Coordinates != null ? new LocationDto(battle.Coordinates.X, battle.Coordinates.Y) : null
+        };
+    }
+
+    private static SiteConquestMapMarkerDto? CreateSiteConquestMapMarkerDto(SiteConquered outcome)
+    {
+        var site = outcome.Site;
+        if (site == null || site.Coordinates.Count == 0 || outcome.StartYear < 0)
+        {
+            return null;
+        }
+
+        var parentWar = outcome.ParentCollection as War ?? outcome.Battle?.ParentCollection as War;
+        var coord = site.Coordinates[0];
+        return new SiteConquestMapMarkerDto
+        {
+            Id = outcome.Id,
+            SiteId = site.Id,
+            SiteName = site.Name,
+            SiteLink = site.ToLink(true),
+            Link = outcome.ToLink(true),
+            Outcome = outcome.ConquerType.ToString(),
+            Year = outcome.StartYear,
+            AttackerId = outcome.Attacker?.Id,
+            AttackerName = outcome.Attacker?.Name ?? string.Empty,
+            AttackerLink = outcome.Attacker?.ToLink(true),
+            AttackerColor = outcome.Attacker?.MapNation.LineColor.ToRgbaString() ?? "#E53935",
+            DefenderId = outcome.Defender?.Id,
+            DefenderName = outcome.Defender?.Name ?? string.Empty,
+            DefenderLink = outcome.Defender?.ToLink(true),
+            WarId = parentWar?.Id,
+            BattleId = outcome.Battle?.Id,
+            Coordinates = new LocationDto(coord.X, coord.Y)
         };
     }
 
