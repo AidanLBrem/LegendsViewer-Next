@@ -277,6 +277,29 @@ public class Entity : WorldObject, IHasCoordinates
         }
     }
 
+    // A map faction can be an independent non-civilization (e.g. a
+    // necromancer's tower faction). Treat subsidiary site owners as part of
+    // their highest parent faction, even if no entity in the chain is a civ.
+    // This is deliberately distinct from CurrentCiv's civ-only semantics.
+    [JsonIgnore]
+    public Entity MapNation
+    {
+        get
+        {
+            Entity nation = this;
+            HashSet<Entity> visited = [this];
+            while (nation.Parent is Entity parent && visited.Add(parent))
+            {
+                nation = parent;
+                if (nation.IsCiv)
+                {
+                    break;
+                }
+            }
+            return nation;
+        }
+    }
+
     [JsonIgnore]
     public List<EntityPositionAssignment> EntityPositionAssignments { get; set; } = []; // legends_plus.xml
     public List<ListItemDto> EntityPositionAssignmentsList
