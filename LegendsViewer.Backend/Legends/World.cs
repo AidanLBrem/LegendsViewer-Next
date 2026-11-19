@@ -244,70 +244,117 @@ public class World : IDisposable, IWorld
             }
         }
 
+        // Reuse a fixed palette. Global uniqueness is unnecessary: only nations
+        // that control nearby sites need noticeably different map colors.
+        // There is no collision-retry loop and the algorithm is bounded.
         const double goldenAngle = 137.50776405003785;
+        const int cellSize = 32;
         List<Entity> orderedNations = nations.OrderBy(entity => entity.Id).ToList();
-        HashSet<int> usedColors = [];
-        for (int i = 0; i < orderedNations.Count; i++)
+        Dictionary<Entity, HashSet<Entity>> neighbors = orderedNations
+            .ToDictionary(entity => entity, _ => new HashSet<Entity>());
+
+        // Spatially group current and original site owners. Multiple sites owned
+        // by the same nation in a cell do not increase the work required.
+        Dictionary<(int X, int Y), HashSet<Entity>> occupied = [];
+        foreach (Site site in Sites)
         {
-            double hue = (i * goldenAngle) % 360;
-            double saturation = (i / 24) % 3 switch
+            if (site.Coordinates.Count == 0)
             {
-                1 => 0.60,
-                2 => 0.90,
-                _ => 0.78
-            };
-            double value = (i / 72) % 3 switch
-            {
-                1 => 0.78,
-                2 => 0.87,
-                _ => 0.96
-            };
-
-            Color color = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
-
-            // A 7-degree step only reaches 360 candidate hues. If they are all
-            // occupied, an unbounded retry loop will hang world loading forever.
-            // Limit palette retries, then fall back to the full 24-bit RGB space.
-            bool assigned = false;
-            for (int attempt = 0; attempt < 16; attempt++)
-            {
-                if (usedColors.Add(color.ToArgb()))
-                {
-                    assigned = true;
-                    break;
-                }
-
-                hue = (hue + 7) % 360;
-                color = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
+                continue;
             }
 
-            if (!assigned)
+            Location position = site.Coordinates[0];
+            var cell = ((int)Math.Floor(position.X / (double)cellSize),
+                        (int)Math.Floor(position.Y / (double)cellSize));
+            if (!occupied.TryGetValue(cell, out HashSet<Entity>? owners))
             {
-                // Consecutive RGB codes are distinct. At most usedColors.Count
-                // codes can be taken, so one of the next Count + 1 must be free.
-                uint firstCode = unchecked((uint)(i + 1) * 2654435761u) & 0xFFFFFFu;
-                for (int step = 0; step <= usedColors.Count; step++)
+                owners = [];
+                occupied.Add(cell, owners);
+            }
+
+            Entity? currentOwner = site.CurrentOwner;
+            Entity? currentNation = currentOwner?.CurrentCiv ?? currentOwner;
+            if (currentNation != null && neighbors.ContainsKey(currentNation))
+            {
+                owners.Add(currentNation);
+            }
+
+            Entity? originalNation = site.OriginNation;
+            if (originalNation != null && neighbors.ContainsKey(originalNation))
+            {
+                owners.Add(originalNation);
+            }
+        }
+
+        // Adjacent cells count as local neighbors. All loops have fixed bounds;
+        // distant nations are free to reuse identical palette entries.
+        foreach (var (cell, owners) in occupied)
+        {
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dy = -1; dy <= 1; dy++)
                 {
-                    uint code = (firstCode + (uint)step) & 0xFFFFFFu;
-                    Color fallback = Color.FromArgb(176,
-                        (int)((code >> 16) & 0xFF),
-                        (int)((code >> 8) & 0xFF),
-                        (int)(code & 0xFF));
-                    if (usedColors.Add(fallback.ToArgb()))
+                    if (!occupied.TryGetValue((cell.X + dx, cell.Y + dy),
+                        out HashSet<Entity>? otherOwners))
                     {
-                        color = fallback;
-                        assigned = true;
-                        break;
+                        continue;
+                    }
+
+                    foreach (Entity owner in owners)
+                    {
+                        foreach (Entity other in otherOwners)
+                        {
+                            if (owner != other)
+                            {
+                                neighbors[owner].Add(other);
+                                neighbors[other].Add(owner);
+                            }
+                        }
                     }
                 }
             }
+        }
 
-            if (!assigned)
+        const int paletteSize = 24;
+        Color[] palette = Enumerable.Range(0, paletteSize)
+            .Select(i => Color.FromArgb(176, Formatting.HsvToColor(
+                (i * goldenAngle) % 360,
+                i % 2 == 0 ? 0.82 : 0.68,
+                i % 4 < 2 ? 0.97 : 0.76)))
+            .ToArray();
+
+        Dictionary<Entity, Color> assigned = [];
+        foreach (Entity nation in orderedNations
+                     .OrderByDescending(entity => neighbors[entity].Count)
+                     .ThenBy(entity => entity.Id))
+        {
+            List<Color> nearbyColors = neighbors[nation]
+                .Where(assigned.ContainsKey)
+                .Select(entity => assigned[entity])
+                .ToList();
+
+            int preferred = (int)((uint)nation.Id % paletteSize);
+            int bestIndex = preferred;
+            int bestDistance = -1;
+            for (int offset = 0; offset < paletteSize; offset++)
             {
-                throw new InvalidOperationException("Too many distinct political entities to assign unique colors.");
+                int candidateIndex = (preferred + offset) % paletteSize;
+                Color candidate = palette[candidateIndex];
+                int minDistance = nearbyColors.Count == 0 ? int.MaxValue : nearbyColors.Min(color =>
+                    (candidate.R - color.R) * (candidate.R - color.R) +
+                    (candidate.G - color.G) * (candidate.G - color.G) +
+                    (candidate.B - color.B) * (candidate.B - color.B));
+
+                if (minDistance > bestDistance)
+                {
+                    bestDistance = minDistance;
+                    bestIndex = candidateIndex;
+                }
             }
 
-            orderedNations[i].LineColor = color;
+            Color selected = palette[bestIndex];
+            nation.LineColor = selected;
+            assigned.Add(nation, selected);
         }
 
         // Keep the race palette for race-based charts, independently of nation colors.
