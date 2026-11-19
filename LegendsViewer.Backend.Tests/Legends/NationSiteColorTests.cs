@@ -88,4 +88,38 @@ public class NationSiteColorTests
         Assert.AreEqual(4, marker.OriginOwnerId);
         Assert.AreNotEqual(marker.Color, marker.OriginColor);
     }
+    [TestMethod]
+    public void GenerateCivColors_MoreThanSixThousandNations_NeverLoopsAndRemainsUnique()
+    {
+        using World world = new();
+        for (int i = 0; i < 7000; i++)
+        {
+            world.Entities.Add(new Entity([], world)
+            {
+                Id = i + 1,
+                Name = $"Nation {i + 1}",
+                IsCiv = true
+            });
+        }
+
+        typeof(World).GetMethod("GenerateCivColors", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(world, null);
+
+        Assert.AreEqual(world.Entities.Count,
+            world.Entities.Select(entity => entity.LineColor.ToArgb()).Distinct().Count());
+    }
+
+    [TestMethod]
+    public void EntityCurrentCiv_WithCyclicParents_ReturnsWithoutHanging()
+    {
+        using World world = new();
+        var first = new Entity([], world) { Id = 1, Name = "First group" };
+        var second = new Entity([], world) { Id = 2, Name = "Second group" };
+        first.SetParent(second);
+        second.SetParent(first);
+
+        Assert.IsNull(first.CurrentCiv);
+        Assert.IsNull(second.CurrentCiv);
+    }
+
 }
