@@ -34,6 +34,32 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                     :defender-remaining="store.object?.defendersRemainingCount"
                     :site-outcomes="store.object?.siteOutcomes" />
             </v-col>
+            <v-col v-if="store.object?.attackerInitialArmyByRace?.labels?.length"
+                cols="12" xl="4" lg="6" md="12">
+                <v-card :title="'Attacking Army — ' + (store.object?.attackerCount ?? 0).toLocaleString() + ' troops'"
+                    subtitle="Initial attacking force by race, before battle casualties"
+                    height="400" variant="text">
+                    <template #prepend>
+                        <v-icon class="mr-2" icon="mdi-account-group" size="32px" />
+                    </template>
+                    <v-card-text>
+                        <DoughnutChart :chart-data="store.object.attackerInitialArmyByRace" />
+                    </v-card-text>
+                </v-card>
+            </v-col>
+            <v-col v-if="store.object?.defenderInitialArmyByRace?.labels?.length"
+                cols="12" xl="4" lg="6" md="12">
+                <v-card :title="'Defending Army — ' + (store.object?.defenderCount ?? 0).toLocaleString() + ' troops'"
+                    subtitle="Initial defending force by race, before battle casualties"
+                    height="400" variant="text">
+                    <template #prepend>
+                        <v-icon class="mr-2" icon="mdi-account-group" size="32px" />
+                    </template>
+                    <v-card-text>
+                        <DoughnutChart :chart-data="store.object.defenderInitialArmyByRace" />
+                    </v-card-text>
+                </v-card>
+            </v-col>
             <template v-for="(list, i) in lists" :key="i">
                 <v-col v-if="list?.items.length" cols="12" xl="4" lg="6" md="12">
                     <LegendsCardList :list="list" />
