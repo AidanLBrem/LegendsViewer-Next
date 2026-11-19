@@ -144,40 +144,37 @@ public class Battle : EventCollection, IHasComplexSubtype
 
     public List<string> NotableDeathLinks => NotableDeaths.ConvertAll(x => x.ToLink(true, this));
 
-    public ChartDataDto DeathsByRace => BuildDeathsByRaceChart(Deaths);
+    // Keep animated undead separate from the living form of the same race.
+    // The chart totals still reconcile with the reported troop/death totals.
+    public ChartDataDto DeathsByRace => BuildSquadChart(Attackers.Concat(Defenders), squad => squad.Deaths);
 
-    // The pre-casualty army compositions are the already aggregated
-    // combatants: reported squads plus distinct named historical figures.
-    // Their summed counts reconcile with AttackerCount / DefenderCount.
-    public ChartDataDto AttackerInitialArmyByRace => BuildDeathsByRaceChart(Attackers
-        .Where(squad => squad.Numbers > 0)
-        .GroupBy(squad => squad.Race)
-        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Numbers))));
+    public ChartDataDto AttackerInitialArmyByRace =>
+        BuildSquadChart(Attackers, squad => squad.Numbers);
 
-    public ChartDataDto DefenderInitialArmyByRace => BuildDeathsByRaceChart(Defenders
-        .Where(squad => squad.Numbers > 0)
-        .GroupBy(squad => squad.Race)
-        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Numbers))));
+    public ChartDataDto DefenderInitialArmyByRace =>
+        BuildSquadChart(Defenders, squad => squad.Numbers);
 
-    public ChartDataDto AttackerDeathsByRace => BuildDeathsByRaceChart(Attackers
-        .Where(squad => squad.Deaths > 0)
-        .GroupBy(squad => squad.Race)
-        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Deaths))));
+    public ChartDataDto AttackerDeathsByRace =>
+        BuildSquadChart(Attackers, squad => squad.Deaths);
 
-    public ChartDataDto DefenderDeathsByRace => BuildDeathsByRaceChart(Defenders
-        .Where(squad => squad.Deaths > 0)
-        .GroupBy(squad => squad.Race)
-        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Deaths))));
+    public ChartDataDto DefenderDeathsByRace =>
+        BuildSquadChart(Defenders, squad => squad.Deaths);
 
-    private ChartDataDto BuildDeathsByRaceChart(IEnumerable<KeyValuePair<CreatureInfo, int>> deaths)
+    private ChartDataDto BuildSquadChart(IEnumerable<Squad> squads, Func<Squad, int> countSelector)
     {
         ChartDataDto chart = new();
         ChartDatasetDto dataset = new();
-        foreach (var death in deaths.Where(entry => entry.Value > 0).OrderByDescending(entry => entry.Value))
+        foreach (var group in squads
+                     .GroupBy(squad => (squad.Race, squad.Animated))
+                     .Select(group => new { group.Key.Race, group.Key.Animated, Count = group.Sum(countSelector) })
+                     .Where(group => group.Count > 0)
+                     .OrderByDescending(group => group.Count)
+                     .ThenBy(group => group.Race.NamePlural)
+                     .ThenBy(group => group.Animated))
         {
-            chart.Labels.Add(death.Key.NamePlural);
-            dataset.Data.Add(death.Value);
-            if (World != null && World.MainRaces.TryGetValue(death.Key, out var raceColor))
+            chart.Labels.Add(group.Animated ? $"Undead {group.Race.NamePlural}" : group.Race.NamePlural);
+            dataset.Data.Add(group.Count);
+            if (World != null && World.MainRaces.TryGetValue(group.Race, out var raceColor))
             {
                 dataset.BorderColor.Add(raceColor.ToRgbaString());
                 dataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
@@ -244,11 +241,13 @@ public class Battle : EventCollection, IHasComplexSubtype
         : base(properties, world)
     {
         var attackerSquadRaces = new List<CreatureInfo>();
+        var attackerSquadAnimated = new List<bool>();
         var attackerSquadEntityPopulation = new List<int>();
         var attackerSquadNumbers = new List<int>();
         var attackerSquadDeaths = new List<int>();
         var attackerSquadSite = new List<int>();
         var defenderSquadRaces = new List<CreatureInfo>();
+        var defenderSquadAnimated = new List<bool>();
         var defenderSquadEntityPopulation = new List<int>();
         var defenderSquadNumbers = new List<int>();
         var defenderSquadDeaths = new List<int>();
@@ -282,7 +281,10 @@ public class Battle : EventCollection, IHasComplexSubtype
                         NotableDefenders.Add(defendingHf);
                     }
                     break;
-                case "attacking_squad_race": attackerSquadRaces.Add(world.GetCreatureInfo(property.Value)); break;
+                case "attacking_squad_race":
+                    attackerSquadRaces.Add(world.GetCreatureInfo(property.Value));
+                    attackerSquadAnimated.Add(false);
+                    break;
                 case "attacking_squad_entity_pop": attackerSquadEntityPopulation.Add(Convert.ToInt32(property.Value)); break;
                 case "attacking_squad_number":
                     int attackerSquadNumber = Convert.ToInt32(property.Value);
@@ -293,7 +295,10 @@ public class Battle : EventCollection, IHasComplexSubtype
                     attackerSquadDeaths.Add(Math.Max(0, attackerSquadDeath));
                     break;
                 case "attacking_squad_site": attackerSquadSite.Add(Convert.ToInt32(property.Value)); break;
-                case "defending_squad_race": defenderSquadRaces.Add(world.GetCreatureInfo(property.Value)); break;
+                case "defending_squad_race":
+                    defenderSquadRaces.Add(world.GetCreatureInfo(property.Value));
+                    defenderSquadAnimated.Add(false);
+                    break;
                 case "defending_squad_entity_pop": defenderSquadEntityPopulation.Add(Convert.ToInt32(property.Value)); break;
                 case "defending_squad_number":
                     int defenderSquadNumber = Convert.ToInt32(property.Value);
@@ -327,8 +332,24 @@ public class Battle : EventCollection, IHasComplexSubtype
                     //    DefendingMercenaryEntity.Type = EntityType.MercenaryCompany;
                     //}
                     break;
-                case "attacking_squad_animated": property.Known = true; AttackingSquadAnimated = true; break;
-                case "defending_squad_animated": property.Known = true; DefendingSquadAnimated = true; break;
+                case "attacking_squad_animated":
+                    property.Known = true;
+                    // Flags are recorded on individual squads; do not mark every
+                    // squad on the side as undead just because one is animated.
+                    if (attackerSquadAnimated.Count > 0)
+                    {
+                        attackerSquadAnimated[^1] = true;
+                    }
+                    AttackingSquadAnimated = true;
+                    break;
+                case "defending_squad_animated":
+                    property.Known = true;
+                    if (defenderSquadAnimated.Count > 0)
+                    {
+                        defenderSquadAnimated[^1] = true;
+                    }
+                    DefendingSquadAnimated = true;
+                    break;
                 case "a_support_merc_enid":
                     var attackerSupportMercenaryEntity = world.GetEntity(Convert.ToInt32(property.Value));
                     if (attackerSupportMercenaryEntity != null)
@@ -432,7 +453,7 @@ public class Battle : EventCollection, IHasComplexSubtype
             int number = Math.Max(attackerSquadNumbers.ElementAtOrDefault(i), deaths);
             int site = i < attackerSquadSite.Count ? attackerSquadSite[i] : -1;
             int population = i < attackerSquadEntityPopulation.Count ? attackerSquadEntityPopulation[i] : -1;
-            AttackerSquads.Add(new Squad(attackerSquadRaces[i], number, deaths, site, population));
+            AttackerSquads.Add(new Squad(attackerSquadRaces[i], number, deaths, site, population, attackerSquadAnimated[i]));
         }
 
         for (int i = 0; i < defenderSquadRaces.Count; i++)
@@ -441,7 +462,7 @@ public class Battle : EventCollection, IHasComplexSubtype
             int number = Math.Max(defenderSquadNumbers.ElementAtOrDefault(i), deaths);
             int site = i < defenderSquadSite.Count ? defenderSquadSite[i] : -1;
             int population = i < defenderSquadEntityPopulation.Count ? defenderSquadEntityPopulation[i] : -1;
-            DefenderSquads.Add(new Squad(defenderSquadRaces[i], number, deaths, site, population));
+            DefenderSquads.Add(new Squad(defenderSquadRaces[i], number, deaths, site, population, defenderSquadAnimated[i]));
         }
 
         HashSet<HistoricalFigure> deceasedFigures = GetSubEvents().OfType<HfDied>()
@@ -551,18 +572,19 @@ public class Battle : EventCollection, IHasComplexSubtype
             (entity.EqualsOrParentEquals(side) || entity.CurrentCiv == side);
     }
 
-    private static List<Squad> AggregateCombatants(
+    private List<Squad> AggregateCombatants(
         IEnumerable<Squad> squads,
         IEnumerable<HistoricalFigure> notableFigures,
         HashSet<HistoricalFigure> deceasedFigures)
     {
-        Dictionary<CreatureInfo, Squad> grouped = [];
+        Dictionary<(CreatureInfo Race, bool Animated), Squad> grouped = [];
         foreach (Squad squad in squads)
         {
-            if (!grouped.TryGetValue(squad.Race, out Squad? aggregate))
+            var key = (squad.Race, squad.Animated);
+            if (!grouped.TryGetValue(key, out Squad? aggregate))
             {
-                aggregate = new Squad(squad.Race, 0, 0, -1, -1);
-                grouped.Add(squad.Race, aggregate);
+                aggregate = new Squad(squad.Race, 0, 0, -1, -1, squad.Animated);
+                grouped.Add(key, aggregate);
             }
             aggregate.Numbers += squad.Numbers;
             aggregate.Deaths += squad.Deaths;
@@ -570,10 +592,16 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         foreach (HistoricalFigure figure in notableFigures.Distinct())
         {
-            if (!grouped.TryGetValue(figure.Race, out Squad? aggregate))
+            // Prefer the dated undead history. Older exports sometimes only
+            // expose a current undead flag without a dated conversion.
+            bool undead = figure.UndeadTypes.Count > 0
+                ? figure.UndeadTypes.Any(type => type.StartYear <= StartYear)
+                : figure.Skeleton || figure.Zombie || figure.Ghost || figure.Animated;
+            var key = (figure.Race, undead);
+            if (!grouped.TryGetValue(key, out Squad? aggregate))
             {
-                aggregate = new Squad(figure.Race, 0, 0, -1, -1);
-                grouped.Add(figure.Race, aggregate);
+                aggregate = new Squad(figure.Race, 0, 0, -1, -1, undead);
+                grouped.Add(key, aggregate);
             }
             aggregate.Numbers++;
             if (deceasedFigures.Contains(figure))
@@ -600,13 +628,15 @@ public class Battle : EventCollection, IHasComplexSubtype
         public int Deaths { get; set; }
         public int Site { get; set; }
         public int Population { get; set; }
-        public Squad(CreatureInfo race, int numbers, int deaths, int site, int population)
+        public bool Animated { get; set; }
+        public Squad(CreatureInfo race, int numbers, int deaths, int site, int population, bool animated = false)
         {
             Race = race;
             Numbers = numbers;
             Deaths = deaths;
             Site = site;
             Population = population;
+            Animated = animated;
         }
     }
 
