@@ -74,6 +74,8 @@ public class Battle : EventCollection, IHasComplexSubtype
     public int DefenderSitesLostCount => SiteOutcomes.DefenderLost.Count;
     [JsonIgnore]
     public int DefenderSitesPlunderedCount => SiteOutcomes.DefenderPlundered.Count;
+    [JsonIgnore]
+    public int UnattributedSitesCount => SiteOutcomes.Unattributed.Count;
 
     public List<ListItemDto> MiscList
     {
