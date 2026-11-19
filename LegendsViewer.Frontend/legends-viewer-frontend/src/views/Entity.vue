@@ -6,11 +6,22 @@ import LegendsCardList from '../components/LegendsCardList.vue';
 import ExpandableCard from '../components/ExpandableCard.vue';
 import WarfareGraph from '../components/WarfareGraph.vue';
 import MonarchTimeline from '../components/MonarchTimeline.vue';
+import EntityPopulationCard from '../components/EntityPopulationCard.vue';
 import { computed, ComputedRef } from 'vue';
 import { LegendLinkListData } from '../types/legends';
 
 const store = useEntityStore()
 const mapStore = useEntityMapStore()
+
+const showPopulation = computed(() => {
+    const entity = store.object;
+    return Boolean(
+        entity?.isCiv ||
+        entity?.type?.toLowerCase() === 'civilization' ||
+        (entity?.populations?.length ?? 0) > 0 ||
+        (entity?.entityPopulation?.count ?? 0) > 0
+    );
+});
 
 const warsList: ComputedRef<LegendLinkListData> = computed(() => ({
     title: 'Wars', items: store.object?.warList ?? [], icon: "mdi-sword-cross", subtitle: "Wars shaping the realm’s history"
@@ -36,6 +47,11 @@ const afterLists: ComputedRef<LegendLinkListData[]> = computed(() => [
 <template>
     <WorldObjectPage :store="store" :mapStore="mapStore" :object-type="'entity'">
         <template v-slot:type-specific-before-table>
+            <v-col v-if="showPopulation" cols="12" xl="6" lg="6" md="12">
+                <EntityPopulationCard
+                    :populations="store.object?.populations"
+                    :entity-population="store.object?.entityPopulation" />
+            </v-col>
             <v-col v-if="store.object?.warGraphData != null" cols="12" xl="4" lg="6" md="12">
                 <ExpandableCard title="War Graph" subtitle="Scaled representation of faction roles in war"
                     icon="mdi-sword-cross">
