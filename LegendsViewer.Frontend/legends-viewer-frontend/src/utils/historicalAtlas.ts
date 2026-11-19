@@ -100,6 +100,10 @@ export interface TerritoryGrid {
   height: number;
   nation: Int32Array;
   colors: Map<number, string>;
+  // Which geographic land component produced each winner. Checked at exact
+  // world-tile resolution to keep islands separate on downsampled grids.
+  sourceComponents?: Int32Array;
+  landComponents?: Int32Array;
 }
 
 // One bit per world tile, in row-major order. Oceans are transparent in
@@ -113,6 +117,83 @@ export function isOceanTile(
   if (!oceanMask) return false;
   const index = y * worldWidth + x;
   return (oceanMask[index >> 3] & (1 << (index & 7))) !== 0;
+}
+
+// Cardinal land adjacency; diagonally touching shores are not connected.
+// A packed water mask keeps the calculation small even on very large worlds.
+export function buildLandComponents(width: number, height: number, waterMask: Uint8Array): Int32Array {
+  const count = width * height;
+  const components = new Int32Array(count);
+  const queue = new Int32Array(count);
+  let nextId = 0;
+  const enqueue = (tile: number, id: number, tail: number): number => {
+    if (components[tile] || (waterMask[tile >> 3] & (1 << (tile & 7)))) return tail;
+    components[tile] = id;
+    queue[tail] = tile;
+    return tail + 1;
+  };
+
+  for (let start = 0; start < count; start++) {
+    if (components[start] || (waterMask[start >> 3] & (1 << (start & 7)))) continue;
+    const id = ++nextId;
+    let head = 0;
+    let tail = enqueue(start, id, 0);
+    while (head < tail) {
+      const tile = queue[head++];
+      const x = tile % width;
+      if (x > 0) tail = enqueue(tile - 1, id, tail);
+      if (x + 1 < width) tail = enqueue(tile + 1, id, tail);
+      if (tile >= width) tail = enqueue(tile - width, id, tail);
+      if (tile + width < count) tail = enqueue(tile + width, id, tail);
+    }
+  }
+  return components;
+}
+
+// A claimed region must have a continuous path through its own territory
+// to an actual site on the same land component. This removes unattached
+// political islands caused by competing overlapping influence fields.
+export function pruneUnanchoredClaims(grid: TerritoryGrid, siteAnchors: Uint8Array): void {
+  const { width, height, nation, sourceComponents } = grid;
+  const visited = new Uint8Array(nation.length);
+  const queue = new Int32Array(nation.length);
+
+  for (let start = 0; start < nation.length; start++) {
+    if (visited[start] || nation[start] < 0) continue;
+    const owner = nation[start];
+    const component = sourceComponents?.[start] ?? 1;
+    let head = 0;
+    let tail = 1;
+    let anchored = false;
+    queue[0] = start;
+    visited[start] = 1;
+
+    while (head < tail) {
+      const cell = queue[head++];
+      if (siteAnchors[cell]) anchored = true;
+      const x = cell % width;
+      const neighbors = [
+        x > 0 ? cell - 1 : -1,
+        x + 1 < width ? cell + 1 : -1,
+        cell >= width ? cell - width : -1,
+        cell + width < width * height ? cell + width : -1,
+      ];
+      for (const next of neighbors) {
+        if (next < 0 || visited[next] || nation[next] !== owner ||
+            (sourceComponents && sourceComponents[next] !== component)) continue;
+        visited[next] = 1;
+        queue[tail++] = next;
+      }
+    }
+
+    if (!anchored) {
+      for (let i = 0; i < tail; i++) {
+        const cell = queue[i];
+        nation[cell] = -1;
+        if (sourceComponents) sourceComponents[cell] = 0;
+      }
+    }
+  }
 }
 
 // Resolve a click to the same bounded-resolution political estimate used by
@@ -132,8 +213,15 @@ export function getTerritoryNationAtTile(
   }
   const cellX = Math.min(grid.width - 1, Math.floor(x * grid.width / worldWidth));
   const cellY = Math.min(grid.height - 1, Math.floor(y * grid.height / worldHeight));
-  const nationId = grid.nation[cellY * grid.width + cellX];
-  return nationId >= 0 ? nationId : null;
+  const cell = cellY * grid.width + cellX;
+  const nationId = grid.nation[cell];
+  if (nationId < 0) return null;
+  // Tile-level check matters when multiple islands occupy a coarse cell.
+  if (grid.landComponents && grid.sourceComponents &&
+      grid.landComponents[y * worldWidth + x] !== grid.sourceComponents[cell]) {
+    return null;
+  }
+  return nationId;
 }
 
 export type YieldToBrowser = () => Promise<void>;
@@ -150,7 +238,8 @@ export async function createTerritoryGrid(
   seeds: readonly TerritorySeed[],
   yieldToBrowser: YieldToBrowser = async () => {},
   cancelled: () => boolean = () => false,
-  oceanMask?: Uint8Array
+  oceanMask?: Uint8Array,
+  cachedLandComponents?: Int32Array
 ): Promise<TerritoryGrid | null> {
   const rasterWidth = Math.max(1, Math.min(320, Math.ceil(width)));
   const rasterHeight = Math.max(1, Math.min(320, Math.ceil(height)));
@@ -160,17 +249,42 @@ export async function createTerritoryGrid(
   if (width <= 0 || height <= 0) return { width: rasterWidth, height: rasterHeight, nation, colors };
 
   const baseRadius = Math.max(7, Math.min(140, Math.hypot(width, height) * 0.045));
-  const groups = new Map<number, TerritorySeed[]>();
+  const landComponents = oceanMask
+    ? (cachedLandComponents?.length === width * height
+        ? cachedLandComponents : buildLandComponents(width, height, oceanMask))
+    : undefined;
+  const sourceComponents = landComponents ? new Int32Array(nation.length) : undefined;
+  const rasterLandComponents = landComponents ? new Int32Array(nation.length) : undefined;
+  if (landComponents && rasterLandComponents) {
+    for (let py = 0; py < rasterHeight; py++) {
+      const worldY = Math.min(height - 1, Math.floor((py + 0.5) * height / rasterHeight));
+      for (let px = 0; px < rasterWidth; px++) {
+        const worldX = Math.min(width - 1, Math.floor((px + 0.5) * width / rasterWidth));
+        rasterLandComponents[py * rasterWidth + px] = landComponents[worldY * width + worldX];
+      }
+    }
+  }
+  const result = (): TerritoryGrid => ({
+    width: rasterWidth, height: rasterHeight, nation, colors,
+    ...(landComponents ? { landComponents, sourceComponents } : {}),
+  });
+  // Separate factions by land component so no field jumps the sea.
+  const groups = new Map<string, {
+    nationId: number; componentId: number; sites: TerritorySeed[];
+  }>();
   for (const seed of seeds) {
     if (!Number.isFinite(seed.x) || !Number.isFinite(seed.y) ||
         seed.x < 0 || seed.x >= width || seed.y < 0 || seed.y >= height) continue;
     if (isOceanTile(oceanMask, width, Math.floor(seed.x), Math.floor(seed.y))) continue;
-    const group = groups.get(seed.nationId);
-    if (group) group.push(seed);
-    else groups.set(seed.nationId, [seed]);
+    const componentId = landComponents?.[Math.floor(seed.y) * width + Math.floor(seed.x)] ?? 1;
+    if (!componentId) continue;
+    const key = `${seed.nationId}:${componentId}`;
+    const group = groups.get(key);
+    if (group) group.sites.push(seed);
+    else groups.set(key, { nationId: seed.nationId, componentId, sites: [seed] });
     colors.set(seed.nationId, seed.color);
   }
-  if (groups.size === 0) return { width: rasterWidth, height: rasterHeight, nation, colors };
+  if (groups.size === 0) return result();
 
   // Reuse a single accumulator for every nation. A generation-stamp array
   // and list of touched cells avoids both a map per pixel and a full-grid
@@ -184,7 +298,7 @@ export async function createTerritoryGrid(
   const pixelWidth = width / rasterWidth;
   const pixelHeight = height / rasterHeight;
 
-  for (const [nationId, nationSeeds] of groups) {
+  for (const { nationId, componentId, sites: nationSeeds } of groups.values()) {
     if (cancelled()) return null;
     stamp++;
     touched.length = 0;
@@ -214,9 +328,10 @@ export async function createTerritoryGrid(
           const dx = (px + 0.5) * pixelWidth - seed.x;
           const distanceSquared = dx * dx + dySquared;
           if (distanceSquared >= radiusSquared) continue;
+          const cell = py * rasterWidth + px;
+          if (rasterLandComponents && rasterLandComponents[cell] !== componentId) continue;
           const falloff = 1 - distanceSquared / radiusSquared;
           const contribution = weight * falloff * falloff;
-          const cell = py * rasterWidth + px;
           if (stamps[cell] !== stamp) {
             stamps[cell] = stamp;
             accumulated[cell] = contribution;
@@ -236,6 +351,7 @@ export async function createTerritoryGrid(
            (nation[cell] < 0 || nationId < nation[cell]))) {
         bestStrength[cell] = strength;
         nation[cell] = nationId;
+        if (sourceComponents) sourceComponents[cell] = componentId;
       }
     }
     groupsProcessed++;
@@ -248,14 +364,20 @@ export async function createTerritoryGrid(
   // When rival fields overlap a settlement's exact world tile, preserve
   // recorded ownership at that location instead of obscuring the site
   // beneath a stronger neighbor's estimated surrounding territory.
-  for (const [nationId, nationSeeds] of groups) {
+  const siteAnchors = new Uint8Array(nation.length);
+  for (const { nationId, componentId, sites: nationSeeds } of groups.values()) {
     for (const seed of nationSeeds) {
       const px = Math.min(rasterWidth - 1, Math.floor(seed.x / pixelWidth));
       const py = Math.min(rasterHeight - 1, Math.floor(seed.y / pixelHeight));
-      nation[py * rasterWidth + px] = nationId;
+      const cell = py * rasterWidth + px;
+      nation[cell] = nationId;
+      if (sourceComponents) sourceComponents[cell] = componentId;
+      siteAnchors[cell] = 1;
     }
   }
-  return { width: rasterWidth, height: rasterHeight, nation, colors };
+  const grid = result();
+  pruneUnanchoredClaims(grid, siteAnchors);
+  return grid;
 }
 
 function rgb(color: string): [number, number, number] {
@@ -294,7 +416,7 @@ export function territoryGridToDataUrl(
     for (let x = 0; x < canvas.width; x++) {
       const sourceX = Math.min(grid.width - 1, Math.floor(x * grid.width / canvas.width));
       const offset = sourceY * grid.width + sourceX;
-      const id = isOceanTile(oceanMask, canvas.width, x, y) ? -1 : grid.nation[offset];
+      const id = getTerritoryNationAtTile(grid, canvas.width, canvas.height, x, y, oceanMask) ?? -1;
       if (id >= 0) {
         if (!cache.has(id)) cache.set(id, rgb(grid.colors.get(id) ?? '#777777'));
         const [r, g, b] = cache.get(id)!;
@@ -304,7 +426,7 @@ export function territoryGridToDataUrl(
         pixels.data[pos] = border ? 22 : r;
         pixels.data[pos + 1] = border ? 26 : g;
         pixels.data[pos + 2] = border ? 28 : b;
-        pixels.data[pos + 3] = border ? 190 : 142;
+        pixels.data[pos + 3] = border ? 224 : 195;
       }
       previousRow[x] = id;
       leftId = id;
