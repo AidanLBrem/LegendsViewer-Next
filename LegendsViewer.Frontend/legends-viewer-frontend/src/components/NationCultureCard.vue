@@ -102,7 +102,7 @@ const formatRate = (number: number) => number.toLocaleString(undefined, { maximu
                 <v-alert v-else-if="error" type="warning" variant="tonal" :text="error" />
                 <template v-else-if="profile && period">
                     <div class="d-flex align-center flex-wrap ga-3 mb-3">
-                        <v-chip color="primary" variant="tonal" prepend-icon="mdi-history">{{ profile.character }}</v-chip>
+                        <v-chip color="primary" variant="tonal" prepend-icon="mdi-history">{{ period.character }}</v-chip>
                         <v-select v-model="windowYears" :items="cultureWindows" label="Historical period"
                             variant="outlined" density="compact" hide-details style="max-width: 260px;" />
                         <span class="text-caption text-medium-emphasis">
