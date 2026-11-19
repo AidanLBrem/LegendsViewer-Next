@@ -165,11 +165,11 @@ public class War : EventCollection, IHasComplexSubtype
         ChartDatasetDto dataset = new();
 
         foreach (var group in squads.Where(s => s.Numbers > 0)
-                     .GroupBy(s => s.Race)
-                     .Select(group => new { Race = group.Key, Count = group.Sum(s => s.Numbers) })
+                     .GroupBy(s => (s.Race, s.Animated))
+                     .Select(group => new { group.Key.Race, group.Key.Animated, Count = group.Sum(s => s.Numbers) })
                      .OrderByDescending(x => x.Count))
         {
-            chart.Labels.Add(group.Race.NamePlural);
+            chart.Labels.Add(group.Animated ? $"Undead {group.Race.NamePlural}" : group.Race.NamePlural);
             dataset.Data.Add(group.Count);
             Color color = World != null && World.MainRaces.TryGetValue(group.Race, out var raceColor)
                 ? raceColor : Color.SlateGray;
@@ -293,23 +293,21 @@ public class War : EventCollection, IHasComplexSubtype
         {
             // War totals include battle casualties, so build the race breakdown
             // from those same battle totals rather than counting unrelated events.
-            Dictionary<CreatureInfo, int> deaths = [];
-            foreach (var battle in Battles)
+            Dictionary<(CreatureInfo Race, bool Animated), int> deaths = [];
+            foreach (var squad in Battles.SelectMany(battle => battle.Attackers.Concat(battle.Defenders)))
             {
-                foreach (var casualty in battle.Deaths)
-                {
-                    deaths.TryGetValue(casualty.Key, out int previous);
-                    deaths[casualty.Key] = previous + casualty.Value;
-                }
+                var key = (squad.Race, squad.Animated);
+                deaths.TryGetValue(key, out int previous);
+                deaths[key] = previous + squad.Deaths;
             }
 
             ChartDataDto chart = new();
             ChartDatasetDto dataset = new();
             foreach (var death in deaths.Where(entry => entry.Value > 0).OrderByDescending(entry => entry.Value))
             {
-                chart.Labels.Add(death.Key.NamePlural);
+                chart.Labels.Add(death.Key.Animated ? $"Undead {death.Key.Race.NamePlural}" : death.Key.Race.NamePlural);
                 dataset.Data.Add(death.Value);
-                if (World != null && World.MainRaces.TryGetValue(death.Key, out var raceColor))
+                if (World != null && World.MainRaces.TryGetValue(death.Key.Race, out var raceColor))
                 {
                     dataset.BorderColor.Add(raceColor.ToRgbaString());
                     dataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
