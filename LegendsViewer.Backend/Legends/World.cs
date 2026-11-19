@@ -225,60 +225,68 @@ public class World : IDisposable, IWorld
 
     private void GenerateCivColors()
     {
-        List<Entity> civs = Entities.Where(entity => entity.IsCiv).ToList();
-        List<CreatureInfo> races = civs.GroupBy(entity => entity.Race).Select(entity => entity.Key).OrderBy(creatureInfo => creatureInfo.NamePlural).ToList();
-
-        //Calculates color
-        //Creates a variety of colors
-        //Races 1 to 6 get a medium color
-        //Races 7 to 12 get a light color
-        //Races 13 to 18 get a dark color
-        //19+ reduced color variance
-        const int maxHue = 300;
-        int colorVariance;
-        if (races.Count <= 1)
+        // Civilizations are separate political entities, even when they share a race.
+        // Also include independent site owners (such as necromancer factions) which
+        // have no parent civilization.
+        HashSet<Entity> nations = new(Entities.Where(entity => entity.IsCiv));
+        foreach (Site site in Sites)
         {
-            colorVariance = 0;
-        }
-        else if (races.Count <= 6)
-        {
-            colorVariance = Convert.ToInt32(Math.Floor(maxHue / Convert.ToDouble(races.Count - 1)));
-        }
-        else
-        {
-            colorVariance = races.Count > 18 ? Convert.ToInt32(Math.Floor(maxHue / (Math.Ceiling(races.Count / 3.0) - 1))) : 60;
-        }
-
-        foreach (Entity civ in civs)
-        {
-            int colorIndex = races.IndexOf(civ.Race);
-            Color raceColor;
-            if (colorIndex * colorVariance < 360)
+            Entity? owner = site.CurrentOwner;
+            if (owner != null && owner.CurrentCiv == null)
             {
-                raceColor = Formatting.HsvToColor(colorIndex * colorVariance, 1, 1.0);
-            }
-            else if (colorIndex * colorVariance < 720)
-            {
-                raceColor = Formatting.HsvToColor(colorIndex * colorVariance - 360, 0.4, 1);
-            }
-            else
-            {
-                raceColor = colorIndex * colorVariance < 1080 ? Formatting.HsvToColor(colorIndex * colorVariance - 720, 1, 0.4) : Color.DarkSeaGreen;
+                nations.Add(owner);
             }
 
-            const int alpha = 176;
-
-            MainRaces.TryAdd(civ.Race, raceColor);
-
-            civ.LineColor = Color.FromArgb(alpha, raceColor);
-
-            foreach (var childGroup in civ.Groups)
+            Entity? origin = site.OriginNation;
+            if (origin != null && origin.CurrentCiv == null)
             {
-                childGroup.LineColor = civ.LineColor;
+                nations.Add(origin);
             }
         }
 
-        // generate Subtypes that need color infos
+        const double goldenAngle = 137.50776405003785;
+        List<Entity> orderedNations = nations.OrderBy(entity => entity.Id).ToList();
+        for (int i = 0; i < orderedNations.Count; i++)
+        {
+            double hue = (i * goldenAngle) % 360;
+            double saturation = (i / 24) % 3 switch
+            {
+                1 => 0.60,
+                2 => 0.90,
+                _ => 0.78
+            };
+            double value = (i / 72) % 3 switch
+            {
+                1 => 0.78,
+                2 => 0.87,
+                _ => 0.96
+            };
+
+            orderedNations[i].LineColor = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
+        }
+
+        // Keep the race palette for race-based charts, independently of nation colors.
+        List<CreatureInfo> races = Entities.Where(entity => entity.IsCiv)
+            .Select(entity => entity.Race).Distinct()
+            .OrderBy(race => race.NamePlural).ToList();
+        for (int i = 0; i < races.Count; i++)
+        {
+            MainRaces.TryAdd(races[i], Formatting.HsvToColor((i * goldenAngle) % 360, 0.65, 0.95));
+        }
+
+        // Subsidiary groups inherit their nation's color unless they are themselves
+        // independent site-owning factions with an assigned color.
+        foreach (Entity civ in Entities.Where(entity => entity.IsCiv))
+        {
+            foreach (Entity childGroup in civ.Groups)
+            {
+                if (!nations.Contains(childGroup))
+                {
+                    childGroup.LineColor = civ.LineColor;
+                }
+            }
+        }
+
         foreach (var collection in EventCollections.OfType<IHasComplexSubtype>())
         {
             collection.GenerateComplexSubType();
