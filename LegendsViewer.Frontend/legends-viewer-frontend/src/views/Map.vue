@@ -1068,6 +1068,8 @@ export default defineComponent({
         mapProgress.value = 'Loading world data...';
         await worldStore.loadWorld();
         if (disposed) return;
+        historyMaxYear.value = Math.max(0, Math.floor(worldStore.world?.currentYear ?? 0));
+        selectedYear.value = historyMaxYear.value;
 
         const width = worldStore.world?.width ?? 0;
         const height = worldStore.world?.height ?? 0;
@@ -1500,7 +1502,8 @@ export default defineComponent({
 
         // Skip Vue's deep proxies while iterating over potentially tens of
         // thousands of exported sites and polygon coordinates.
-        const markers = toRaw(worldStore.world.siteMarkers ?? []);
+        const markers = toRaw(worldStore.world.siteMarkers ?? []) as SiteMarker[];
+        ownershipChangeYears = getOwnershipChangeYears(markers, historyMaxYear.value);
         let created = 0;
         for (const siteMarker of markers) {
           if (disposed || generation !== renderGeneration || !leafletMap.value) return;
@@ -1512,6 +1515,17 @@ export default defineComponent({
             ownerLayers[ownerText].addTo(leafletMap.value);
           }
 
+          // These owner groups are also available when the selected year is
+          // before their last known holding. The control never loses factions
+          // simply because they have no sites in the current snapshot.
+          for (const period of siteMarker.ownerHistory ?? []) {
+            const historicName = period.ownerText ?? 'Unclaimed';
+            if (!ownerLayers[historicName]) {
+              ownerLayers[historicName] = new L.LayerGroup();
+              ownerLayers[historicName].addTo(leafletMap.value);
+            }
+          }
+
           for (const coordinate of siteMarker.coordinates) {
             if (coordinate.x == null || coordinate.y == null) continue;
             const marker = createMarker(
@@ -1520,16 +1534,16 @@ export default defineComponent({
               toLatLng(coordinate.x, coordinate.y),
               siteRenderer
             );
-            siteLayers.push({ marker, site: siteMarker });
-
-            registerTileItem({
+            const item: MapTileItem = {
               type: 'site',
               x: coordinate.x,
               y: coordinate.y,
               layerGroup: ownerLayers[ownerText],
               marker,
               data: { marker: siteMarker, x: coordinate.x, y: coordinate.y },
-            });
+            };
+            siteLayers.push({ marker, site: siteMarker, item });
+            registerTileItem(item);
             ownerLayers[ownerText].addLayer(marker);
 
             if (siteMarker.id != null) {
@@ -1551,6 +1565,8 @@ export default defineComponent({
           syncTileBadges,
           () => { void loadWarfareOverlay(); }
         );
+
+        historyReady.value = true;
 
         // The warfare layer starts unchecked. Load its data only when a user
         // enables it rather than making a potentially huge request on every map open.
