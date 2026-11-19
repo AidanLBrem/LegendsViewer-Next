@@ -107,7 +107,7 @@ public class Site : WorldObject, IHasCoordinates
             Entity? origin = foundingOwner ?? xmlCivilization ?? earliestOwner ??
                 OwnerHistory.FirstOrDefault(period => period.Owner != null)?.Owner;
 
-            return origin?.CurrentCiv ?? origin;
+            return origin?.MapNation;
         }
     }
 
