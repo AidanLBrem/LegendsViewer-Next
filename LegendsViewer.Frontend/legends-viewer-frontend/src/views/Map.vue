@@ -687,7 +687,7 @@ function createOwnerLayerControl(
       let scheduled = false;
       let frameId = 0;
       const render = () => {
-        if (!viewport.isConnected) return;
+
         count.textContent = `Showing ${filtered.length.toLocaleString()} of ${owners.length.toLocaleString()}`;
         contents.style.height = `${filtered.length * rowHeight}px`;
         const first = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
