@@ -15,11 +15,38 @@ export interface TerritorySeed {
   color: string;
 }
 
+export interface TerritorySeedOptions {
+  filterMinorPowers?: boolean;
+  excludedNationIds?: ReadonlySet<number>;
+}
+
+// Necromancer factions are identified by their association with a tower,
+// rather than by their name. Do not classify civilizations that later
+// captured a tower as necromancers.
+export function getNecromancerNationIds(sites: readonly AtlasSite[]): Set<number> {
+  const necromancers = new Set<number>();
+  const include = (id: number | null | undefined, type: string | null | undefined) => {
+    if (id != null && type != null && type !== 'Civilization') {
+      necromancers.add(id);
+    }
+  };
+
+  for (const site of sites) {
+    if (site.type !== 'Tower') continue;
+    include(site.ownerId, site.ownerEntityType);
+    for (const period of site.ownerHistory ?? []) {
+      include(period.ownerId, period.ownerEntityType);
+    }
+  }
+  return necromancers;
+}
+
 export function getTerritorySeeds(
   sites: readonly AtlasSite[],
   year: number,
   presentYear: number,
-  includeSite: (site: AtlasSite) => boolean = () => true
+  includeSite: (site: AtlasSite) => boolean = () => true,
+  options: TerritorySeedOptions = {}
 ): TerritorySeed[] {
   const seeds: TerritorySeed[] = [];
   const ownedSites: Array<{
@@ -44,6 +71,8 @@ export function getTerritorySeeds(
     // A lone nomadic camp is still a selectable, owned site; it just
     // cannot project a political border onto neighboring map tiles.
     if (owner.ownerEntityType === 'NomadicGroup' && siteCounts.get(owner.ownerId!) === 1) continue;
+    if (options.filterMinorPowers && (siteCounts.get(owner.ownerId!) ?? 0) <= 1) continue;
+    if (options.excludedNationIds?.has(owner.ownerId!)) continue;
     if (!includeSite(site)) continue;
     for (const location of site.coordinates ?? []) {
       if (location.x == null || location.y == null ||
@@ -72,6 +101,27 @@ export function isOceanTile(
   if (!oceanMask) return false;
   const index = y * worldWidth + x;
   return (oceanMask[index >> 3] & (1 << (index & 7))) !== 0;
+}
+
+// Resolve a click to the same bounded-resolution political estimate used by
+// the rendered overlay, with ocean tiles explicitly unclaimed.
+export function getTerritoryNationAtTile(
+  grid: TerritoryGrid,
+  worldWidth: number,
+  worldHeight: number,
+  x: number,
+  y: number,
+  oceanMask?: Uint8Array | null
+): number | null {
+  if (!Number.isInteger(x) || !Number.isInteger(y) ||
+      x < 0 || y < 0 || x >= worldWidth || y >= worldHeight ||
+      isOceanTile(oceanMask, worldWidth, x, y)) {
+    return null;
+  }
+  const cellX = Math.min(grid.width - 1, Math.floor(x * grid.width / worldWidth));
+  const cellY = Math.min(grid.height - 1, Math.floor(y * grid.height / worldHeight));
+  const nationId = grid.nation[cellY * grid.width + cellX];
+  return nationId >= 0 ? nationId : null;
 }
 
 export type YieldToBrowser = () => Promise<void>;
