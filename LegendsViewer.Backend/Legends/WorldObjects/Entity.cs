@@ -264,7 +264,8 @@ public class Entity : WorldObject, IHasCoordinates
                 return this;
             }
             Entity? parent = Parent;
-            while (parent != null)
+            HashSet<Entity> visited = [];
+            while (parent != null && visited.Add(parent))
             {
                 if (parent.IsCiv)
                 {
