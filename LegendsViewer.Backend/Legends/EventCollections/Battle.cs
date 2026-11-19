@@ -41,6 +41,10 @@ public class Battle : EventCollection, IHasComplexSubtype
     public List<Squad> AttackerSquads { get; set; } = [];
     [JsonIgnore]
     public List<Squad> DefenderSquads { get; set; } = [];
+    [JsonIgnore]
+    public int AttackerTroopCount => AttackerCount;
+    [JsonIgnore]
+    public int DefenderTroopCount => DefenderCount;
     public int AttackerCount => NotableAttackers.Distinct().Count() + AttackerSquads.Sum(squad => squad.Numbers);
     public int DefenderCount => NotableDefenders.Distinct().Count() + DefenderSquads.Sum(squad => squad.Numbers);
     public int AttackersRemainingCount => Attackers.Sum(squad => Math.Max(0, squad.Numbers - squad.Deaths));
