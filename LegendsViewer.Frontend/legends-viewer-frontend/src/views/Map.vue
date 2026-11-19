@@ -1415,16 +1415,24 @@ export default defineComponent({
         // The terrain mask comes from the actual overworld region data,
         // not from colors in the exported map image.
         oceanMask = null;
-        const maskResponse = await fetch('http://localhost:15421/api/WorldMap/ocean-mask');
-        if (!maskResponse.ok) {
-          throw new Error('Unable to load the ocean terrain mask.');
+        try {
+          const maskResponse = await fetch('http://localhost:15421/api/WorldMap/ocean-mask');
+          if (!maskResponse.ok) {
+            throw new Error('Unable to load the ocean terrain mask.');
+          }
+          const mask = new Uint8Array(await maskResponse.arrayBuffer());
+          if (mask.length !== Math.ceil(width * height / 8)) {
+            throw new Error('The ocean terrain mask does not match the loaded world.');
+          }
+          if (disposed) return;
+          oceanMask = mask;
+        } catch (error) {
+          // Keep the rest of the map usable without showing misleading
+          // territory over oceans when the terrain service is unavailable.
+          console.error('Unable to load ocean terrain:', error);
+          showEstimatedTerritories.value = false;
+          mapError.value = 'Estimated territories are disabled because ocean terrain data is unavailable.';
         }
-        const mask = new Uint8Array(await maskResponse.arrayBuffer());
-        if (mask.length !== Math.ceil(width * height / 8)) {
-          throw new Error('The ocean terrain mask does not match the loaded world.');
-        }
-        if (disposed) return;
-        oceanMask = mask;
 
         // The large map uses 10 px per world tile. Limit image dimensions
         // to avoid allocating hundreds of megabytes for large DF worlds.
