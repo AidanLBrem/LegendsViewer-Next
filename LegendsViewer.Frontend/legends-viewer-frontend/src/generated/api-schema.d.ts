@@ -15638,7 +15638,13 @@ export interface components {
             name?: string | null;
             owner?: string | null;
             ownerText?: string | null;
+            ownerId?: number | null;
+            currentOwnerId?: number | null;
             color?: string | null;
+            originOwner?: string | null;
+            originOwnerText?: string | null;
+            originOwnerId?: number | null;
+            originColor?: string | null;
             typeAsString?: string | null;
             type?: components["schemas"]["SiteType"];
             coordinates?: components["schemas"]["Location"][] | null;
