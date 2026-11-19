@@ -41,7 +41,12 @@
       <div class="history-stepper__limits">
         <span>0</span><span>{{ historyMaxYear.toLocaleString() }}</span>
       </div>
-      <small>Recorded site ownership only. Sites without history retain their current display; terrain and warfare overlays remain present-day.</small>
+      <small v-if="historyMaxYear === 0">
+        No dated site ownership records are available for this world.
+      </small>
+      <small v-else>
+        Recorded site ownership only. Sites without history retain their current display; terrain and warfare overlays remain present-day.
+      </small>
     </section>
   </div>
 </template>
@@ -59,6 +64,7 @@ import type { WarfareMapDto, WarMapOverlayDto, BattleMapMarkerDto } from '../typ
 import {
   getSiteOwnerAtYear,
   getOwnershipChangeYears,
+  getTimelineMaxYear,
   stepOwnershipChange,
   type SiteWithOwnershipHistory,
 } from '../utils/siteHistory';
@@ -1083,7 +1089,10 @@ export default defineComponent({
         mapProgress.value = 'Loading world data...';
         await worldStore.loadWorld();
         if (disposed) return;
-        historyMaxYear.value = Math.max(0, Math.floor(worldStore.world?.currentYear ?? 0));
+        // Older imports returned currentYear=0 even for ancient worlds.
+        // Use all recorded site ownership dates as a fallback.
+        const historySites = toRaw(worldStore.world?.siteMarkers ?? []) as SiteMarker[];
+        historyMaxYear.value = getTimelineMaxYear(worldStore.world?.currentYear, historySites);
         selectedYear.value = historyMaxYear.value;
 
         const width = worldStore.world?.width ?? 0;
