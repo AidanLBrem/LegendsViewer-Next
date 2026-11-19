@@ -85,6 +85,7 @@ export interface BattleMapMarkerDto {
     endYear?: number;
     isActive: boolean;
     deathCount?: number;
+    isSiege?: boolean;
     attackerDeathCount?: number;
     defenderDeathCount?: number;
     coordinates?: LocationDto;
