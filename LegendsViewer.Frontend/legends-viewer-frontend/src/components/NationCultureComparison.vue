@@ -5,7 +5,7 @@ import {
     type NationCulturePeriod, type NationCultureSummary
 } from '../types/nationCulture';
 
-type RateKey = 'settlementExpansionPerCentury' | 'conquestPerCentury' | 'offensiveOperationsPerCentury' |
+type RateKey = 'settlementExpansionPerCentury' | 'conquestPerCentury' | 'sitesLostInWarPerCentury' | 'offensiveOperationsPerCentury' |
     'plundersPerCentury' | 'diplomacyPerCentury' | 'upheavalsPerCentury';
 type SortKey = RateKey | 'name' | 'currentSites';
 type CultureRow = NationCultureSummary & { period: NationCulturePeriod };
@@ -21,6 +21,7 @@ const descending = ref(true);
 const rateColumns: { key: RateKey; title: string }[] = [
     { key: 'settlementExpansionPerCentury', title: 'Expansion' },
     { key: 'conquestPerCentury', title: 'Conquest' },
+    { key: 'sitesLostInWarPerCentury', title: 'Settlements Lost in War' },
     { key: 'offensiveOperationsPerCentury', title: 'Offense' },
     { key: 'plundersPerCentury', title: 'Plunder' },
     { key: 'diplomacyPerCentury', title: 'Diplomacy' },
@@ -81,7 +82,7 @@ onMounted(async () => {
                 </v-row>
                 <div class="text-caption text-medium-emphasis mb-3">
                     Rates are recorded actions per 100 observed years, not official cultural values.
-                    Click a header to sort all civilizations. Expansion = founded settlements; Conquest = captured sites. Reclamations are excluded from both.
+                    Click a header to sort all civilizations. Expansion = founded settlements; Conquest = captured sites; Settlements Lost in War = confirmed wartime captures, surrenders or destruction. Reclamations and ordinary abandonment are excluded.
                 </div>
                 <v-progress-linear v-if="loading" color="primary" indeterminate />
                 <v-alert v-else-if="error" type="warning" variant="tonal" :text="error" />
@@ -118,11 +119,17 @@ onMounted(async () => {
                                 <td>{{ nation.period.character }}</td>
                                 <td class="text-end">{{ nation.currentSites.toLocaleString() }}</td>
                                 <td v-for="column in rateColumns" :key="column.key" class="text-end culture-number">
-                                    {{ formatRate(nation.period[column.key]) }}
+                                    <v-tooltip v-if="column.key === 'sitesLostInWarPerCentury'"
+                                        :text="nation.period.sitesLostInWar.toLocaleString() + ' recorded wartime settlement losses in this period'">
+                                        <template #activator="{ props: tooltipProps }">
+                                            <span v-bind="tooltipProps">{{ formatRate(nation.period[column.key]) }}</span>
+                                        </template>
+                                    </v-tooltip>
+                                    <span v-else>{{ formatRate(nation.period[column.key]) }}</span>
                                 </td>
                             </tr>
                             <tr v-if="sortedNations.length === 0">
-                                <td colspan="9" class="text-medium-emphasis">No matching civilizations.</td>
+                                <td colspan="10" class="text-medium-emphasis">No matching civilizations.</td>
                             </tr>
                         </tbody>
                     </v-table>
@@ -138,7 +145,7 @@ onMounted(async () => {
 
 <style scoped>
 .culture-table-scroll { overflow-x: auto; }
-.culture-table-scroll :deep(table) { min-width: 1050px; }
+.culture-table-scroll :deep(table) { min-width: 1250px; }
 .sortable-header { cursor: pointer; white-space: nowrap; user-select: none; }
 .sortable-header:hover { text-decoration: underline; }
 .culture-number { font-variant-numeric: tabular-nums; }
