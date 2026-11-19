@@ -242,6 +242,14 @@ public class World : IDisposable, IWorld
             {
                 nations.Add(origin);
             }
+
+            foreach (OwnerPeriod period in site.OwnerHistory)
+            {
+                if (period.Owner?.MapNation is Entity historicalNation)
+                {
+                    nations.Add(historicalNation);
+                }
+            }
         }
 
         // Reuse a fixed palette. Global uniqueness is unnecessary: only nations
@@ -282,6 +290,15 @@ public class World : IDisposable, IWorld
             if (originalNation != null && neighbors.ContainsKey(originalNation))
             {
                 owners.Add(originalNation);
+            }
+
+            foreach (OwnerPeriod period in site.OwnerHistory)
+            {
+                Entity? historicalNation = period.Owner?.MapNation;
+                if (historicalNation != null && neighbors.ContainsKey(historicalNation))
+                {
+                    owners.Add(historicalNation);
+                }
             }
         }
 
