@@ -49,6 +49,26 @@ public class Battle : EventCollection, IHasComplexSubtype
     [JsonIgnore]
     public Dictionary<CreatureInfo, int> Deaths { get; set; } = [];
 
+    // Link conquests through either the battle or its parent war. In exported
+    // legends data these references can be attached from either direction.
+    public WarfareSiteOutcomesDto SiteOutcomes
+    {
+        get
+        {
+            IEnumerable<SiteConquered> conquests = EventCollections.OfType<SiteConquered>();
+            if (Conquering != null)
+            {
+                conquests = conquests.Append(Conquering);
+            }
+            if (ParentCollection is War war)
+            {
+                conquests = conquests.Concat(war.Conquerings.Where(c => c.Battle == this));
+            }
+
+            return WarfareSiteOutcomesDto.FromConquerings(conquests, Attacker, Defender);
+        }
+    }
+
     public List<ListItemDto> MiscList
     {
         get
@@ -72,6 +92,22 @@ public class Battle : EventCollection, IHasComplexSubtype
                     Subtitle = $"{Defender.ToLink(true, this)} (Deaths: {DefenderDeathCount} ✝)",
                 });
             }
+            WarfareSiteOutcomesDto sites = SiteOutcomes;
+            list.Add(new ListItemDto
+            {
+                Title = "Casualties",
+                Subtitle = $"Total: {DeathCount:N0} deaths | Attackers: {AttackerDeathCount:N0} | Defenders: {DefenderDeathCount:N0}"
+            });
+            list.Add(new ListItemDto
+            {
+                Title = "Attacker site outcomes",
+                Subtitle = $"Gained: {sites.AttackerGained.Count:N0} | Lost: {sites.AttackerLost.Count:N0} | Plundered: {sites.AttackerPlundered.Count:N0}"
+            });
+            list.Add(new ListItemDto
+            {
+                Title = "Defender site outcomes",
+                Subtitle = $"Gained: {sites.DefenderGained.Count:N0} | Lost: {sites.DefenderLost.Count:N0} | Plundered: {sites.DefenderPlundered.Count:N0}"
+            });
             return list;
         }
     }
