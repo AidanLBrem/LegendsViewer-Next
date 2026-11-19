@@ -774,7 +774,7 @@ export default defineComponent({
         leafletMap.value.on('zoomend', syncTileBadges);
         leafletMap.value.on('overlayadd', event => {
           syncTileBadges();
-          if (event.layer === warfareLayer.value) void loadWarfareOverlay();
+          if ('layer' in event && event.layer === warfareLayer.value) void loadWarfareOverlay();
         });
         leafletMap.value.on('overlayremove', syncTileBadges);
 
