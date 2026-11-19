@@ -15643,6 +15643,7 @@ export interface components {
             owner?: string | null;
             ownerText?: string | null;
             ownerId?: number | null;
+            ownerEntityType?: string | null;
             currentOwnerId?: number | null;
             color?: string | null;
             originOwner?: string | null;
@@ -15652,6 +15653,8 @@ export interface components {
             typeAsString?: string | null;
             type?: components["schemas"]["SiteType"];
             coordinates?: components["schemas"]["Location"][] | null;
+            /** Format: int64 */
+            populationCount?: number | null;
             ownerHistory?: components["schemas"]["SiteOwnershipPeriodDto"][] | null;
             /** Format: int32 */
             createdYear?: number | null;
@@ -15666,6 +15669,7 @@ export interface components {
             ownerText?: string | null;
             /** Format: int32 */
             ownerId?: number | null;
+            ownerEntityType?: string | null;
             /** Format: int32 */
             currentOwnerId?: number | null;
             actualOwner?: string | null;
