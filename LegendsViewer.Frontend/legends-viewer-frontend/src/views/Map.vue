@@ -12,6 +12,7 @@
       <div class="site-visibility-options" role="group" aria-label="Visible site types">
         <label><input type="checkbox" v-model="showMonasteries" :disabled="!historyReady" /> Monasteries</label>
         <label><input type="checkbox" v-model="showCamps" :disabled="!historyReady" /> Camps</label>
+        <label><input type="checkbox" v-model="showCaves" :disabled="!historyReady" /> Caves</label>
       </div>
     </div>
     <section v-if="historyReady" class="history-stepper" aria-label="Map history">
@@ -45,7 +46,7 @@
         No dated site ownership records are available for this world.
       </small>
       <small v-else>
-        Recorded site ownership only. Sites without history retain their current display; terrain and warfare overlays remain present-day.
+        Sites appear when founded and disappear when destroyed, where recorded. Abandoned sites remain visible as unclaimed; terrain and warfare overlays remain present-day.
       </small>
     </section>
   </div>
@@ -836,6 +837,7 @@ export default defineComponent({
     const siteColorMode = ref<'current' | 'origin'>('current');
     const showMonasteries = ref(true);
     const showCamps = ref(true);
+    const showCaves = ref(true);
     const mapError = ref('');
     const mapProgress = ref('');
     const historyReady = ref(false);
@@ -860,6 +862,7 @@ export default defineComponent({
       isSiteTypeVisible(site.type, {
         showMonasteries: showMonasteries.value,
         showCamps: showCamps.value,
+        showCaves: showCaves.value,
       });
 
     const colorForSite = (site: SiteMarker, ownerColor = site.color): string => {
@@ -933,7 +936,7 @@ export default defineComponent({
           if (disposed || generation !== historyUpdateGeneration) return;
           const { marker, site, item } = siteLayers[i];
           const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
-          const ownerLayer = ownerLayers[owner.ownerText] ?? ownerLayers['Others'];
+          const ownerLayer = ownerLayers[owner.ownerText] ?? ownerLayers['Unclaimed'];
           if (!owner.visible || !ownerLayer || !siteTypeIsVisible(site)) {
             if (item.layerGroup.hasLayer(marker)) item.layerGroup.removeLayer(marker);
           } else {
@@ -942,7 +945,11 @@ export default defineComponent({
               item.layerGroup = ownerLayer;
             }
             if (!ownerLayer.hasLayer(marker)) ownerLayer.addLayer(marker);
-            marker.setStyle({ color: colorForSite(site, owner.color) });
+            const nextColor = colorForSite(site, owner.color);
+            // Avoid redrawing unchanged Canvas shapes on each history step.
+            if (marker.options.color !== nextColor) {
+              marker.setStyle({ color: nextColor });
+            }
           }
           if (i % 200 === 199) await yieldToBrowser();
         }
@@ -955,7 +962,7 @@ export default defineComponent({
     };
 
     watch(
-      [selectedYear, siteColorMode, showMonasteries, showCamps],
+      [selectedYear, siteColorMode, showMonasteries, showCamps, showCaves],
       () => { void applyHistoryYear(); }
     );
 
@@ -1529,12 +1536,20 @@ export default defineComponent({
         // thousands of exported sites and polygon coordinates.
         const markers = toRaw(worldStore.world.siteMarkers ?? []) as SiteMarker[];
         ownershipChangeYears = getOwnershipChangeYears(markers, historyMaxYear.value);
+
+        // An ownerless site remains selectable, so it needs its own
+        // layer regardless of whether any current site is unclaimed.
+        if (!ownerLayers['Unclaimed']) {
+          ownerLayers['Unclaimed'] = new L.LayerGroup();
+          ownerLayers['Unclaimed'].addTo(leafletMap.value);
+        }
+
         let created = 0;
         for (const siteMarker of markers) {
           if (disposed || generation !== renderGeneration || !leafletMap.value) return;
           if (!siteMarker.coordinates || !siteMarker.owner) continue;
 
-          const ownerText = siteMarker.ownerText ?? 'Unknown';
+          const ownerText = siteMarker.ownerText ?? 'Others';
           if (!ownerLayers[ownerText]) {
             ownerLayers[ownerText] = new L.LayerGroup();
             ownerLayers[ownerText].addTo(leafletMap.value);
@@ -1551,11 +1566,14 @@ export default defineComponent({
             }
           }
 
+          const initialOwner = getSiteOwnerAtYear(siteMarker, selectedYear.value, historyMaxYear.value);
+          const initialLayer = ownerLayers[initialOwner.ownerText] ?? ownerLayers['Unclaimed'];
+
           for (const coordinate of siteMarker.coordinates) {
             if (coordinate.x == null || coordinate.y == null) continue;
             const marker = createMarker(
               siteMarker.type ?? 'Unknown',
-              colorForSite(siteMarker),
+              colorForSite(siteMarker, initialOwner.color),
               toLatLng(coordinate.x, coordinate.y),
               siteRenderer
             );
@@ -1563,14 +1581,14 @@ export default defineComponent({
               type: 'site',
               x: coordinate.x,
               y: coordinate.y,
-              layerGroup: ownerLayers[ownerText],
+              layerGroup: initialLayer,
               marker,
               data: { marker: siteMarker, x: coordinate.x, y: coordinate.y },
             };
             siteLayers.push({ marker, site: siteMarker, item });
             registerTileItem(item);
-            if (siteTypeIsVisible(siteMarker)) {
-              ownerLayers[ownerText].addLayer(marker);
+            if (initialOwner.visible && siteTypeIsVisible(siteMarker)) {
+              initialLayer.addLayer(marker);
             }
 
             if (siteMarker.id != null) {
@@ -1646,6 +1664,7 @@ export default defineComponent({
       siteColorMode,
       showMonasteries,
       showCamps,
+      showCaves,
       mapError,
       mapProgress,
       historyReady,
