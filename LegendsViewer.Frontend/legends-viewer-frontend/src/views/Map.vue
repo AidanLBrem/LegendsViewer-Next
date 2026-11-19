@@ -2,6 +2,7 @@
   <div class="map-container">
     <div id="map" style="height: 100%;"></div>
     <div v-if="mapError" class="map-error" role="alert">{{ mapError }}</div>
+    <div v-if="mapProgress" class="map-progress" role="status">{{ mapProgress }}</div>
     <div class="site-color-selector">
       <label for="site-color-mode">Site colors</label>
       <select id="site-color-mode" v-model="siteColorMode">
@@ -637,12 +638,15 @@ export default defineComponent({
     const siteMarkersMap = new Map<number, { marker: L.Layer; popup: HTMLElement }>();
     const siteColorMode = ref<'current' | 'origin'>('current');
     const mapError = ref('');
+    const mapProgress = ref('');
     const siteLayers: Array<{ marker: L.Path; site: SiteMarker }> = [];
     const siteRenderer = L.canvas({ padding: 0.3 });
     let renderGeneration = 0;
     let recolorGeneration = 0;
     let isRenderingSites = false;
     let disposed = false;
+    let warfareLoaded = false;
+    let warfareLoading = false;
 
     const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
@@ -768,7 +772,10 @@ export default defineComponent({
           preferCanvas: true
         });
         leafletMap.value.on('zoomend', syncTileBadges);
-        leafletMap.value.on('overlayadd', syncTileBadges);
+        leafletMap.value.on('overlayadd', event => {
+          syncTileBadges();
+          if (event.layer === warfareLayer.value) void loadWarfareOverlay();
+        });
         leafletMap.value.on('overlayremove', syncTileBadges);
 
         const mapContainerEl = document.getElementById('map');
@@ -1039,134 +1046,164 @@ export default defineComponent({
       }
     };
 
-    const loadImageToMap = (base64Image: string) => {
-      if (!leafletMap.value) return;
+    const loadWarfareOverlay = async () => {
+      if (warfareLoaded || warfareLoading || disposed || !warfareLayer.value) return;
+      warfareLoading = true;
+      const generation = renderGeneration;
+      try {
+        const data: WarfareMapDto | null = await mapStore.loadWarfareMap(true);
+        if (!data || disposed || renderGeneration !== generation || !warfareLayer.value) return;
 
+        unregisterWarfareItems();
+        warfareLayer.value.clearLayers();
+
+        let processed = 0;
+        for (const war of data.wars ?? []) {
+          if (disposed || renderGeneration !== generation || !warfareLayer.value) return;
+          renderWarOverlay(war, warfareLayer.value, router, toLatLng, registerTileItem);
+          if (++processed % 150 === 0) await yieldToBrowser();
+        }
+        for (const battle of data.battles ?? []) {
+          if (disposed || renderGeneration !== generation || !warfareLayer.value) return;
+          renderBattleMarker(battle, warfareLayer.value, router, toLatLng, registerTileItem);
+          if (++processed % 150 === 0) await yieldToBrowser();
+        }
+
+        warfareLoaded = true;
+        syncTileBadges();
+      } catch (error) {
+        console.error('Failed to render the warfare overlay:', error);
+      } finally {
+        warfareLoading = false;
+      }
+    };
+
+    const loadImageToMap = async (base64Image: string) => {
+      if (!leafletMap.value) return;
       const width = worldStore.world?.width;
       const height = worldStore.world?.height;
-      if (!width || !height || !base64Image) {
-        return;
-      }
+      if (!width || !height || !base64Image) return;
 
-      if (currentOverlay.value) {
-        leafletMap.value.removeLayer(currentOverlay.value as unknown as Layer);
-        currentOverlay.value = null;
-      }
-      if (siteCountLayer.value) {
-        leafletMap.value.removeLayer(siteCountLayer.value as unknown as Layer);
-        siteCountLayer.value = null;
-      }
-
-      for (const key in ownerLayers) {
-        if (leafletMap.value.hasLayer(ownerLayers[key])) {
-          leafletMap.value.removeLayer(ownerLayers[key]);
+      const generation = ++renderGeneration;
+      isRenderingSites = true;
+      mapProgress.value = 'Preparing map markers...';
+      mapError.value = '';
+      try {
+        if (currentOverlay.value) {
+          leafletMap.value.removeLayer(currentOverlay.value as unknown as Layer);
+          currentOverlay.value = null;
         }
-        ownerLayers[key].clearLayers();
-        delete ownerLayers[key];
-      }
-      if (controlLayers.value) {
-        leafletMap.value.removeControl(controlLayers.value);
-        controlLayers.value = undefined;
-      }
+        if (siteCountLayer.value) {
+          leafletMap.value.removeLayer(siteCountLayer.value as unknown as Layer);
+          siteCountLayer.value = null;
+        }
+        if (warfareLayer.value && leafletMap.value.hasLayer(warfareLayer.value)) {
+          leafletMap.value.removeLayer(warfareLayer.value);
+        }
+        warfareLayer.value?.clearLayers();
+        warfareLoaded = false;
 
-      siteMarkersMap.clear();
-      siteLayers.length = 0;
-      tileItemsMap.clear();
+        for (const key in ownerLayers) {
+          if (leafletMap.value.hasLayer(ownerLayers[key])) {
+            leafletMap.value.removeLayer(ownerLayers[key]);
+          }
+          ownerLayers[key].clearLayers();
+          delete ownerLayers[key];
+        }
+        if (controlLayers.value) {
+          leafletMap.value.removeControl(controlLayers.value);
+          controlLayers.value = undefined;
+        }
 
-      const scale = 8;
-      const bounds: L.LatLngBoundsExpression = [[0, 0], [scale * height, scale * width]];
-      const imageOverlay = L.imageOverlay(base64Image, bounds, {
-        pane: 'tilePane',
-        interactive: false,
-      });
+        siteMarkersMap.clear();
+        siteLayers.length = 0;
+        tileItemsMap.clear();
 
-      imageOverlay.addTo(leafletMap.value);
-      currentOverlay.value = imageOverlay;
-      leafletMap.value.setMaxBounds(bounds);
+        const scale = 8;
+        const bounds: L.LatLngBoundsExpression = [[0, 0], [scale * height, scale * width]];
+        const imageOverlay = L.imageOverlay(base64Image, bounds, {
+          pane: 'tilePane',
+          interactive: false,
+        });
 
-      if (worldStore.world.siteMarkers != null) {
-        if (!warfareLayer.value) {
-          warfareLayer.value = new L.LayerGroup();
+        imageOverlay.addTo(leafletMap.value);
+        currentOverlay.value = imageOverlay;
+        leafletMap.value.setMaxBounds(bounds);
+
+        // Show the background immediately while markers are built incrementally.
+        const queryType = route.query.type as string | undefined;
+        const queryId = route.query.id ? parseInt(route.query.id as string, 10) : undefined;
+        if (!queryType || !queryId || isNaN(queryId)) {
+          leafletMap.value.fitBounds(bounds);
         }
 
         const layersControl: Record<string, LayerGroup> = {};
+        warfareLayer.value = new L.LayerGroup();
 
-        // Iterate over the site markers
-        for (const siteMarker of worldStore.world.siteMarkers) {
-          if (siteMarker.coordinates != null && siteMarker.owner != null) {
-            const ownerText = siteMarker.ownerText ?? 'Unknown'
-            // Create a layer group for each owner if it doesn't exist
-            if (!ownerLayers[ownerText]) {
-              ownerLayers[ownerText] = new L.LayerGroup();
-              layersControl[siteMarker.owner] = ownerLayers[ownerText];
+        // Skip Vue's deep proxies while iterating over potentially tens of
+        // thousands of exported sites and polygon coordinates.
+        const markers = toRaw(worldStore.world.siteMarkers ?? []);
+        let created = 0;
+        for (const siteMarker of markers) {
+          if (disposed || generation !== renderGeneration || !leafletMap.value) return;
+          if (!siteMarker.coordinates || !siteMarker.owner) continue;
+
+          const ownerText = siteMarker.ownerText ?? 'Unknown';
+          if (!ownerLayers[ownerText]) {
+            ownerLayers[ownerText] = new L.LayerGroup();
+            layersControl[siteMarker.owner] = ownerLayers[ownerText];
+            ownerLayers[ownerText].addTo(leafletMap.value);
+          }
+
+          for (const coordinate of siteMarker.coordinates) {
+            if (coordinate.x == null || coordinate.y == null) continue;
+            const marker = createMarker(
+              siteMarker.type ?? 'Unknown',
+              colorForSite(siteMarker),
+              toLatLng(coordinate.x, coordinate.y),
+              siteRenderer
+            );
+            siteLayers.push({ marker, site: siteMarker });
+
+            registerTileItem({
+              type: 'site',
+              x: coordinate.x,
+              y: coordinate.y,
+              layerGroup: ownerLayers[ownerText],
+              marker,
+              data: { marker: siteMarker, x: coordinate.x, y: coordinate.y },
+            });
+            ownerLayers[ownerText].addLayer(marker);
+
+            if (siteMarker.id != null) {
+              siteMarkersMap.set(siteMarker.id, { marker, popup: null as any });
             }
 
-            for (const coordinate of siteMarker.coordinates) {
-              if (coordinate.x != null && coordinate.y != null) {
-                const marker = createMarker(
-                  siteMarker.type ?? 'Unknown',
-                  colorForSite(siteMarker),
-                  toLatLng(coordinate.x, coordinate.y)
-                );
-                siteLayers.push({ marker: marker as L.Path, site: siteMarker });
-
-                const siteAtCoord: SiteAtCoordinate = { marker: siteMarker, x: coordinate.x, y: coordinate.y };
-                registerTileItem({
-                  type: 'site',
-                  x: coordinate.x,
-                  y: coordinate.y,
-                  layerGroup: ownerLayers[ownerText],
-                  marker: marker,
-                  data: siteAtCoord,
-                });
-
-                ownerLayers[ownerText].addLayer(marker); // Add the marker to the owner's layer
-
-                if (siteMarker.id != null) {
-                  siteMarkersMap.set(siteMarker.id, { marker, popup: null as any });
-                }
-              }
+            if (++created % 150 === 0) {
+              mapProgress.value = `Rendering map sites: ${created.toLocaleString()} markers`;
+              await yieldToBrowser();
+              if (disposed || generation !== renderGeneration) return;
             }
           }
         }
 
-        // Add Wars & Battles overlay to layersControl so it is included in control creation
-        layersControl['Wars & Battles'] = warfareLayer.value as any;
+        layersControl['Wars & Battles'] = warfareLayer.value;
+        controlLayers.value = L.control.layers(undefined, layersControl).addTo(leafletMap.value);
 
-        // Add the site owner layers to the map
-        for (const key in ownerLayers) {
-          ownerLayers[key].addTo(leafletMap.value);
+        // The warfare layer starts unchecked. Load its data only when a user
+        // enables it rather than making a potentially huge request on every map open.
+        if (queryType && queryId && !isNaN(queryId)) {
+          void handleObjectFocus(queryType, queryId);
         }
-        if (!controlLayers.value) {
-          controlLayers.value = L.control.layers(undefined, layersControl).addTo(leafletMap.value);
+      } catch (error) {
+        console.error('Failed to render world map markers:', error);
+        mapError.value = error instanceof Error ? error.message : String(error);
+      } finally {
+        if (generation === renderGeneration) {
+          isRenderingSites = false;
+          mapProgress.value = '';
+          syncTileBadges();
         }
-
-        syncTileBadges();
-
-        void mapStore.loadWarfareMap(true).then((data: WarfareMapDto | null) => {
-          if (data && warfareLayer.value) {
-            unregisterWarfareItems();
-            for (const war of data.wars ?? []) {
-              renderWarOverlay(war, warfareLayer.value as any, router, toLatLng, registerTileItem);
-            }
-            for (const battle of data.battles ?? []) {
-              renderBattleMarker(battle, warfareLayer.value as any, router, toLatLng, registerTileItem);
-            }
-            syncTileBadges();
-          }
-        });
-      }
-
-      const queryType = route.query.type as string | undefined;
-      const queryId = route.query.id ? parseInt(route.query.id as string, 10) : undefined;
-
-      // Fit map bounds first only if no specific target object requested via query params
-      if (!queryType || !queryId || isNaN(queryId)) {
-        leafletMap.value.fitBounds(bounds);
-      }
-
-      if (queryType && queryId && !isNaN(queryId)) {
-        void handleObjectFocus(queryType, queryId);
       }
     };
 
@@ -1204,6 +1241,7 @@ export default defineComponent({
       mapStore,
       siteColorMode,
       mapError,
+      mapProgress,
     };
   },
 });
@@ -1215,6 +1253,18 @@ export default defineComponent({
   width: 100%;
   position: relative;
   /* Ensure the map and controls are positioned properly */
+}
+
+.map-progress {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1100;
+  padding: 8px 12px;
+  background: rgba(30, 30, 30, 0.85);
+  color: white;
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 .map-error {
