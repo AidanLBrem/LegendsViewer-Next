@@ -39,7 +39,7 @@ public class OceanMaskTests
 
         Assert.IsNotNull(response);
         Assert.AreEqual("application/octet-stream", response.ContentType);
-        Assert.HasCount(2, response.FileContents);
+        Assert.AreEqual(2, response.FileContents.Length);
         Assert.AreEqual(1, response.FileContents[0] & 1); // (0, 0) is ocean
         Assert.AreEqual(2, response.FileContents[1] & 2); // (4, 1) is ocean
         Assert.AreEqual(0, response.FileContents[0] & (1 << 2)); // lake
