@@ -9,6 +9,7 @@ export interface AtlasSite extends SiteWithOwnershipHistory {
   type?: string | null;
   // From the optional sites-and-pops export; a current snapshot rather
   // than a reconstructed population for each historical year.
+  residentRace?: string | null;
   populationCount?: number | null;
 }
 export interface TerritorySeed {
@@ -16,6 +17,7 @@ export interface TerritorySeed {
   y: number;
   nationId: number;
   color: string;
+  race?: string;
   population?: number;
   coordinateCount?: number;
 }
@@ -83,9 +85,11 @@ export function getTerritorySeeds(
       location.x != null && location.y != null &&
       Number.isFinite(location.x) && Number.isFinite(location.y));
     const population = site.populationCount;
+    const race = (year >= presentYear ? site.residentRace : null) || owner.ownerRace;
     for (const location of locations) {
       seeds.push({
         x: location.x!, y: location.y!, nationId: owner.ownerId!, color: owner.color,
+        ...(race ? { race } : {}),
         ...(population != null && Number.isFinite(population) && population > 0
           ? { population } : {}),
         ...(locations.length > 1 ? { coordinateCount: locations.length } : {}),
@@ -232,6 +236,41 @@ export type YieldToBrowser = () => Promise<void>;
 // centers reinforce each other instead of being treated as isolated points.
 // The world export does not contain political borders or historical
 // populations; these fields are estimates using the imported site snapshot.
+// Indices follow the backend RegionType values. Costs are world-distance multipliers.
+const raceAliases: Record<string, string> = { dwarves: 'dwarf', elves: 'elf', humans: 'human', goblins: 'goblin', kobolds: 'kobold' };
+const terrainCosts: Record<string, readonly number[]> = {
+  //         other  mtn  forest desert sea wetland tundra ice grass hills lake
+  dwarf:    [1, 1,   2.2, 1.5, Infinity, 2,   1.5, 2.2, 1.15, 1,   Infinity],
+  elf:      [1, 2.4, 1,   1.8, Infinity, 1.2, 1.6, 2.4, 1.1,  1.3, Infinity],
+  human:    [1, 2,   1.4, 1.6, Infinity, 1.6, 1.6, 2.3, 1,    1.1, Infinity],
+  goblin:   [1, 1.3, 1.4, 1.5, Infinity, 1.5, 1.5, 2.1, 1.15, 1,   Infinity],
+  kobold:   [1, 1.8, 1.1, 1.6, Infinity, 1.2, 1.7, 2.3, 1.3,  1.1, Infinity],
+  other:    [1, 1.8, 1.4, 1.6, Infinity, 1.5, 1.5, 2.2, 1,    1.2, Infinity],
+};
+
+// Integrate the length crossed inside each tile along the site's influence radius.
+// A difficult ridge reduces influence on its far side as well as on the ridge.
+function crossingCost(x: number, y: number, dx: number, dy: number,
+  width: number, tiles: Uint8Array, costs: readonly number[]): number {
+  let col = Math.floor(x);
+  let row = Math.floor(y);
+  const stepX = Math.sign(dx), stepY = Math.sign(dy);
+  const strideX = dx ? 1 / Math.abs(dx) : Infinity;
+  const strideY = dy ? 1 / Math.abs(dy) : Infinity;
+  let nextX = dx ? ((dx > 0 ? col + 1 : col) - x) / dx : Infinity;
+  let nextY = dy ? ((dy > 0 ? row + 1 : row) - y) / dy : Infinity;
+  let total = 0;
+  let t = 0;
+  while (t < 1) {
+    const end = Math.min(nextX, nextY, 1);
+    if (end > t) total += (end - t) * (costs[tiles[row * width + col]] ?? 1);
+    if (end === nextX) { col += stepX; nextX += strideX; }
+    if (end === nextY) { row += stepY; nextY += strideY; }
+    t = end;
+  }
+  return total;
+}
+
 export async function createTerritoryGrid(
   width: number,
   height: number,
@@ -239,7 +278,8 @@ export async function createTerritoryGrid(
   yieldToBrowser: YieldToBrowser = async () => {},
   cancelled: () => boolean = () => false,
   oceanMask?: Uint8Array,
-  cachedLandComponents?: Int32Array
+  cachedLandComponents?: Int32Array,
+  terrain?: Uint8Array
 ): Promise<TerritoryGrid | null> {
   const rasterWidth = Math.max(1, Math.min(320, Math.ceil(width)));
   const rasterHeight = Math.max(1, Math.min(320, Math.ceil(height)));
@@ -306,6 +346,9 @@ export async function createTerritoryGrid(
     for (let i = 0; i < nationSeeds.length; i++) {
       if (cancelled()) return null;
       const seed = nationSeeds[i];
+      const label = seed.race?.trim().toLowerCase() ?? 'other';
+      const race = Object.prototype.hasOwnProperty.call(raceAliases, label) ? raceAliases[label] : label;
+      const costs = Object.prototype.hasOwnProperty.call(terrainCosts, race) ? terrainCosts[race] : terrainCosts.other;
       // Log scaling gives large cities more reach without allowing one
       // enormous settlement to overpower an entire surrounding region.
       // Unknown population has the same weight as a single ordinary site.
@@ -330,7 +373,10 @@ export async function createTerritoryGrid(
           if (distanceSquared >= radiusSquared) continue;
           const cell = py * rasterWidth + px;
           if (rasterLandComponents && rasterLandComponents[cell] !== componentId) continue;
-          const falloff = 1 - distanceSquared / radiusSquared;
+          const cost = terrain ? crossingCost(seed.x, seed.y, dx, dy, width, terrain, costs) : 1;
+          const weightedDistance = distanceSquared * cost * cost;
+          if (weightedDistance >= radiusSquared) continue;
+          const falloff = 1 - weightedDistance / radiusSquared;
           const contribution = weight * falloff * falloff;
           if (stamps[cell] !== stamp) {
             stamps[cell] = stamp;

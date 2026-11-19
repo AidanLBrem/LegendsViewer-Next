@@ -1066,6 +1066,7 @@ export default defineComponent({
     let activeTerritoryGrid: TerritoryGrid | null = null;
     let activeTerritoryOwners = new Map<number, string>();
     let necromancerNationIds = new Set<number>();
+    let terrainTiles: Uint8Array | undefined;
     let oceanMask: Uint8Array | null = null;
     let landComponents: Int32Array | null = null;
     let territoryChangeYears: number[] = [];
@@ -1214,7 +1215,7 @@ export default defineComponent({
       const grid = await createTerritoryGrid(
         width, height, seeds, yieldToBrowser,
         () => disposed || generation !== historyUpdateGeneration || !showEstimatedTerritories.value,
-        oceanMask, landComponents ?? undefined
+        oceanMask, landComponents ?? undefined, terrainTiles
       );
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
@@ -1545,17 +1546,23 @@ export default defineComponent({
         // The water mask (oceans and lakes) comes from overworld regions,
         // not colors in the exported map image.
         oceanMask = null;
+        terrainTiles = undefined;
         landComponents = null;
         try {
-          const maskResponse = await fetch('http://localhost:15421/api/WorldMap/ocean-mask');
+          const maskResponse = await fetch('http://localhost:15421/api/WorldMap/territory-terrain');
           if (!maskResponse.ok) {
             throw new Error('Unable to load the ocean terrain mask.');
           }
-          const mask = new Uint8Array(await maskResponse.arrayBuffer());
-          if (mask.length !== Math.ceil(width * height / 8)) {
+          const tiles = new Uint8Array(await maskResponse.arrayBuffer());
+          if (tiles.length !== width * height) {
             throw new Error('The ocean terrain mask does not match the loaded world.');
           }
           if (disposed) return;
+          terrainTiles = tiles;
+          const mask = new Uint8Array(Math.ceil(tiles.length / 8));
+          for (let i = 0; i < tiles.length; i++) {
+            if (tiles[i] === 4 || tiles[i] === 10) mask[i >> 3] |= 1 << (i & 7);
+          }
           oceanMask = mask;
           // Cache land connectivity once per imported world, rather than
           // reflooding every year of historical territory playback.

@@ -107,6 +107,7 @@ public class WorldRegion : WorldObject, IRegion
                             RegionType = RegionType.Glacier;
                             Icon = HtmlStyleUtil.GetIconString("snowflake");
                             break;
+                        case "Jungle":
                         case "Forest":
                             RegionType = RegionType.Forest;
                             Icon = HtmlStyleUtil.GetIconString("forest-outline");

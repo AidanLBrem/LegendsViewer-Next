@@ -167,6 +167,26 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
         return File(mask, "application/octet-stream");
     }
 
+    [HttpGet("territory-terrain")]
+    public IActionResult GetTerritoryTerrain()
+    {
+        int width = _worldDataService.Width;
+        int height = _worldDataService.Height;
+        if (width <= 0 || height <= 0 || (long)width * height > int.MaxValue)
+            return BadRequest("Invalid world dimensions.");
+
+        byte[] tiles = new byte[width * height];
+        foreach (var region in _worldDataService.Regions.Where(region => region.Depth == null))
+        {
+            foreach (var location in region.Coordinates)
+            {
+                if ((uint)location.X < width && (uint)location.Y < height)
+                    tiles[location.Y * width + location.X] = (byte)region.RegionType;
+            }
+        }
+        return File(tiles, "application/octet-stream");
+    }
+
     [HttpGet("warfare")]
     public ActionResult<WarfareMapDto> GetWarfareMap([FromQuery] bool activeOnly = true)
     {
