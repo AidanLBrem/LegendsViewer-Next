@@ -81,6 +81,12 @@
                     <div v-if="isWarfareOverview" class="text-caption mb-2">
                         Atk = attacking side; Def = defending side. Site counts represent
                         recorded gains, losses and plunderings. Click a column heading to sort all results.
+                        <span v-if="title === 'Wars'">
+                            Troop figures are summed battle deployments, not unique soldiers or armies at war start.
+                        </span>
+                        <span v-else>
+                            Troop figures are the forces initially fielded in each battle, before casualties.
+                        </span>
                     </div>
                     <v-data-table-server v-model:items-per-page="store.objectsPerPage"
                         :class="{ 'warfare-overview-table': isWarfareOverview }" :headers="tableHeaders"
@@ -159,7 +165,7 @@ const filters = ref<FilterRuleDto[]>([]);
 const draftFilters = ref<FilterRuleDto[]>([]);
 const showFilterPopup = ref(false)
 const activeSort = ref<LoadItemsSortOption[]>([]);
-const isWarfareOverview = props.tableHeaders.some(header => header.key === 'attackerSitesGained');
+const isWarfareOverview = props.tableHeaders.some(header => header.key === 'attackerSitesGainedCount');
 
 const applyFilters = () => {
     filters.value = [...draftFilters.value];
