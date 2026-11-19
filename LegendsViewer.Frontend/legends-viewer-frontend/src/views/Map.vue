@@ -79,6 +79,7 @@ import { useWorldStore } from '../stores/worldStore';
 import { useWorldMapStore } from '../stores/mapStore';
 import L, { Map as LeafletMap, ImageOverlay, Layer, LayerGroup } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { territoryLabelSvg } from '../utils/territoryLabels';
 import { components } from '../generated/api-schema'; // Import from the OpenAPI schema
 
 import type { WarfareMapDto, WarMapOverlayDto, BattleMapMarkerDto, SiteConquestMapMarkerDto } from '../types/legends';
@@ -1045,6 +1046,7 @@ export default defineComponent({
     const leafletMap = shallowRef<LeafletMap>();
     const currentOverlay = shallowRef<ImageOverlay | null>(null);
     const siteCountLayer = shallowRef<LayerGroup | null>(null);
+    let territoryNames: L.SVGOverlay | null = null;
     const territoryOverlay = shallowRef<ImageOverlay | null>(null);
     const historicalWarfareLayer = shallowRef<LayerGroup | null>(null);
     const highlightLayer = shallowRef<LayerGroup | null>(null);
@@ -1186,6 +1188,7 @@ export default defineComponent({
       const map = leafletMap.value;
       if (!map || disposed) return;
       if (!showEstimatedTerritories.value) {
+        territoryNames?.remove();
         if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
         clearTerritoryTip();
         activeTerritoryGrid = null;
@@ -1197,6 +1200,7 @@ export default defineComponent({
       const width = worldStore.world?.width ?? 0;
       const height = worldStore.world?.height ?? 0;
       if (!width || !height || !oceanMask) {
+        territoryNames?.remove();
         if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
         clearTerritoryTip();
         activeTerritoryGrid = null;
@@ -1211,6 +1215,7 @@ export default defineComponent({
       ].join(':');
       if (key === territorySnapshotKey && territoryOverlay.value) {
         if (!map.hasLayer(territoryOverlay.value)) territoryOverlay.value.addTo(map);
+        if (territoryNames && !map.hasLayer(territoryNames)) territoryNames.addTo(map);
         return;
       }
 
@@ -1228,12 +1233,14 @@ export default defineComponent({
         }
       );
       const includedNationIds = new Set(seeds.map(seed => seed.nationId));
+      const ownerNames = new Map<number, string>();
       const ownerLinks = new Map<number, string>();
       for (const site of sites) {
         const owner = getSiteOwnerAtYear(site, year, historyMaxYear.value);
         if (owner.ownerId != null && includedNationIds.has(owner.ownerId) &&
             !ownerLinks.has(owner.ownerId)) {
           ownerLinks.set(owner.ownerId, owner.owner);
+          ownerNames.set(owner.ownerId, owner.ownerText);
         }
         if (ownerLinks.size === includedNationIds.size) break;
       }
@@ -1262,6 +1269,11 @@ export default defineComponent({
         element.style.imageRendering = 'pixelated';
         element.style.pointerEvents = 'none';
       }
+      const labels = territoryLabelSvg(grid, width, height, oceanMask, ownerNames);
+      territoryNames?.remove();
+      territoryNames = L.svgOverlay(labels, territoryOverlay.value.getBounds(), {
+        pane: 'territoryPane', interactive: false,
+      }).addTo(map);
       territorySnapshotKey = key;
     };
 
@@ -2017,6 +2029,8 @@ export default defineComponent({
           leafletMap.value.removeLayer(siteCountLayer.value as unknown as Layer);
           siteCountLayer.value = null;
         }
+        territoryNames?.remove();
+        territoryNames = null;
         if (territoryOverlay.value) {
           leafletMap.value.removeLayer(territoryOverlay.value);
           territoryOverlay.value = null;
@@ -2244,6 +2258,20 @@ export default defineComponent({
 </script>
 
 <style>
+.territory-names {
+  pointer-events: none;
+}
+.territory-names text {
+  font-family: Georgia, serif;
+  font-weight: bold;
+  text-anchor: middle;
+  dominant-baseline: central;
+  fill: #fff9e9;
+  stroke: #211b18;
+  stroke-width: 0.12em;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
 .nominal-territory-info {
   border-bottom: 1px solid #7775;
   margin-bottom: 8px;
