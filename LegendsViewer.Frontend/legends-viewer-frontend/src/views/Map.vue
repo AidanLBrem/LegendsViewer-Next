@@ -1,6 +1,7 @@
 <template>
   <div class="map-container">
     <div id="map" style="height: 100%;"></div>
+    <div v-if="mapError" class="map-error" role="alert">{{ mapError }}</div>
     <div class="site-color-selector">
       <label for="site-color-mode">Site colors</label>
       <select id="site-color-mode" v-model="siteColorMode">
@@ -12,7 +13,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, onMounted, watch, ref, onBeforeUnmount, type Ref } from 'vue';
+import { defineComponent, onMounted, watch, ref, shallowRef, toRaw, onBeforeUnmount, type Ref } from 'vue';
 import { useRouter, useRoute, type Router } from 'vue-router';
 import { useWorldStore } from '../stores/worldStore';
 import { useWorldMapStore } from '../stores/mapStore';
@@ -425,30 +426,30 @@ const siteTypeMarkers: Record<SiteType, MarkerConfig> = {
   ImportantLocation: { shape: 'star' },
 };
 
-function createMarker(siteType: SiteType, siteColor: string | null | undefined, latlng: L.LatLngExpression): L.Layer {
+function createMarker(siteType: SiteType, siteColor: string | null | undefined, latlng: L.LatLngExpression, renderer: L.Renderer): L.Path {
   const config = siteTypeMarkers[siteType];
   const color = siteColor ?? config?.color ?? "#666"
   const size = config?.size ?? 3;
-  const options = { pane: 'overlayPane', color: color };
+  const options = { pane: 'overlayPane', color: color, renderer };
   switch (config?.shape) {
     case 'circle':
       return L.circle(latlng, { ...options, radius: size });
     case 'triangle':
-      return createPolygon(latlng, 3, size, color);
+      return createPolygon(latlng, 3, size, color, renderer);
     case 'square':
-      return createPolygon(latlng, 4, size, color);
+      return createPolygon(latlng, 4, size, color, renderer);
     case 'pentagon':
-      return createPolygon(latlng, 5, size, color);
+      return createPolygon(latlng, 5, size, color, renderer);
     case 'hexagon':
-      return createPolygon(latlng, 6, size, color);
+      return createPolygon(latlng, 6, size, color, renderer);
     case 'star':
-      return createStar(latlng, 5, size, size / 2, color);
+      return createStar(latlng, 5, size, size / 2, color, renderer);
     default:
       return L.circle(latlng, { ...options, radius: size / 2 });
   }
 }
 
-function createPolygon(center: L.LatLngExpression, sides: number, size: number, color: string): L.Polygon {
+function createPolygon(center: L.LatLngExpression, sides: number, size: number, color: string, renderer: L.Renderer): L.Polygon {
   const vertices: L.LatLngExpression[] = [];
   for (let i = 0; i < sides; i++) {
     const angle = (i / sides) * 2 * Math.PI + Math.PI / 2; // Add 90 degrees (π/2 radians)
@@ -458,10 +459,10 @@ function createPolygon(center: L.LatLngExpression, sides: number, size: number, 
     ]
     vertices.push(vertex);
   }
-  return L.polygon(vertices, { pane: 'overlayPane', color });
+  return L.polygon(vertices, { pane: 'overlayPane', color, renderer });
 }
 
-function createStar(center: L.LatLngExpression, points: number, outer: number, inner: number, color: string): L.Polygon {
+function createStar(center: L.LatLngExpression, points: number, outer: number, inner: number, color: string, renderer: L.Renderer): L.Polygon {
   const vertices: L.LatLngExpression[] = [];
   for (let i = 0; i < points * 2; i++) {
     const angle = (i / (points * 2)) * 2 * Math.PI + Math.PI / 2; // Add 90 degrees (π/2 radians)
@@ -472,7 +473,7 @@ function createStar(center: L.LatLngExpression, points: number, outer: number, i
     ]
     vertices.push(vertex);
   }
-  return L.polygon(vertices, { pane: 'overlayPane', color });
+  return L.polygon(vertices, { pane: 'overlayPane', color, renderer });
 }
 
 function coordinateKey(x: number, y: number): string {
@@ -627,13 +628,23 @@ export default defineComponent({
     const mapStore = useWorldMapStore();
     const router = useRouter();
     const route = useRoute();
-    const leafletMap = ref<LeafletMap>();
-    const currentOverlay = ref<ImageOverlay | null>(null);
-    const siteCountLayer = ref<LayerGroup | null>(null);
-    const highlightLayer = ref<LayerGroup | null>(null);
+    // Leaflet mutates deeply nested objects internally; Vue proxies are expensive
+    // and can break Leaflet's identity-sensitive layer and map bookkeeping.
+    const leafletMap = shallowRef<LeafletMap>();
+    const currentOverlay = shallowRef<ImageOverlay | null>(null);
+    const siteCountLayer = shallowRef<LayerGroup | null>(null);
+    const highlightLayer = shallowRef<LayerGroup | null>(null);
     const siteMarkersMap = new Map<number, { marker: L.Layer; popup: HTMLElement }>();
     const siteColorMode = ref<'current' | 'origin'>('current');
+    const mapError = ref('');
     const siteLayers: Array<{ marker: L.Path; site: SiteMarker }> = [];
+    const siteRenderer = L.canvas({ padding: 0.3 });
+    let renderGeneration = 0;
+    let recolorGeneration = 0;
+    let isRenderingSites = false;
+    let disposed = false;
+
+    const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
     const colorForSite = (site: SiteMarker): string => {
       if (siteColorMode.value === 'origin') {
@@ -643,16 +654,22 @@ export default defineComponent({
     };
 
     watch(siteColorMode, () => {
-      for (const { marker, site } of siteLayers) {
-        marker.setStyle({ color: colorForSite(site) });
-      }
+      const generation = ++recolorGeneration;
+      void (async () => {
+        for (let i = 0; i < siteLayers.length; i++) {
+          if (disposed || generation !== recolorGeneration) return;
+          const { marker, site } = siteLayers[i];
+          marker.setStyle({ color: colorForSite(site) });
+          if (i % 250 === 249) await yieldToBrowser();
+        }
+      })();
     });
 
     // This will hold the LayerGroups for different owners
     const ownerLayers: Record<string, LayerGroup> = {};
-    const controlLayers = ref<L.Control.Layers>();
+    const controlLayers = shallowRef<L.Control.Layers>();
 
-    const warfareLayer = ref<LayerGroup | null>(null);
+    const warfareLayer = shallowRef<LayerGroup | null>(null);
 
     const tileItemsMap = new Map<string, MapTileItem[]>();
 
@@ -692,7 +709,7 @@ export default defineComponent({
     };
 
     const syncTileBadges = () => {
-      if (!leafletMap.value) return;
+      if (!leafletMap.value || isRenderingSites) return;
 
       const map = leafletMap.value;
       if (!siteCountLayer.value) {
@@ -747,7 +764,8 @@ export default defineComponent({
           crs: L.CRS.Simple,
           zoom: 0,
           minZoom: -2,
-          maxZoom: 2
+          maxZoom: 2,
+          preferCanvas: true
         });
         leafletMap.value.on('zoomend', syncTileBadges);
         leafletMap.value.on('overlayadd', syncTileBadges);
@@ -762,13 +780,18 @@ export default defineComponent({
         }
       }
 
-      await Promise.all([
-        worldStore.loadWorld(),
-        mapStore.loadWorldMap('Large')
-      ]);
+      try {
+        await Promise.all([
+          worldStore.loadWorld(),
+          mapStore.loadWorldMap('Large')
+        ]);
 
-      if (mapStore.worldMapMax && worldStore.world?.width && worldStore.world?.height) {
-        loadImageToMap(mapStore.worldMapMax);
+        if (!disposed && mapStore.worldMapMax && worldStore.world?.width && worldStore.world?.height) {
+          await loadImageToMap(mapStore.worldMapMax);
+        }
+      } catch (error) {
+        console.error('Unable to initialize world map:', error);
+        mapError.value = error instanceof Error ? error.message : String(error);
       }
 
       // Add custom control to activate/deactivate all layers
@@ -1147,14 +1170,8 @@ export default defineComponent({
       }
     };
 
-    watch(
-      [() => mapStore.worldMapMax, () => worldStore.world?.width, () => worldStore.world?.height],
-      ([newBase64Map, width, height]) => {
-        if (newBase64Map && width && height) {
-          loadImageToMap(newBase64Map as string);
-        }
-      }
-    );
+    // The initial Promise.all loads the map once. Watching both asynchronous
+    // responses used to build every marker twice when the view first opened.
 
     watch(() => [route.query.type, route.query.id], ([newType, newId]) => {
       if (newType && newId) {
@@ -1171,6 +1188,9 @@ export default defineComponent({
     });
 
     onBeforeUnmount(() => {
+      disposed = true;
+      renderGeneration++;
+      recolorGeneration++;
       if (resizeObserver) {
         resizeObserver.disconnect();
         resizeObserver = null;
@@ -1183,6 +1203,7 @@ export default defineComponent({
     return {
       mapStore,
       siteColorMode,
+      mapError,
     };
   },
 });
@@ -1194,6 +1215,17 @@ export default defineComponent({
   width: 100%;
   position: relative;
   /* Ensure the map and controls are positioned properly */
+}
+
+.map-error {
+  position: absolute;
+  top: 12px;
+  left: 60px;
+  z-index: 1100;
+  padding: 10px 14px;
+  color: #ffffff;
+  background: #a12626;
+  border-radius: 4px;
 }
 
 .site-color-selector {
