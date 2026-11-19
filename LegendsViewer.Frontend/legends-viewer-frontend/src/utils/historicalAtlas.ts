@@ -67,41 +67,86 @@ export async function createTerritoryGrid(
 
   const radius = Math.max(7, Math.min(140, Math.hypot(width, height) * 0.045));
   const radiusSquared = radius * radius;
-  const binSize = radius;
-  const buckets = new Map<string, TerritorySeed[]>();
+
+  // Jump-flood the settlement seeds on a resolution-capped grid. Unlike
+  // testing every site against every cell, this has bounded O(pixels log pixels)
+  // cost even when thousands of settlements cluster in one province.
+  const validSeeds: TerritorySeed[] = [];
+  let nearest = new Int32Array(rasterWidth * rasterHeight);
+  nearest.fill(-1);
   for (const seed of seeds) {
     if (seed.x < 0 || seed.x >= width || seed.y < 0 || seed.y >= height) continue;
     colors.set(seed.nationId, seed.color);
-    const key = `${Math.floor(seed.x / binSize)}:${Math.floor(seed.y / binSize)}`;
-    const bucket = buckets.get(key) ?? [];
-    bucket.push(seed);
-    buckets.set(key, bucket);
+    const px = Math.min(rasterWidth - 1, Math.floor(seed.x * rasterWidth / width));
+    const py = Math.min(rasterHeight - 1, Math.floor(seed.y * rasterHeight / height));
+    const cell = py * rasterWidth + px;
+    const old = nearest[cell];
+    const distance = (seed.x - (px + 0.5) * width / rasterWidth) ** 2 +
+      (seed.y - (py + 0.5) * height / rasterHeight) ** 2;
+    const oldDistance = old < 0 ? Infinity :
+      (validSeeds[old].x - (px + 0.5) * width / rasterWidth) ** 2 +
+      (validSeeds[old].y - (py + 0.5) * height / rasterHeight) ** 2;
+    if (distance < oldDistance || (distance === oldDistance &&
+      (old < 0 || seed.nationId < validSeeds[old].nationId))) {
+      nearest[cell] = validSeeds.length;
+    }
+    validSeeds.push(seed);
+  }
+
+  const maxDimension = Math.max(rasterWidth, rasterHeight);
+  let step = 1;
+  while (step < maxDimension) step *= 2;
+
+  for (step = Math.floor(step / 2); step >= 1; step = Math.floor(step / 2)) {
+    let next = new Int32Array(rasterWidth * rasterHeight);
+    next.fill(-1);
+    for (let py = 0; py < rasterHeight; py++) {
+      if (cancelled()) return null;
+      const y = (py + 0.5) * height / rasterHeight;
+      for (let px = 0; px < rasterWidth; px++) {
+        const x = (px + 0.5) * width / rasterWidth;
+        const pos = py * rasterWidth + px;
+        let nearestSeed = nearest[pos];
+        let bestDistance = nearestSeed < 0 ? Infinity :
+          (validSeeds[nearestSeed].x - x) ** 2 + (validSeeds[nearestSeed].y - y) ** 2;
+        for (let dy = -step; dy <= step; dy += step) {
+          const ny = py + dy;
+          if (ny < 0 || ny >= rasterHeight) continue;
+          for (let dx = -step; dx <= step; dx += step) {
+            const nx = px + dx;
+            if (nx < 0 || nx >= rasterWidth) continue;
+            const candidate = nearest[ny * rasterWidth + nx];
+            if (candidate < 0) continue;
+            const seed = validSeeds[candidate];
+            const distance = (seed.x - x) ** 2 + (seed.y - y) ** 2;
+            if (distance < bestDistance ||
+              (distance === bestDistance && nearestSeed >= 0 &&
+                seed.nationId < validSeeds[nearestSeed].nationId)) {
+              nearestSeed = candidate;
+              bestDistance = distance;
+            }
+          }
+        }
+        next[pos] = nearestSeed;
+      }
+      if (py % 32 === 31) await yieldToBrowser();
+    }
+    nearest = next;
   }
 
   for (let py = 0; py < rasterHeight; py++) {
     if (cancelled()) return null;
     const y = (py + 0.5) * height / rasterHeight;
-    const baseY = Math.floor(y / binSize);
     for (let px = 0; px < rasterWidth; px++) {
       const x = (px + 0.5) * width / rasterWidth;
-      const baseX = Math.floor(x / binSize);
-      let nearest = -1;
-      let bestDistance = radiusSquared;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          for (const seed of buckets.get(`${baseX + dx}:${baseY + dy}`) ?? []) {
-            const distance = (seed.x - x) ** 2 + (seed.y - y) ** 2;
-            if (distance < bestDistance ||
-              (distance === bestDistance && (nearest < 0 || seed.nationId < nearest))) {
-              nearest = seed.nationId;
-              bestDistance = distance;
-            }
-          }
-        }
-      }
-      nation[py * rasterWidth + px] = nearest;
+      const pos = py * rasterWidth + px;
+      const seedIndex = nearest[pos];
+      if (seedIndex < 0) continue;
+      const seed = validSeeds[seedIndex];
+      const distance = (seed.x - x) ** 2 + (seed.y - y) ** 2;
+      if (distance <= radiusSquared) nation[pos] = seed.nationId;
     }
-    if (py % 24 === 23) await yieldToBrowser();
+    if (py % 32 === 31) await yieldToBrowser();
   }
   return { width: rasterWidth, height: rasterHeight, nation, colors };
 }
