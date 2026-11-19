@@ -264,11 +264,49 @@ public class World : IDisposable, IWorld
             };
 
             Color color = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
-            while (!usedColors.Add(color.ToArgb()))
+
+            // A 7-degree step only reaches 360 candidate hues. If they are all
+            // occupied, an unbounded retry loop will hang world loading forever.
+            // Limit palette retries, then fall back to the full 24-bit RGB space.
+            bool assigned = false;
+            for (int attempt = 0; attempt < 16; attempt++)
             {
+                if (usedColors.Add(color.ToArgb()))
+                {
+                    assigned = true;
+                    break;
+                }
+
                 hue = (hue + 7) % 360;
                 color = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
             }
+
+            if (!assigned)
+            {
+                // Consecutive RGB codes are distinct. At most usedColors.Count
+                // codes can be taken, so one of the next Count + 1 must be free.
+                uint firstCode = unchecked((uint)(i + 1) * 2654435761u) & 0xFFFFFFu;
+                for (int step = 0; step <= usedColors.Count; step++)
+                {
+                    uint code = (firstCode + (uint)step) & 0xFFFFFFu;
+                    Color fallback = Color.FromArgb(176,
+                        (int)((code >> 16) & 0xFF),
+                        (int)((code >> 8) & 0xFF),
+                        (int)(code & 0xFF));
+                    if (usedColors.Add(fallback.ToArgb()))
+                    {
+                        color = fallback;
+                        assigned = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!assigned)
+            {
+                throw new InvalidOperationException("Too many distinct political entities to assign unique colors.");
+            }
+
             orderedNations[i].LineColor = color;
         }
 
