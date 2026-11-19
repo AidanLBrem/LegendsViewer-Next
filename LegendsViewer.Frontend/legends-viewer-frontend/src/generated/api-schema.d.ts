@@ -14842,7 +14842,6 @@ export interface components {
             /** Format: int32 */
             readonly warDeaths?: number;
             readonly allLeaderLinks?: string[] | null;
-            readonly populationsAsList?: string[] | null;
             /** Format: double */
             readonly warKillDeathRatio?: number;
             lineColor?: components["schemas"]["Color"];
