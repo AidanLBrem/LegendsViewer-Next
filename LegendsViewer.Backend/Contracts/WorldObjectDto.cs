@@ -49,20 +49,20 @@ public class WorldObjectDto
     public int? AttackerDeathCount { get; set; }
     public int? DefenderDeathCount { get; set; }
 
-    public int? AttackerSitesGained { get; set; }
-    public int? AttackerSitesLost { get; set; }
-    public int? AttackerSitesPlundered { get; set; }
-    public int? DefenderSitesGained { get; set; }
-    public int? DefenderSitesLost { get; set; }
-    public int? DefenderSitesPlundered { get; set; }
+    public int? AttackerSitesGainedCount { get; set; }
+    public int? AttackerSitesLostCount { get; set; }
+    public int? AttackerSitesPlunderedCount { get; set; }
+    public int? DefenderSitesGainedCount { get; set; }
+    public int? DefenderSitesLostCount { get; set; }
+    public int? DefenderSitesPlunderedCount { get; set; }
 
     private void SetSiteCounts(WarfareSiteOutcomesDto sites)
     {
-        AttackerSitesGained = sites.AttackerGained.Count;
-        AttackerSitesLost = sites.AttackerLost.Count;
-        AttackerSitesPlundered = sites.AttackerPlundered.Count;
-        DefenderSitesGained = sites.DefenderGained.Count;
-        DefenderSitesLost = sites.DefenderLost.Count;
-        DefenderSitesPlundered = sites.DefenderPlundered.Count;
+        AttackerSitesGainedCount = sites.AttackerGained.Count;
+        AttackerSitesLostCount = sites.AttackerLost.Count;
+        AttackerSitesPlunderedCount = sites.AttackerPlundered.Count;
+        DefenderSitesGainedCount = sites.DefenderGained.Count;
+        DefenderSitesLostCount = sites.DefenderLost.Count;
+        DefenderSitesPlunderedCount = sites.DefenderPlundered.Count;
     }
 }
