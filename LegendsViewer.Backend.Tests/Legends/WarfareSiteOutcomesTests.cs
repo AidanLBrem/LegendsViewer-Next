@@ -1,4 +1,5 @@
 using LegendsViewer.Backend.Contracts;
+using LegendsViewer.Backend.Extensions;
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.EventCollections;
@@ -78,6 +79,26 @@ public class WarfareSiteOutcomesTests
         Assert.IsTrue(outcomes.AttackerGained[0].Contains("Conquered Town"));
         Assert.IsTrue(outcomes.DefenderLost.Any(s => s.Contains("Destroyed Fort")));
         Assert.IsFalse(outcomes.AttackerGained.Any(s => s.Contains("Destroyed Fort")));
+
+        // The paginated overview DTO must surface the same counts as the
+        // detail page, rather than dropping them from the table response.
+        WorldObjectDto overview = new(war);
+        Assert.AreEqual(1, overview.AttackerSitesGained);
+        Assert.AreEqual(1, overview.AttackerSitesLost);
+        Assert.AreEqual(1, overview.AttackerSitesPlundered);
+        Assert.AreEqual(1, overview.DefenderSitesGained);
+        Assert.AreEqual(2, overview.DefenderSitesLost);
+        Assert.AreEqual(0, overview.DefenderSitesPlundered);
+
+        // Sorting is applied to the full domain collection before pagination.
+        War quietWar = new([
+            P("id", "11"), P("name", "Peaceful War"),
+            P("aggressor_ent_id", "1"), P("defender_ent_id", "2")
+        ], world);
+        var ranked = new[] { quietWar, war }
+            .SortByProperty("attackerSitesGained", "desc").ToList();
+        Assert.AreSame(war, ranked[0]);
+        Assert.AreSame(quietWar, ranked[1]);
     }
 
     [TestMethod]
@@ -105,6 +126,17 @@ public class WarfareSiteOutcomesTests
         Assert.AreEqual(1, outcomes.DefenderLost.Count);
         Assert.AreEqual(0, outcomes.AttackerPlundered.Count);
         Assert.AreEqual(0, outcomes.DefenderGained.Count);
+
+        WorldObjectDto overview = new(battle);
+        Assert.AreEqual(1, overview.AttackerSitesGained);
+        Assert.AreEqual(1, overview.DefenderSitesLost);
+        Assert.AreEqual(0, overview.AttackerSitesPlundered);
+
+        Battle quietBattle = new([P("id", "21"), P("war_eventcol", "10")], world);
+        var ranked = new[] { quietBattle, battle }
+            .SortByProperty("defenderSitesLost", "desc").ToList();
+        Assert.AreSame(battle, ranked[0]);
+        Assert.AreSame(quietBattle, ranked[1]);
     }
 
     [TestMethod]
