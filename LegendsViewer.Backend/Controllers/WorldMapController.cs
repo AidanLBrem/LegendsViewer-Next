@@ -140,7 +140,13 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
         var battlesQuery = _worldDataService.EventCollections.OfType<Battle>();
         if (activeOnly)
         {
-            battlesQuery = battlesQuery.Where(b => b.EndYear == -1 || ((b.ParentCollection as War)?.EndYear == -1));
+            // A battle with no recorded end date is not necessarily ongoing.
+            // Otherwise ancient battles are returned with every map load,
+            // including those in wars that ended centuries earlier.
+            int recentYear = Math.Max(0, _worldDataService.CurrentYear - 1);
+            battlesQuery = battlesQuery.Where(b =>
+                (b.ParentCollection is War war ? war.EndYear == -1 : b.EndYear == -1) &&
+                (_worldDataService.CurrentYear <= 0 || b.StartYear >= recentYear));
         }
 
         foreach (var battle in battlesQuery)
