@@ -18,6 +18,7 @@
       <div class="site-visibility-options atlas-options" role="group" aria-label="Historical atlas overlays">
         <strong>Historical atlas</strong>
         <label><input type="checkbox" v-model="showEstimatedTerritories" :disabled="!historyReady" /> Estimated territories</label>
+        <label><input type="checkbox" v-model="showBorderLines" :disabled="!historyReady || !showEstimatedTerritories" /> Show border lines</label>
         <label><input type="checkbox" v-model="filterMinorPowers" :disabled="!historyReady" /> Filter minor powers (≤1 site)</label>
         <label><input type="checkbox" v-model="showHistoricalBattles" :disabled="!historyReady" /> Battles / sieges</label>
         <label><input type="checkbox" v-model="showHistoricalCampaigns" :disabled="!historyReady" /> War campaigns</label>
@@ -998,6 +999,7 @@ export default defineComponent({
     const showNecromancers = ref(true);
     const filterMinorPowers = ref(false);
     const showEstimatedTerritories = ref(true);
+    const showBorderLines = ref(true);
     const showHistoricalBattles = ref(true);
     const showHistoricalCampaigns = ref(true);
     const showHistoricalSiteOutcomes = ref(true);
@@ -1139,7 +1141,7 @@ export default defineComponent({
       const key = [
         territoryBoundaryYear(year), ownerVisibilityVersion,
         showMonasteries.value, showCamps.value, showCaves.value,
-        showNecromancers.value, filterMinorPowers.value
+        showNecromancers.value, filterMinorPowers.value, showBorderLines.value
       ].join(':');
       if (key === territorySnapshotKey && territoryOverlay.value) {
         if (!map.hasLayer(territoryOverlay.value)) territoryOverlay.value.addTo(map);
@@ -1176,7 +1178,7 @@ export default defineComponent({
       );
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
-      const image = territoryGridToDataUrl(grid, oceanMask, width, height);
+      const image = territoryGridToDataUrl(grid, oceanMask, width, height, showBorderLines.value);
       activeTerritoryGrid = grid;
       activeTerritoryOwners = ownerLinks;
       if (!territoryOverlay.value) {
@@ -1325,7 +1327,7 @@ export default defineComponent({
     watch(
       [
         selectedYear, siteColorMode, showMonasteries, showCamps, showCaves,
-        showNecromancers, filterMinorPowers, showEstimatedTerritories,
+        showNecromancers, filterMinorPowers, showEstimatedTerritories, showBorderLines,
         showHistoricalBattles, showHistoricalCampaigns,
         showHistoricalSiteOutcomes
       ],
@@ -2109,6 +2111,7 @@ export default defineComponent({
       showNecromancers,
       filterMinorPowers,
       showEstimatedTerritories,
+      showBorderLines,
       showHistoricalBattles,
       showHistoricalCampaigns,
       showHistoricalSiteOutcomes,
