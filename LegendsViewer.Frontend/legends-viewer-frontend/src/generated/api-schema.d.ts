@@ -15972,6 +15972,8 @@ export interface components {
             defenderSitesLostCount?: number | null;
             /** Format: int32 */
             defenderSitesPlunderedCount?: number | null;
+            /** Format: int32 */
+            unattributedSitesCount?: number | null;
         };
         WorldObjectDtoPaginatedResponse: {
             items?: components["schemas"]["WorldObjectDto"][] | null;
