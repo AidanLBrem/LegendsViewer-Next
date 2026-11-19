@@ -1039,6 +1039,137 @@ export default defineComponent({
       }, 650);
     };
 
+    const atlasEventsEnabled = () =>
+      showHistoricalBattles.value || showHistoricalCampaigns.value || showHistoricalSiteOutcomes.value;
+
+    const territoryBoundaryYear = (year: number): number => {
+      let low = 0;
+      let high = territoryChangeYears.length;
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (territoryChangeYears[mid] <= year) low = mid + 1;
+        else high = mid;
+      }
+      return territoryChangeYears[Math.max(0, low - 1)] ?? 0;
+    };
+
+    const refreshTerritories = async (generation: number) => {
+      const map = leafletMap.value;
+      if (!map || disposed) return;
+      if (!showEstimatedTerritories.value) {
+        if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
+        territorySnapshotKey = '';
+        return;
+      }
+
+      const width = worldStore.world?.width ?? 0;
+      const height = worldStore.world?.height ?? 0;
+      if (!width || !height) return;
+      const year = selectedYear.value;
+      const key = [
+        territoryBoundaryYear(year),
+        showMonasteries.value, showCamps.value, showCaves.value
+      ].join(':');
+      if (key === territorySnapshotKey && territoryOverlay.value) {
+        if (!map.hasLayer(territoryOverlay.value)) territoryOverlay.value.addTo(map);
+        return;
+      }
+
+      const sites = toRaw(worldStore.world?.siteMarkers ?? []) as SiteMarker[];
+      const seeds = getTerritorySeeds(
+        sites, year, historyMaxYear.value,
+        site => siteTypeIsVisible(site as SiteMarker)
+      );
+      const grid = await createTerritoryGrid(
+        width, height, seeds, yieldToBrowser,
+        () => disposed || generation !== historyUpdateGeneration || !showEstimatedTerritories.value
+      );
+      if (!grid || disposed || generation !== historyUpdateGeneration) return;
+
+      const image = territoryGridToDataUrl(grid);
+      if (!territoryOverlay.value) {
+        const bounds: L.LatLngBoundsExpression = [[0, 0], [height * 8, width * 8]];
+        territoryOverlay.value = L.imageOverlay(image, bounds, {
+          pane: 'territoryPane', interactive: false, opacity: 0.75
+        });
+      } else {
+        territoryOverlay.value.setUrl(image);
+      }
+      if (!map.hasLayer(territoryOverlay.value)) territoryOverlay.value.addTo(map);
+      const element = territoryOverlay.value.getElement();
+      if (element) {
+        element.style.imageRendering = 'pixelated';
+        element.style.pointerEvents = 'none';
+      }
+      territorySnapshotKey = key;
+    };
+
+    const refreshHistoricalWarfare = async (generation: number) => {
+      const layer = historicalWarfareLayer.value;
+      if (!layer || disposed) return;
+      unregisterWarfareItems(layer);
+      layer.clearLayers();
+      const data = historicalWarfareData;
+      if (!data || !atlasEventsEnabled()) {
+        syncTileBadges();
+        return;
+      }
+
+      const year = selectedYear.value;
+      let drawn = 0;
+      if (showHistoricalCampaigns.value) {
+        for (const war of data.wars ?? []) {
+          if (disposed || generation !== historyUpdateGeneration) return;
+          if (!isWarInYear(war, year)) continue;
+          // Lines connect known faction locations, not an observed army route.
+          renderWarOverlay({ ...war, isActive: true }, layer, router, toLatLng, registerTileItem);
+          if (++drawn % 75 === 0) await yieldToBrowser();
+        }
+      }
+      if (showHistoricalBattles.value) {
+        for (const battle of data.battles ?? []) {
+          if (disposed || generation !== historyUpdateGeneration) return;
+          if (!isBattleInYear(battle, year)) continue;
+          renderBattleMarker({ ...battle, isActive: false }, layer, router, toLatLng, registerTileItem);
+          if (++drawn % 75 === 0) await yieldToBrowser();
+        }
+      }
+      if (showHistoricalSiteOutcomes.value) {
+        for (const event of data.siteConquests ?? []) {
+          if (disposed || generation !== historyUpdateGeneration) return;
+          if (!isSiteConquestInYear(event, year)) continue;
+          renderSiteConquestMarker(event, layer, router, toLatLng, registerTileItem);
+          if (++drawn % 75 === 0) await yieldToBrowser();
+        }
+      }
+      syncTileBadges();
+    };
+
+    const loadHistoricalWarfare = async () => {
+      if (historicalDataLoading || historicalWarfareData || !historyReady.value ||
+        !atlasEventsEnabled() || disposed) return;
+      historicalDataLoading = true;
+      historicalStatus.value = 'Loading recorded wars, battles, and conquests...';
+      try {
+        const data = await mapStore.loadWarfareMap(false) as WarfareMapDto | null;
+        if (disposed || !data) {
+          if (!disposed) historicalStatus.value = 'Historical warfare data unavailable.';
+          return;
+        }
+        historicalWarfareData = data;
+        const additionalDates = getWarfareChangeYears(data, historyMaxYear.value);
+        ownershipChangeYears = [...new Set([...ownershipChangeYears, ...additionalDates])]
+          .sort((a, b) => a - b);
+        historicalStatus.value = '';
+        await refreshHistoricalWarfare(historyUpdateGeneration);
+      } catch (error) {
+        console.error('Unable to load historical warfare:', error);
+        historicalStatus.value = 'Unable to load historical warfare events.';
+      } finally {
+        historicalDataLoading = false;
+      }
+    };
+
     // Change existing Canvas marker colors/owner layers in place. Avoid
     // recreating the world map and cancel stale updates while scrubbing.
     const applyHistoryYear = async () => {
@@ -1079,6 +1210,13 @@ export default defineComponent({
           }
           if (i % 200 === 199) await yieldToBrowser();
         }
+        if (disposed || generation !== historyUpdateGeneration) return;
+        await refreshTerritories(generation);
+        if (disposed || generation !== historyUpdateGeneration) return;
+        await refreshHistoricalWarfare(generation);
+      } catch (error) {
+        console.error('Could not update historical atlas:', error);
+        historicalStatus.value = 'Historical atlas rendering failed; check the console.';
       } finally {
         if (generation === historyUpdateGeneration) {
           historyBusy.value = false;
@@ -1090,7 +1228,11 @@ export default defineComponent({
     };
 
     watch(
-      [selectedYear, siteColorMode, showMonasteries, showCamps, showCaves],
+      [
+        selectedYear, siteColorMode, showMonasteries, showCamps, showCaves,
+        showEstimatedTerritories, showHistoricalBattles, showHistoricalCampaigns,
+        showHistoricalSiteOutcomes
+      ],
       () => { void applyHistoryYear(); }
     );
 
@@ -1099,6 +1241,9 @@ export default defineComponent({
     const controlLayers = shallowRef<L.Control>();
 
     const warfareLayer = shallowRef<LayerGroup | null>(null);
+
+    watch([showHistoricalBattles, showHistoricalCampaigns, showHistoricalSiteOutcomes],
+      () => { if (atlasEventsEnabled()) void loadHistoricalWarfare(); });
 
     const tileItemsMap = new Map<string, MapTileItem[]>();
 
