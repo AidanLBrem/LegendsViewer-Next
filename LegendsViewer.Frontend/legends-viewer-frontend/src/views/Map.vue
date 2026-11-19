@@ -28,6 +28,7 @@
         <strong>History</strong>
         <span>Year {{ selectedYear.toLocaleString() }}</span>
       </div>
+      <div v-if="historicalStatus" class="text-caption" role="status">{{ historicalStatus }}</div>
       <div class="history-stepper__actions">
         <button type="button" title="Previous ownership change" aria-label="Previous ownership change"
           :disabled="selectedYear <= 0" @click="jumpToHistoryChange(-1)">⏮</button>
@@ -936,12 +937,19 @@ export default defineComponent({
     const leafletMap = shallowRef<LeafletMap>();
     const currentOverlay = shallowRef<ImageOverlay | null>(null);
     const siteCountLayer = shallowRef<LayerGroup | null>(null);
+    const territoryOverlay = shallowRef<ImageOverlay | null>(null);
+    const historicalWarfareLayer = shallowRef<LayerGroup | null>(null);
     const highlightLayer = shallowRef<LayerGroup | null>(null);
     const siteMarkersMap = new Map<number, { marker: L.Layer; popup: HTMLElement }>();
     const siteColorMode = ref<'current' | 'origin'>('current');
     const showMonasteries = ref(true);
     const showCamps = ref(true);
     const showCaves = ref(true);
+    const showEstimatedTerritories = ref(true);
+    const showHistoricalBattles = ref(true);
+    const showHistoricalCampaigns = ref(true);
+    const showHistoricalSiteOutcomes = ref(true);
+    const historicalStatus = ref('');
     const mapError = ref('');
     const mapProgress = ref('');
     const historyReady = ref(false);
@@ -959,6 +967,10 @@ export default defineComponent({
     let disposed = false;
     let warfareLoaded = false;
     let warfareLoading = false;
+    let historicalWarfareData: WarfareMapDto | null = null;
+    let historicalDataLoading = false;
+    let territorySnapshotKey = '';
+    let territoryChangeYears: number[] = [];
 
     const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
@@ -1117,9 +1129,10 @@ export default defineComponent({
       bindTileMarkerPopup(item.marker, item.x, item.y);
     };
 
-    const unregisterWarfareItems = () => {
+    const unregisterWarfareItems = (layer: LayerGroup | null) => {
+      if (!layer) return;
       for (const [key, items] of tileItemsMap.entries()) {
-        const filtered = items.filter(i => i.type === 'site');
+        const filtered = items.filter(i => i.layerGroup !== layer);
         if (filtered.length > 0) {
           tileItemsMap.set(key, filtered);
         } else {
@@ -1559,7 +1572,7 @@ export default defineComponent({
         const data: WarfareMapDto | null = await mapStore.loadWarfareMap(true);
         if (!data || disposed || renderGeneration !== generation || !warfareLayer.value) return;
 
-        unregisterWarfareItems();
+        unregisterWarfareItems(warfareLayer.value);
         warfareLayer.value.clearLayers();
 
         let processed = 0;
@@ -1781,6 +1794,11 @@ export default defineComponent({
       showMonasteries,
       showCamps,
       showCaves,
+      showEstimatedTerritories,
+      showHistoricalBattles,
+      showHistoricalCampaigns,
+      showHistoricalSiteOutcomes,
+      historicalStatus,
       mapError,
       mapProgress,
       historyReady,
