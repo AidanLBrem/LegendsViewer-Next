@@ -108,6 +108,52 @@ public class WarfareSiteOutcomesTests
     }
 
     [TestMethod]
+    public void CivilWarSides_SharingParentCivilization_UseExactSideIdentity()
+    {
+        using World world = new();
+        Entity parent = new([], world) { Id = 1, Name = "Empire", IsCiv = true };
+        Entity rebels = new([], world) { Id = 2, Name = "Rebels", Parent = parent };
+        Entity loyalists = new([], world) { Id = 3, Name = "Loyalists", Parent = parent };
+        Site town = new([], world) { Id = 4, Name = "Disputed Town" };
+        world.Entities.AddRange([parent, rebels, loyalists]);
+
+        SiteConquered capture = new([P("id", "5")], world)
+        {
+            Attacker = rebels,
+            Defender = loyalists,
+            Site = town,
+            ConquerType = SiteConqueredType.Conquest
+        };
+
+        WarfareSiteOutcomesDto outcomes = WarfareSiteOutcomesDto.FromConquerings(
+            [capture], rebels, loyalists);
+        Assert.AreEqual(1, outcomes.AttackerGained.Count);
+        Assert.AreEqual(1, outcomes.DefenderLost.Count);
+    }
+
+    [TestMethod]
+    public void ThirdPartyConquest_IsNotMisattributedToWarSide()
+    {
+        var setup = CreateWar();
+        using World world = setup.World;
+        Entity thirdParty = new([], world) { Id = 3, Name = "Unaligned Mercenaries" };
+        world.Entities.Add(thirdParty);
+        Site town = new([], world) { Id = 400, Name = "Mercenary Capture" };
+        SiteConquered capture = new([P("id", "401")], world)
+        {
+            Attacker = thirdParty,
+            Defender = setup.Defender,
+            Site = town,
+            ConquerType = SiteConqueredType.Conquest
+        };
+
+        var outcomes = WarfareSiteOutcomesDto.FromConquerings(
+            [capture], setup.Attacker, setup.Defender);
+        Assert.AreEqual(0, outcomes.AttackerGained.Count);
+        Assert.AreEqual(0, outcomes.DefenderLost.Count);
+    }
+
+    [TestMethod]
     public void UnattributedConquest_IsNotSilentlyCreditedToEitherSide()
     {
         var setup = CreateWar();
