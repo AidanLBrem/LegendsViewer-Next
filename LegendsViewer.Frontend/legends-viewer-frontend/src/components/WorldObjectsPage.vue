@@ -80,7 +80,9 @@
                 <v-card-text>
                     <div v-if="isWarfareOverview" class="text-caption mb-2">
                         Atk = attacking side; Def = defending side. Site counts represent
-                        recorded gains, losses and plunderings. Click a column heading to sort all results.
+                        recorded gains, losses and plunderings. "Other sites" lists linked
+                        territorial events whose war side cannot be determined.
+                        Click a column heading to sort all results.
                         <span v-if="title === 'Wars'">
                             Troop figures are summed battle deployments, not unique soldiers or armies at war start.
                         </span>
