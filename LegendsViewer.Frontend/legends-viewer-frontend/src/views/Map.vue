@@ -55,7 +55,9 @@
         No dated site ownership records are available for this world.
       </small>
       <small v-else>
-        Sites follow recorded founding and destruction dates. Battles, sieges, campaigns and conquests follow the selected year. Territory influence is estimated, not exact. The separate modern warfare layer is independent.
+        Recorded battles, sieges, and site actions appear in their event year.
+        Dashed campaign lines connect known faction locations, not recorded army movements.
+        Shaded territory is estimated from settlement locations, not exact borders.
       </small>
     </section>
   </div>
@@ -372,7 +374,8 @@ function renderWarOverlay(
   targetLayer: LayerGroup,
   router: Router,
   toLatLng: (x: number, y: number) => L.LatLngTuple,
-  onRegisterItem?: (item: MapTileItem) => void
+  onRegisterItem?: (item: MapTileItem) => void,
+  historical = false
 ): { points: L.LatLngTuple[]; mainMarker?: L.Marker } {
   const points: L.LatLngTuple[] = [];
   const popup = createWarPopup(war, router);
@@ -387,13 +390,16 @@ function renderWarOverlay(
 
     const polyline = L.polyline([start, end], {
       color: color,
-      weight: 7,
-      opacity: 0.9,
-      dashArray: war.isActive ? undefined : '10, 10',
+      weight: historical ? 3 : 7,
+      opacity: historical ? 0.65 : 0.9,
+      dashArray: historical ? '6, 9' : (war.isActive ? undefined : '10, 10'),
       pane: 'overlayPane',
+      // Historical connections are only approximations between known faction
+      // settlements. Do not let them intercept site selection.
+      interactive: !historical,
     });
 
-    polyline.bindPopup(popup);
+    if (!historical) polyline.bindPopup(popup);
     targetLayer.addLayer(polyline as any);
 
     // Calculate correct rotation angle for UP-pointing (North = 0 deg) SVG arrowhead
@@ -1129,7 +1135,7 @@ export default defineComponent({
           if (disposed || generation !== historyUpdateGeneration) return;
           if (!isWarInYear(war, year)) continue;
           // Lines connect known faction locations, not an observed army route.
-          renderWarOverlay({ ...war, isActive: true }, layer, router, toLatLng, registerTileItem);
+          renderWarOverlay({ ...war, isActive: true }, layer, router, toLatLng, registerTileItem, true);
           if (++drawn % 75 === 0) await yieldToBrowser();
         }
       }
