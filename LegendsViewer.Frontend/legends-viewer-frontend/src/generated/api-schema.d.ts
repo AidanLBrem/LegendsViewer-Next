@@ -15648,6 +15648,22 @@ export interface components {
             typeAsString?: string | null;
             type?: components["schemas"]["SiteType"];
             coordinates?: components["schemas"]["Location"][] | null;
+            ownerHistory?: components["schemas"]["SiteOwnershipPeriodDto"][] | null;
+        };
+        SiteOwnershipPeriodDto: {
+            /** Format: int32 */
+            startYear?: number;
+            /** Format: int32 */
+            endYear?: number;
+            owner?: string | null;
+            ownerText?: string | null;
+            /** Format: int32 */
+            ownerId?: number | null;
+            /** Format: int32 */
+            currentOwnerId?: number | null;
+            actualOwner?: string | null;
+            color?: string | null;
+            startCause?: string | null;
         };
         SiteProperty: {
             /** Format: int32 */
