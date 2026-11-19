@@ -109,7 +109,9 @@ public class WarfareSiteOutcomesDto
             // Prefer the actual events when they exist.
             if (!hasConcreteOutcome)
             {
-                Site? site = conquest.Site ?? childEvents.Select(GetSite).FirstOrDefault(x => x != null);
+                Site? site = conquest.Site ??
+                    childEvents.Select(GetSite).FirstOrDefault(x => x != null) ??
+                    conquest.Battle?.GetSubEvents().Select(GetSite).FirstOrDefault(x => x != null);
                 switch (conquest.ConquerType)
                 {
                     case SiteConqueredType.Conquest:
