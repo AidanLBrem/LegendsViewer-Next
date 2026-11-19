@@ -53,25 +53,11 @@ public class Battle : EventCollection, IHasComplexSubtype
     [JsonIgnore]
     public Dictionary<CreatureInfo, int> Deaths { get; set; } = [];
 
-    // Link conquests through either the battle or its parent war. In exported
-    // legends data these references can be attached from either direction.
-    public WarfareSiteOutcomesDto SiteOutcomes
-    {
-        get
-        {
-            IEnumerable<SiteConquered> conquests = EventCollections.OfType<SiteConquered>();
-            if (Conquering != null)
-            {
-                conquests = conquests.Append(Conquering);
-            }
-            if (ParentCollection is War war)
-            {
-                conquests = conquests.Concat(war.Conquerings.Where(c => c.Battle == this));
-            }
-
-            return WarfareSiteOutcomesDto.FromConquerings(conquests, Attacker, Defender);
-        }
-    }
+    // Conquests and raw site events may be attached to a battle or to
+    // the surrounding war. Use explicit battle links and parent ownership.
+    private WarfareSiteOutcomesDto? _siteOutcomes;
+    public WarfareSiteOutcomesDto SiteOutcomes =>
+        _siteOutcomes ??= WarfareSiteOutcomesDto.FromBattle(this);
 
     // Numeric counterparts to the detailed site lists. Keeping these on the
     // domain objects lets the existing server-side sorter order all records
