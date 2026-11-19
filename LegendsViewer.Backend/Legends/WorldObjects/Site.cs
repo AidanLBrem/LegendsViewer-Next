@@ -81,6 +81,7 @@ public class Site : WorldObject, IHasCoordinates
 
     // The original civilization ID in the legends XML is retained separately
     // from the site's changing owner.
+    [JsonIgnore]
     public int? OriginalCivId { get; private set; }
 
     [JsonIgnore]
