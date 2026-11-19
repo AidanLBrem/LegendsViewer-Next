@@ -246,6 +246,7 @@ public class World : IDisposable, IWorld
 
         const double goldenAngle = 137.50776405003785;
         List<Entity> orderedNations = nations.OrderBy(entity => entity.Id).ToList();
+        HashSet<int> usedColors = [];
         for (int i = 0; i < orderedNations.Count; i++)
         {
             double hue = (i * goldenAngle) % 360;
@@ -262,7 +263,13 @@ public class World : IDisposable, IWorld
                 _ => 0.96
             };
 
-            orderedNations[i].LineColor = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
+            Color color = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
+            while (!usedColors.Add(color.ToArgb()))
+            {
+                hue = (hue + 7) % 360;
+                color = Color.FromArgb(176, Formatting.HsvToColor(hue, saturation, value));
+            }
+            orderedNations[i].LineColor = color;
         }
 
         // Keep the race palette for race-based charts, independently of nation colors.
