@@ -92,30 +92,39 @@ public class Battle : EventCollection, IHasComplexSubtype
 
     public List<string> NotableDeathLinks => NotableDeaths.ConvertAll(x => x.ToLink(true, this));
 
-    public ChartDataDto DeathsByRace
+    public ChartDataDto DeathsByRace => BuildDeathsByRaceChart(Deaths);
+
+    public ChartDataDto AttackerDeathsByRace => BuildDeathsByRaceChart(Attackers
+        .Where(squad => squad.Deaths > 0)
+        .GroupBy(squad => squad.Race)
+        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Deaths))));
+
+    public ChartDataDto DefenderDeathsByRace => BuildDeathsByRaceChart(Defenders
+        .Where(squad => squad.Deaths > 0)
+        .GroupBy(squad => squad.Race)
+        .Select(group => new KeyValuePair<CreatureInfo, int>(group.Key, group.Sum(squad => squad.Deaths))));
+
+    private ChartDataDto BuildDeathsByRaceChart(IEnumerable<KeyValuePair<CreatureInfo, int>> deaths)
     {
-        get
+        ChartDataDto chart = new();
+        ChartDatasetDto dataset = new();
+        foreach (var death in deaths.Where(entry => entry.Value > 0).OrderByDescending(entry => entry.Value))
         {
-            ChartDataDto chart = new();
-            ChartDatasetDto dataset = new();
-            foreach (var death in Deaths.Where(entry => entry.Value > 0).OrderByDescending(entry => entry.Value))
+            chart.Labels.Add(death.Key.NamePlural);
+            dataset.Data.Add(death.Value);
+            if (World != null && World.MainRaces.TryGetValue(death.Key, out var raceColor))
             {
-                chart.Labels.Add(death.Key.NamePlural);
-                dataset.Data.Add(death.Value);
-                if (World != null && World.MainRaces.TryGetValue(death.Key, out var raceColor))
-                {
-                    dataset.BorderColor.Add(raceColor.ToRgbaString());
-                    dataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
-                }
-                else
-                {
-                    dataset.BorderColor.Add(Color.SlateGray.ToRgbaString());
-                    dataset.BackgroundColor.Add(Color.SlateGray.ToRgbaString(0.2f));
-                }
+                dataset.BorderColor.Add(raceColor.ToRgbaString());
+                dataset.BackgroundColor.Add(raceColor.ToRgbaString(0.2f));
             }
-            chart.Datasets.Add(dataset);
-            return chart;
+            else
+            {
+                dataset.BorderColor.Add(Color.SlateGray.ToRgbaString());
+                dataset.BackgroundColor.Add(Color.SlateGray.ToRgbaString(0.2f));
+            }
         }
+        chart.Datasets.Add(dataset);
+        return chart;
     }
 
     public int AttackerDeathCount { get; set; }
