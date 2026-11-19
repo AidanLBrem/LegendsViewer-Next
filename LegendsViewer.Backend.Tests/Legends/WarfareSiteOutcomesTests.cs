@@ -83,12 +83,12 @@ public class WarfareSiteOutcomesTests
         // The paginated overview DTO must surface the same counts as the
         // detail page, rather than dropping them from the table response.
         WorldObjectDto overview = new(war);
-        Assert.AreEqual(1, overview.AttackerSitesGained);
-        Assert.AreEqual(1, overview.AttackerSitesLost);
-        Assert.AreEqual(1, overview.AttackerSitesPlundered);
-        Assert.AreEqual(1, overview.DefenderSitesGained);
-        Assert.AreEqual(2, overview.DefenderSitesLost);
-        Assert.AreEqual(0, overview.DefenderSitesPlundered);
+        Assert.AreEqual(1, overview.AttackerSitesGainedCount);
+        Assert.AreEqual(1, overview.AttackerSitesLostCount);
+        Assert.AreEqual(1, overview.AttackerSitesPlunderedCount);
+        Assert.AreEqual(1, overview.DefenderSitesGainedCount);
+        Assert.AreEqual(2, overview.DefenderSitesLostCount);
+        Assert.AreEqual(0, overview.DefenderSitesPlunderedCount);
 
         // Sorting is applied to the full domain collection before pagination.
         War quietWar = new([
@@ -128,9 +128,9 @@ public class WarfareSiteOutcomesTests
         Assert.AreEqual(0, outcomes.DefenderGained.Count);
 
         WorldObjectDto overview = new(battle);
-        Assert.AreEqual(1, overview.AttackerSitesGained);
-        Assert.AreEqual(1, overview.DefenderSitesLost);
-        Assert.AreEqual(0, overview.AttackerSitesPlundered);
+        Assert.AreEqual(1, overview.AttackerSitesGainedCount);
+        Assert.AreEqual(1, overview.DefenderSitesLostCount);
+        Assert.AreEqual(0, overview.AttackerSitesPlunderedCount);
 
         Battle quietBattle = new([P("id", "21"), P("war_eventcol", "10")], world);
         var ranked = new[] { quietBattle, battle }
