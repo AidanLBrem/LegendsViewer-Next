@@ -19,11 +19,14 @@ public class NationSiteColorTests
         var dwarvesA = new Entity([], world) { Id = 1, Name = "First Dwarven Kingdom", IsCiv = true };
         var dwarvesB = new Entity([], world) { Id = 2, Name = "Second Dwarven Kingdom", IsCiv = true };
         var necromancers = new Entity([], world) { Id = 3, Name = "Tower Necromancers" };
+        var otherNecromancers = new Entity([], world) { Id = 4, Name = "Second Tower Necromancers" };
         var tower = new Site([], world) { Id = 10, SiteType = LegendsViewer.Backend.Legends.Enums.SiteType.Tower };
+        var secondTower = new Site([], world) { Id = 11, SiteType = LegendsViewer.Backend.Legends.Enums.SiteType.Tower };
 
-        world.Entities.AddRange([dwarvesA, dwarvesB, necromancers]);
+        world.Entities.AddRange([dwarvesA, dwarvesB, necromancers, otherNecromancers]);
         tower.OwnerHistory.Add(new OwnerPeriod(tower, necromancers, 15, "founded"));
-        world.Sites.Add(tower);
+        secondTower.OwnerHistory.Add(new OwnerPeriod(secondTower, otherNecromancers, 18, "founded"));
+        world.Sites.AddRange([tower, secondTower]);
 
         typeof(World).GetMethod("GenerateCivColors", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(world, null);
@@ -31,6 +34,7 @@ public class NationSiteColorTests
         Assert.AreNotEqual(dwarvesA.LineColor.ToArgb(), dwarvesB.LineColor.ToArgb());
         Assert.AreNotEqual(dwarvesA.LineColor.ToArgb(), necromancers.LineColor.ToArgb());
         Assert.AreNotEqual(dwarvesB.LineColor.ToArgb(), necromancers.LineColor.ToArgb());
+        Assert.AreNotEqual(necromancers.LineColor.ToArgb(), otherNecromancers.LineColor.ToArgb());
         Assert.AreNotEqual(Color.Empty, necromancers.LineColor);
     }
 
