@@ -4,6 +4,7 @@ import WorldObjectsPage from '../components/WorldObjectsPage.vue';
 import { TableHeader } from '../types/legends';
 
 import EntityFilter from '../components/filter/EntityFilter.vue';
+import NationCultureComparison from '../components/NationCultureComparison.vue';
 
 const store = useEntityStore();
 const icon = "mdi-account-group";
@@ -26,6 +27,9 @@ const tableHeaders: TableHeader[] = [
     <WorldObjectsPage :store="store" :icon="icon" :title="title" :subtitle="subtitle" :overviewTitle="overviewTitle"
         :overviewSubtitle="overviewSubtitle" :wikiKeyWord="wikiKeyWord" :tableHeaders="tableHeaders"
         :showFilters="true">
+        <template v-slot:type-specific-before-table>
+            <NationCultureComparison />
+        </template>
         <template v-slot:type-specific-filter="{ filters }">
             <EntityFilter :title="title" :filters="filters"
                 @update:filters="val => filters.splice(0, filters.length, ...val)" />
