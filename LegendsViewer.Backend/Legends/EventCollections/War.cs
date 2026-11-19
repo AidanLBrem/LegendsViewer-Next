@@ -22,6 +22,73 @@ public class War : EventCollection, IHasComplexSubtype
     public int AttackerDeathCount { get; set; }
     public int DefenderDeathCount { get; set; }
 
+    // Wars can involve more than the two civilizations that name the war.
+    // Dwarf Fortress exports multiple aggressor/defender IDs and also an
+    // involved_enid roster. Keep the sides separate, as involvement alone
+    // does not establish which coalition a civilization fought for.
+    [JsonIgnore]
+    public List<Entity> AttackingParticipants { get; } = [];
+    [JsonIgnore]
+    public List<Entity> DefendingParticipants { get; } = [];
+    [JsonIgnore]
+    public List<Entity> OtherParticipants { get; } = [];
+
+    public string GetParticipantRole(Entity participant)
+    {
+        static bool Matches(Entity member, Entity nation) =>
+            member == nation || member.Id == nation.Id ||
+            member.Parent == nation || member.CurrentCiv == nation;
+
+        bool attacking = AttackingParticipants.Any(member => Matches(member, participant));
+        bool defending = DefendingParticipants.Any(member => Matches(member, participant));
+
+        if (attacking && defending)
+        {
+            return "Both sides";
+        }
+        if (attacking)
+        {
+            return "Attacking side";
+        }
+        if (defending)
+        {
+            return "Defending side";
+        }
+        return "Participant (side unspecified)";
+    }
+
+    public void RegisterParticipant(Entity? participant, bool? attackingSide = null)
+    {
+        if (participant == null)
+        {
+            return;
+        }
+
+        List<Entity> roster = attackingSide switch
+        {
+            true => AttackingParticipants,
+            false => DefendingParticipants,
+            null => OtherParticipants
+        };
+        if (!roster.Contains(participant))
+        {
+            roster.Add(participant);
+        }
+
+        // Preserve the existing parent-group association, and also link
+        // subsidiary participants back to their civilization.
+        foreach (Entity entity in new Entity?[]
+                 { participant, participant.Parent, participant.CurrentCiv }
+                 .OfType<Entity>().Distinct())
+        {
+            if (!entity.Wars.Contains(this))
+            {
+                entity.Wars.Add(this);
+            }
+            entity.AddEventCollection(this);
+        }
+    }
+
     // These are battle deployments, NOT unique soldiers or an independently
     // recorded army at the start of the war. A soldier appearing in two
     // battles counts twice. Map local attacking/defending positions back to
@@ -125,6 +192,25 @@ public class War : EventCollection, IHasComplexSubtype
                     Subtitle = $"{Defender.ToLink(true, this)} (Deaths: {DefenderDeathCount} ✝)",
                 });
             }
+            foreach ((string title, List<Entity> participants) in new[]
+            {
+                ("Attacking participants", AttackingParticipants),
+                ("Defending participants", DefendingParticipants),
+                ("Other involved civilizations", OtherParticipants
+                    .Where(entity => !AttackingParticipants.Contains(entity) &&
+                                     !DefendingParticipants.Contains(entity)).ToList())
+            })
+            {
+                if (participants.Count > 0)
+                {
+                    list.Add(new ListItemDto
+                    {
+                        Title = title,
+                        Subtitle = string.Join(", ", participants.Select(entity => entity.ToLink(true, this)))
+                    });
+                }
+            }
+
             WarfareSiteOutcomesDto sites = SiteOutcomes;
             list.Add(new ListItemDto
             {
@@ -346,16 +432,19 @@ public class War : EventCollection, IHasComplexSubtype
             switch (property.Name)
             {
                 case "name": Name = Formatting.InitCaps(property.Value); break;
-                case "aggressor_ent_id": Attacker = world.GetEntity(Convert.ToInt32(property.Value)); break;
-                case "defender_ent_id": Defender = world.GetEntity(Convert.ToInt32(property.Value)); break;
+                case "aggressor_ent_id":
+                    Attacker = world.GetEntity(Convert.ToInt32(property.Value));
+                    RegisterParticipant(Attacker, true);
+                    break;
+                case "defender_ent_id":
+                    Defender = world.GetEntity(Convert.ToInt32(property.Value));
+                    RegisterParticipant(Defender, false);
+                    break;
+                case "involved_enid":
+                    RegisterParticipant(world.GetEntity(Convert.ToInt32(property.Value)));
+                    break;
             }
         }
-
-        Defender?.Wars.Add(this);
-        Defender?.Parent?.Wars.Add(this);
-
-        Attacker?.Wars.Add(this);
-        Attacker?.Parent?.Wars.Add(this);
 
         if (EndYear >= 0)
         {
@@ -365,12 +454,6 @@ public class War : EventCollection, IHasComplexSubtype
         {
             Length = world.Events.Last().Year - StartYear;
         }
-        Attacker?.AddEventCollection(this);
-        if (Defender != Attacker)
-        {
-            Defender?.AddEventCollection(this);
-        }
-
         Icon = HtmlStyleUtil.GetIconString("sword-cross");
     }
 
