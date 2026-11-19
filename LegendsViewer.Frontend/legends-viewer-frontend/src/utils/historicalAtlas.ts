@@ -24,6 +24,9 @@ export function getTerritorySeeds(
   const seeds: TerritorySeed[] = [];
   for (const site of sites) {
     if (!includeSite(site)) continue;
+    // Sites without any historical ownership can be shown at the current
+    // year, but must not project modern control centuries into the past.
+    if (year < presentYear && !(site.ownerHistory?.length)) continue;
     const owner = getSiteOwnerAtYear(site, year, presentYear);
     // Do not invent territory from unclaimed or undated ownership.
     if (!owner.visible || owner.ownerId == null || owner.ownerText === 'Unclaimed') continue;
