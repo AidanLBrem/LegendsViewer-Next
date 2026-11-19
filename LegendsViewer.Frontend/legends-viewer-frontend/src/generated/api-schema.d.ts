@@ -15654,6 +15654,9 @@ export interface components {
             type?: components["schemas"]["SiteType"];
             coordinates?: components["schemas"]["Location"][] | null;
             ownerHistory?: components["schemas"]["SiteOwnershipPeriodDto"][] | null;
+            /** Format: int32 */
+            createdYear?: number | null;
+            destroyedYears?: number[] | null;
         };
         SiteOwnershipPeriodDto: {
             /** Format: int32 */
@@ -15669,6 +15672,7 @@ export interface components {
             actualOwner?: string | null;
             color?: string | null;
             startCause?: string | null;
+            endCause?: string | null;
         };
         SiteProperty: {
             /** Format: int32 */
