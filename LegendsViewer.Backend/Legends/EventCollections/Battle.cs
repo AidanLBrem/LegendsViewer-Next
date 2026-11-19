@@ -479,6 +479,8 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         if (ParentCollection is War parentWar)
         {
+            parentWar.RegisterOpponents(Attacker, Defender);
+
             bool battleAttackerBelongsToWarAttacker =
                 BelongsToWarSide(Attacker, parentWar.Attacker) ||
                 (!BelongsToWarSide(Attacker, parentWar.Defender) &&
