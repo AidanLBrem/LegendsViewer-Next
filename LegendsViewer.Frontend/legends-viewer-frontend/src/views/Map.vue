@@ -788,25 +788,43 @@ export default defineComponent({
       }
 
       try {
-        await Promise.all([
-          worldStore.loadWorld(),
-          mapStore.loadWorldMap('Large')
-        ]);
+        mapProgress.value = 'Loading world data...';
+        await worldStore.loadWorld();
+        if (disposed) return;
 
-        if (!disposed && mapStore.worldMapMax && worldStore.world?.width && worldStore.world?.height) {
-          await loadImageToMap(mapStore.worldMapMax);
+        const width = worldStore.world?.width ?? 0;
+        const height = worldStore.world?.height ?? 0;
+        if (!width || !height) {
+          mapError.value = 'World dimensions are unavailable. Try reloading the world.';
+          return;
+        }
+
+        // The large map uses 10 px per world tile. Limit image dimensions
+        // to avoid allocating hundreds of megabytes for large DF worlds.
+        const useLargeImage = width * height * 100 <= 16_000_000;
+        mapProgress.value = 'Loading map image...';
+        await mapStore.loadWorldMap(useLargeImage ? 'Large' : 'Default');
+        if (disposed) return;
+
+        const image = useLargeImage ? mapStore.worldMapMax : mapStore.worldMapMid;
+        if (image) {
+          await loadImageToMap(image);
+        } else {
+          mapError.value = 'Unable to load the map image. Check the server console for details.';
         }
       } catch (error) {
         console.error('Unable to initialize world map:', error);
         mapError.value = error instanceof Error ? error.message : String(error);
+      } finally {
+        if (!disposed) {
+          if (leafletMap.value) {
+            // Add the all/none control only after map initialization.
+            addCustomControl(leafletMap.value, ownerLayers, warfareLayer as any, syncTileBadges);
+            leafletMap.value.invalidateSize();
+          }
+          if (!isRenderingSites) mapProgress.value = '';
+        }
       }
-
-      // Add custom control to activate/deactivate all layers
-      addCustomControl(leafletMap.value, ownerLayers, warfareLayer as any, syncTileBadges);
-
-      setTimeout(() => {
-        leafletMap.value?.invalidateSize();
-      }, 100);
     };
 
     const toLatLng = (x: number, y: number): L.LatLngTuple => {
