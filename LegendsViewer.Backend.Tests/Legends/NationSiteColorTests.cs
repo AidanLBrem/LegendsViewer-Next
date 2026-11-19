@@ -143,6 +143,57 @@ public class NationSiteColorTests
     }
 
     [TestMethod]
+    public void SiteMarkers_SubordinateNecromancerSitesUseTheirParentFaction()
+    {
+        using World world = new();
+        var necromancer = new Entity([], world)
+        {
+            Id = 100, Name = "Tower of the Necromancer", LineColor = Color.Purple
+        };
+        var firstGarrison = new Entity([], world)
+        {
+            Id = 101, Name = "First Garrison", Parent = necromancer, LineColor = Color.Red
+        };
+        var secondGarrison = new Entity([], world)
+        {
+            Id = 102, Name = "Second Garrison", Parent = necromancer, LineColor = Color.Blue
+        };
+        var firstSite = new Site([], world) { Id = 11, Coordinates = [new Location(10, 10)] };
+        var secondSite = new Site([], world) { Id = 12, Coordinates = [new Location(11, 10)] };
+        firstSite.OwnerHistory.Add(new OwnerPeriod(firstSite, firstGarrison, 10, "founded"));
+        secondSite.OwnerHistory.Add(new OwnerPeriod(secondSite, secondGarrison, 12, "founded"));
+        world.Entities.AddRange([necromancer, firstGarrison, secondGarrison]);
+        world.Sites.AddRange([firstSite, secondSite]);
+
+        typeof(World).GetMethod("GenerateCivColors", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(world, null);
+
+        var firstMarker = new SiteMarkerDto(firstSite);
+        var secondMarker = new SiteMarkerDto(secondSite);
+        Assert.AreEqual(necromancer.Id, firstMarker.OwnerId);
+        Assert.AreEqual(necromancer.Id, secondMarker.OwnerId);
+        Assert.AreEqual(necromancer.Id, firstMarker.OriginOwnerId);
+        Assert.AreEqual(necromancer.Id, secondMarker.OriginOwnerId);
+        Assert.AreEqual(firstGarrison.Id, firstMarker.CurrentOwnerId);
+        Assert.AreEqual(secondGarrison.Id, secondMarker.CurrentOwnerId);
+        Assert.AreEqual(firstMarker.Color, secondMarker.Color);
+        Assert.AreEqual(necromancer.LineColor, firstGarrison.LineColor);
+        Assert.AreEqual(necromancer.LineColor, secondGarrison.LineColor);
+    }
+
+    [TestMethod]
+    public void MapNation_CyclicAncestryTerminates()
+    {
+        using World world = new();
+        var first = new Entity([], world) { Id = 201, Name = "First" };
+        var second = new Entity([], world) { Id = 202, Name = "Second", Parent = first };
+        first.Parent = second;
+
+        Assert.IsNotNull(first.MapNation);
+        Assert.IsNotNull(second.MapNation);
+    }
+
+    [TestMethod]
     public void EntityCurrentCiv_WithCyclicParents_ReturnsWithoutHanging()
     {
         using World world = new();
