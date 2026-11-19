@@ -224,10 +224,10 @@ const loadWorldObjects = async ({ page, itemsPerPage, sortBy, search }: LoadItem
 loadWorldObjects({ page: 1, itemsPerPage: props.store.objectsPerPage, sortBy: activeSort.value, search: searchString.value })
 
 watch(searchString, () => {
-    loadWorldObjects({ page: 1, itemsPerPage: props.store.objectEventsPerPage, sortBy: [], search: searchString.value })
+    loadWorldObjects({ page: 1, itemsPerPage: props.store.objectsPerPage, sortBy: activeSort.value, search: searchString.value })
 });
 watch(filters, () => {
-    loadWorldObjects({ page: 1, itemsPerPage: props.store.objectEventsPerPage, sortBy: [], search: searchString.value });
+    loadWorldObjects({ page: 1, itemsPerPage: props.store.objectsPerPage, sortBy: activeSort.value, search: searchString.value });
 }, { deep: true });
 </script>
 
