@@ -63,6 +63,7 @@ public class WorldObjectDto
     public int? DefenderSitesGainedCount { get; set; }
     public int? DefenderSitesLostCount { get; set; }
     public int? DefenderSitesPlunderedCount { get; set; }
+    public int? UnattributedSitesCount { get; set; }
 
     private void SetSiteCounts(WarfareSiteOutcomesDto sites)
     {
@@ -72,5 +73,6 @@ public class WorldObjectDto
         DefenderSitesGainedCount = sites.DefenderGained.Count;
         DefenderSitesLostCount = sites.DefenderLost.Count;
         DefenderSitesPlunderedCount = sites.DefenderPlundered.Count;
+        UnattributedSitesCount = sites.Unattributed.Count;
     }
 }
