@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTerritoryGrid, getTerritorySeeds, getNecromancerNationIds, getTerritoryNationAtTile,
-  isOceanTile, territoryGridToDataUrl, isWarInYear,
+  buildLandComponents, pruneUnanchoredClaims, isOceanTile, territoryGridToDataUrl, isWarInYear,
   isBattleInYear, isSiteConquestInYear, getWarfareChangeYears
 } from './historicalAtlas';
 
@@ -206,6 +206,83 @@ describe('historical atlas political influence', () => {
     expect(getTerritoryNationAtTile(grid, width, height, 4, 0, oceanMask)).toBeNull();
   });
 
+  it('separates islands and prevents a mainland site from claiming an unoccupied island', async () => {
+    const width = 16, height = 8;
+    const water = new Uint8Array(Math.ceil(width * height / 8));
+    // A full north-south water strip severs left from right.
+    for (let y = 0; y < height; y++) {
+      const tile = y * width + 8;
+      water[tile >> 3] |= 1 << (tile & 7);
+    }
+    const components = buildLandComponents(width, height, water);
+    expect(components[4 * width + 2]).toBeGreaterThan(0);
+    expect(components[4 * width + 12]).not.toBe(components[4 * width + 2]);
+    expect(components[4 * width + 8]).toBe(0);
+
+    const grid = await createTerritoryGrid(width, height, [
+      { x: 5, y: 4, nationId: 1, color: '#ff0000' },
+    ], undefined, undefined, water, components);
+    expect(grid).not.toBeNull();
+    expect(getTerritoryNationAtTile(grid!, width, height, 5, 4, water)).toBe(1);
+    expect(getTerritoryNationAtTile(grid!, width, height, 12, 4, water)).toBeNull();
+    expect(getTerritoryNationAtTile(grid!, width, height, 8, 4, water)).toBeNull();
+  });
+
+  it('lets a faction control distant land only when it has an actual site there', async () => {
+    const width = 16, height = 8;
+    const water = new Uint8Array(Math.ceil(width * height / 8));
+    for (let y = 0; y < height; y++) {
+      const tile = y * width + 8;
+      water[tile >> 3] |= 1 << (tile & 7);
+    }
+    const grid = await createTerritoryGrid(width, height, [
+      { x: 5, y: 4, nationId: 1, color: '#ff0000' },
+      { x: 12, y: 4, nationId: 1, color: '#ff0000' },
+    ], undefined, undefined, water);
+    expect(getTerritoryNationAtTile(grid!, width, height, 5, 4, water)).toBe(1);
+    expect(getTerritoryNationAtTile(grid!, width, height, 12, 4, water)).toBe(1);
+    // No ownership is projected across the intervening water.
+    expect(getTerritoryNationAtTile(grid!, width, height, 8, 4, water)).toBeNull();
+  });
+
+  it('does not connect islands through a diagonal-only corner', () => {
+    const width = 3, height = 3;
+    const land = new Set([0, 4, 8]);
+    const water = new Uint8Array(Math.ceil(width * height / 8));
+    for (let tile = 0; tile < width * height; tile++) {
+      if (!land.has(tile)) water[tile >> 3] |= 1 << (tile & 7);
+    }
+    const components = buildLandComponents(width, height, water);
+    expect(components[0]).not.toBe(components[4]);
+    expect(components[4]).not.toBe(components[8]);
+  });
+
+  it('removes disconnected political patches without a settlement anchor', () => {
+    const grid = {
+      width: 5, height: 1,
+      nation: new Int32Array([1, 1, 2, 1, 1]),
+      colors: new Map<number, string>(),
+    };
+    pruneUnanchoredClaims(grid, new Uint8Array([1, 0, 1, 0, 0]));
+    expect([...grid.nation]).toEqual([1, 1, 2, -1, -1]);
+  });
+
+  it('checks exact land ownership even if the influence grid is downsampled', () => {
+    const width = 4, height = 2;
+    const water = new Uint8Array(Math.ceil(width * height / 8));
+    for (const tile of [2, 6]) water[tile >> 3] |= 1 << (tile & 7);
+    const components = buildLandComponents(width, height, water);
+    const grid = {
+      width: 2, height: 1,
+      nation: new Int32Array([1, 1]),
+      colors: new Map([[1, '#ff0000']]),
+      sourceComponents: new Int32Array([components[0], components[0]]),
+      landComponents: components,
+    };
+    expect(getTerritoryNationAtTile(grid, width, height, 0, 0, water)).toBe(1);
+    expect(getTerritoryNationAtTile(grid, width, height, 3, 0, water)).toBeNull();
+  });
+
   it('excludes ocean settlements as influence seeds, but keeps inland sites', async () => {
     const width = 16;
     const height = 16;
@@ -290,9 +367,9 @@ describe('historical atlas political influence', () => {
       const withBorders = images[0];
       const withoutBorders = images[1];
       // A new faction begins at pixel 1, which is outlined by default.
-      expect([...withBorders.slice(4, 8)]).toEqual([22, 26, 28, 190]);
-      expect([...withoutBorders.slice(4, 8)]).toEqual([68, 85, 102, 142]);
-      expect([...withoutBorders.slice(0, 4)]).toEqual([17, 34, 51, 142]);
+      expect([...withBorders.slice(4, 8)]).toEqual([22, 26, 28, 224]);
+      expect([...withoutBorders.slice(4, 8)]).toEqual([68, 85, 102, 195]);
+      expect([...withoutBorders.slice(0, 4)]).toEqual([17, 34, 51, 195]);
       expect(grid.nation).toEqual(new Int32Array([3, 4]));
     } finally {
       vi.unstubAllGlobals();
