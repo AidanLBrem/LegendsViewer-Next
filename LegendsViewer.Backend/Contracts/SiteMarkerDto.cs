@@ -20,6 +20,7 @@ public class SiteMarkerDto
         Owner = currentNation?.ToLink() ?? "Others";
         OwnerText = currentNation?.Name ?? "Others";
         OwnerId = currentNation?.Id;
+        OwnerEntityType = currentNation?.EntityType.ToString();
         CurrentOwnerId = currentOwner?.Id;
         Color = currentNation?.LineColor.ToRgbaString() ?? "#666";
         OriginOwner = originNation?.ToLink() ?? "Unknown origin";
@@ -68,6 +69,7 @@ public class SiteMarkerDto
     public string Owner { get; set; }
     public string OwnerText { get; set; }
     public int? OwnerId { get; set; }
+    public string? OwnerEntityType { get; set; }
     public int? CurrentOwnerId { get; set; }
     public string Color { get; set; }
     public string OriginOwner { get; set; }
@@ -95,6 +97,7 @@ public class SiteOwnershipPeriodDto
         Owner = nation?.ToLink() ?? "Unclaimed";
         OwnerText = nation?.Name ?? "Unclaimed";
         OwnerId = nation?.Id;
+        OwnerEntityType = nation?.EntityType.ToString();
         CurrentOwnerId = actualOwner?.Id;
         ActualOwner = actualOwner?.ToLink();
         Color = nation?.LineColor.ToRgbaString() ?? "#666";
@@ -107,6 +110,7 @@ public class SiteOwnershipPeriodDto
     public string Owner { get; set; }
     public string OwnerText { get; set; }
     public int? OwnerId { get; set; }
+    public string? OwnerEntityType { get; set; }
     public int? CurrentOwnerId { get; set; }
     public string? ActualOwner { get; set; }
     public string Color { get; set; }
