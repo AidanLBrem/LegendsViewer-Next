@@ -15,8 +15,15 @@ const props = defineProps<{
     siteOutcomes?: SiteOutcomes | null;
 }>();
 
-const showForces = computed(() =>
+const showTroops = computed(() =>
     props.attackerDeployed != null && props.defenderDeployed != null
+);
+const showSurvivors = computed(() =>
+    showTroops.value &&
+    props.attackerRemaining != null && props.defenderRemaining != null
+);
+const troopHeading = computed(() =>
+    showSurvivors.value ? 'Starting troops' : 'Battle deployments'
 );
 
 const rows = computed(() => [
@@ -68,10 +75,10 @@ function lossPercentage(deaths: number, deployed: number): string {
                 <thead>
                     <tr>
                         <th>Side</th>
-                        <th v-if="showForces" class="text-end">Forces</th>
+                        <th v-if="showTroops" class="text-end">{{ troopHeading }}</th>
                         <th class="text-end">Deaths</th>
-                        <th v-if="showForces" class="text-end">Survivors</th>
-                        <th v-if="showForces" class="text-end">Loss %</th>
+                        <th v-if="showSurvivors" class="text-end">Survivors</th>
+                        <th v-if="showSurvivors" class="text-end">Loss %</th>
                         <th class="text-end">Gained</th>
                         <th class="text-end">Lost</th>
                         <th class="text-end">Plundered</th>
@@ -80,10 +87,10 @@ function lossPercentage(deaths: number, deployed: number): string {
                 <tbody>
                     <tr v-for="row in rows" :key="row.side">
                         <td>{{ row.side }}</td>
-                        <td v-if="showForces" class="text-end">{{ row.deployed.toLocaleString() }}</td>
+                        <td v-if="showTroops" class="text-end">{{ row.deployed.toLocaleString() }}</td>
                         <td class="text-end">{{ row.deaths.toLocaleString() }}</td>
-                        <td v-if="showForces" class="text-end">{{ row.survivors.toLocaleString() }}</td>
-                        <td v-if="showForces" class="text-end">{{ lossPercentage(row.deaths, row.deployed) }}</td>
+                        <td v-if="showSurvivors" class="text-end">{{ row.survivors.toLocaleString() }}</td>
+                        <td v-if="showSurvivors" class="text-end">{{ lossPercentage(row.deaths, row.deployed) }}</td>
                         <td class="text-end">{{ row.gained.length.toLocaleString() }}</td>
                         <td class="text-end">{{ row.lost.length.toLocaleString() }}</td>
                         <td class="text-end">{{ row.plundered.length.toLocaleString() }}</td>
@@ -95,6 +102,10 @@ function lossPercentage(deaths: number, deployed: number): string {
                 <span v-if="otherDeaths > 0">
                     (including {{ otherDeaths.toLocaleString() }} other or unattributed deaths)
                 </span>
+            </div>
+            <div v-if="showTroops && !showSurvivors" class="text-caption mt-1">
+                Deployment totals count the troops present in each recorded battle.
+                The same soldier may appear in multiple battles.
             </div>
             <div class="text-caption mt-1">
                 Conquest changes possession; destruction counts as a site lost, not gained.
