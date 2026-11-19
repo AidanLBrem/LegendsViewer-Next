@@ -14,4 +14,5 @@ export const warfareOverviewHeaders: TableHeader[] = [
     { title: 'Def gained', key: 'defenderSitesGainedCount', align: 'end' },
     { title: 'Def lost', key: 'defenderSitesLostCount', align: 'end' },
     { title: 'Def plundered', key: 'defenderSitesPlunderedCount', align: 'end' },
+    { title: 'Other sites', key: 'unattributedSitesCount', align: 'end' },
 ];
