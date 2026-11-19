@@ -29,10 +29,15 @@ public class NationCultureTests
 
         Assert.AreEqual(1, all.SettlementsFounded);
         Assert.AreEqual(1, all.Conquests);
+        Assert.AreEqual(all.SettlementExpansionPerCentury + all.ConquestPerCentury, all.ExpansionPerCentury);
+        Assert.AreEqual(Math.Round(100d / all.ObservedYears, 2), all.SettlementExpansionPerCentury);
+        Assert.AreEqual(Math.Round(100d / all.ObservedYears, 2), all.ConquestPerCentury);
         Assert.AreEqual(1, all.SitesReclaimed);
         Assert.AreEqual(0, recent.Conquests);
         Assert.AreEqual(0, recent.SettlementsFounded);
         Assert.AreEqual(0, recent.SitesReclaimed);
+        Assert.AreEqual(0, recent.SettlementExpansionPerCentury);
+        Assert.AreEqual(0, recent.ConquestPerCentury);
         Assert.AreEqual(3, culture.Evidence.Count);
     }
 
@@ -49,6 +54,8 @@ public class NationCultureTests
         Assert.AreEqual(120, recent.StartYear);
         Assert.AreEqual(11, recent.ObservedYears);
         Assert.AreEqual(Math.Round(100d / 11, 2), recent.ExpansionPerCentury);
+        Assert.AreEqual(recent.ExpansionPerCentury, recent.SettlementExpansionPerCentury);
+        Assert.AreEqual(0, recent.ConquestPerCentury);
     }
 
     [TestMethod]
