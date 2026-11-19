@@ -1,4 +1,5 @@
 using LegendsViewer.Backend.Legends.Enums;
+using LegendsViewer.Backend.Legends.EventCollections;
 using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.WorldObjects;
 
@@ -17,6 +18,7 @@ public sealed class NationCulturePeriodDto
     public int SettlementsFounded { get; set; }
     public int SitesReclaimed { get; set; }
     public int SitesLost { get; set; }
+    public int SitesLostInWar { get; set; }
     public int OffensiveOperations { get; set; }
     public int DefensiveOperations { get; set; }
     public int WarsInitiated { get; set; }
@@ -31,6 +33,7 @@ public sealed class NationCulturePeriodDto
     public double ExpansionPerCentury { get; set; }
     public double SettlementExpansionPerCentury { get; set; }
     public double ConquestPerCentury { get; set; }
+    public double SitesLostInWarPerCentury { get; set; }
     public double OffensiveOperationsPerCentury { get; set; }
     public double PlundersPerCentury { get; set; }
     public double DiplomacyPerCentury { get; set; }
@@ -197,6 +200,126 @@ public sealed class NationCultureProfileDto
             }
         }
 
+        // A site is a wartime loss only if a recorded war associates its
+        // capture, surrender or destruction with the opposing belligerent.
+        // Plunder, abandonment and withering are not wartime captures.
+        var seenWarLosses = new HashSet<(int SiteId, int Year)>();
+
+        static War? WarOf(EventCollection? collection)
+        {
+            var visited = new HashSet<EventCollection>();
+            while (collection != null && visited.Add(collection))
+            {
+                if (collection is War war)
+                {
+                    return war;
+                }
+                collection = collection.ParentCollection;
+            }
+            return null;
+        }
+
+        bool IsOpposingSide(Entity? victor, War war)
+        {
+            if (victor != null && SameNation(victor, nation))
+            {
+                return false;
+            }
+
+            Entity? opponent = SameNation(war.Attacker, nation) ? war.Defender :
+                SameNation(war.Defender, nation) ? war.Attacker : null;
+            if (opponent == null || SameNation(opponent, nation))
+            {
+                return false;
+            }
+
+            // An unnamed conqueror is attributed to the opposing side only
+            // when the event/collection is explicitly linked to this war.
+            return victor == null || SameNation(victor, opponent);
+        }
+
+        void AddWarLoss(Site? site, int year, Entity? victor, Entity? victim,
+            War war, string description)
+        {
+            if (site == null || year < 0 || !SameNation(victim, nation) ||
+                !IsOpposingSide(victor, war) || !seenWarLosses.Add((site.Id, year)))
+            {
+                return;
+            }
+
+            Add(year, "warLoss", $"{site.Name}: {description} in {war.Name}",
+                $"/site/{site.Id}");
+        }
+
+        void ApplyWarEvent(WorldEvent entry, War war)
+        {
+            switch (entry)
+            {
+                case SiteTakenOver takeover:
+                    AddWarLoss(takeover.Site, entry.Year, takeover.Attacker,
+                        takeover.Defender ?? takeover.SiteEntity, war, "taken over");
+                    break;
+                case NewSiteLeader takeover:
+                    AddWarLoss(takeover.Site, entry.Year, takeover.Attacker,
+                        takeover.Defender ?? takeover.SiteEntity, war, "captured");
+                    break;
+                case SiteSurrendered surrender:
+                    AddWarLoss(surrender.Site, entry.Year, surrender.Attacker,
+                        surrender.Defender ?? surrender.SiteEntity, war, "surrendered");
+                    break;
+                case DestroyedSite destroyed:
+                    AddWarLoss(destroyed.Site, entry.Year, destroyed.Attacker,
+                        destroyed.Defender ?? destroyed.SiteEntity, war, "destroyed");
+                    break;
+                case HfDestroyedSite destroyed:
+                    AddWarLoss(destroyed.Site, entry.Year, null,
+                        destroyed.DefenderCiv ?? destroyed.SiteCiv, war, "destroyed");
+                    break;
+            }
+        }
+
+        foreach (var war in nation.Wars.Distinct())
+        {
+            if (!SameNation(war.Attacker, nation) && !SameNation(war.Defender, nation))
+            {
+                continue;
+            }
+
+            foreach (var entry in war.GetSubEvents().Distinct())
+            {
+                ApplyWarEvent(entry, war);
+            }
+
+            // Some Legends exports record the outcome in SiteConquered but
+            // omit a concrete takeover/destruction event. Use the collection
+            // itself as evidence only for an explicit conquest or destruction.
+            foreach (var conquest in war.Conquerings.Distinct())
+            {
+                if (conquest.ConquerType != SiteConqueredType.Conquest &&
+                    conquest.ConquerType != SiteConqueredType.Destruction)
+                {
+                    continue;
+                }
+                int year = conquest.StartYear >= 0
+                    ? conquest.StartYear
+                    : conquest.Events.Where(e => e.Year >= 0)
+                        .Select(e => e.Year).DefaultIfEmpty(-1).Max();
+                AddWarLoss(conquest.Site, year, conquest.Attacker, conquest.Defender,
+                    war, conquest.ConquerType == SiteConqueredType.Destruction
+                        ? "destroyed" : "conquered");
+            }
+        }
+
+        // Certain exports link events via ParentCollection without including
+        // them in the enclosing war's Events list.
+        foreach (var entry in nation.Events.Distinct())
+        {
+            if (WarOf(entry.ParentCollection) is War war)
+            {
+                ApplyWarEvent(entry, war);
+            }
+        }
+
         int latestFactYear = facts.Count == 0 ? 0 : facts.Max(f => f.Year);
         int currentYear = Math.Max(nation.World?.CurrentYear ?? 0, latestFactYear);
         int firstYear = facts.Count == 0 ? currentYear : facts.Min(f => f.Year);
@@ -241,6 +364,7 @@ public sealed class NationCultureProfileDto
                 SettlementsFounded = settlements,
                 SitesReclaimed = Count("reclaim"),
                 SitesLost = Count("loss"),
+                SitesLostInWar = Count("warLoss"),
                 OffensiveOperations = offense,
                 DefensiveOperations = Count("defensive"),
                 WarsInitiated = Count("warInitiated"),
@@ -254,6 +378,7 @@ public sealed class NationCultureProfileDto
                 ExpansionPerCentury = Rate(conquests + settlements),
                 SettlementExpansionPerCentury = Rate(settlements),
                 ConquestPerCentury = Rate(conquests),
+                SitesLostInWarPerCentury = Rate(Count("warLoss")),
                 OffensiveOperationsPerCentury = Rate(offense),
                 PlundersPerCentury = Rate(plunders),
                 DiplomacyPerCentury = Rate(peace + alliances),
