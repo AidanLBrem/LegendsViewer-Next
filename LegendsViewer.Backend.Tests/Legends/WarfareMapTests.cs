@@ -91,6 +91,57 @@ public class WarfareMapTests
     }
 
     [TestMethod]
+    public void GetWarfareMap_ExcludesAncientAndEndedBattlesFromActiveOverlay()
+    {
+        var world = new Mock<IWorld>();
+        var imageGenerator = new Mock<IWorldMapImageGenerator>();
+        world.Setup(w => w.CurrentYear).Returns(200);
+        world.Setup(w => w.Events).Returns(new List<WorldEvent>());
+        world.Setup(w => w.Entities).Returns(new List<Entity>());
+
+        var activeWar = new War(new List<Property>
+        {
+            new Property { Name = "id", Value = "1" },
+            new Property { Name = "name", Value = "Current War" }
+        }, world.Object) { StartYear = 150, EndYear = -1 };
+
+        var endedWar = new War(new List<Property>
+        {
+            new Property { Name = "id", Value = "2" },
+            new Property { Name = "name", Value = "Ended War" }
+        }, world.Object) { StartYear = 80, EndYear = 100 };
+
+        var recentBattle = new Battle(new List<Property>
+        {
+            new Property { Name = "id", Value = "3" },
+            new Property { Name = "name", Value = "Recent Battle" }
+        }, world.Object) { StartYear = 200, EndYear = -1, ParentCollection = activeWar };
+
+        var oldBattle = new Battle(new List<Property>
+        {
+            new Property { Name = "id", Value = "4" },
+            new Property { Name = "name", Value = "Old Battle" }
+        }, world.Object) { StartYear = 150, EndYear = -1, ParentCollection = activeWar };
+
+        var endedWarBattle = new Battle(new List<Property>
+        {
+            new Property { Name = "id", Value = "5" },
+            new Property { Name = "name", Value = "Battle from Ended War" }
+        }, world.Object) { StartYear = 200, EndYear = -1, ParentCollection = endedWar };
+
+        world.Setup(w => w.EventCollections).Returns(
+            new List<EventCollection> { activeWar, endedWar, recentBattle, oldBattle, endedWarBattle });
+
+        var controller = new WorldMapController(world.Object, imageGenerator.Object);
+        var result = controller.GetWarfareMap(activeOnly: true);
+
+        Assert.IsNotNull(result.Value);
+        Assert.AreEqual(1, result.Value.Wars.Count);
+        Assert.AreEqual(1, result.Value.Battles.Count);
+        Assert.AreEqual(3, result.Value.Battles[0].Id);
+    }
+
+    [TestMethod]
     public void GetObjectCoordinates_ForWar_ReturnsBoundsAndCoordinates()
     {
         var worldMock = new Mock<IWorld>();
