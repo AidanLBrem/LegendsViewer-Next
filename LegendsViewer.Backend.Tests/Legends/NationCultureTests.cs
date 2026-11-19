@@ -52,6 +52,25 @@ public class NationCultureTests
     }
 
     [TestMethod]
+    public void RecordedCivilizationCreationAnchorsObservedDuration()
+    {
+        using World world = new() { CurrentYear = 100 };
+        Entity nation = new([], world) { Id = 1, Name = "Old Nation", IsCiv = true };
+        Site town = new([], world) { Id = 10, Name = "Frontier Town" };
+        nation.Events.Add(new EntityCreated([], world)
+        {
+            Id = 4, Entity = nation, Year = 10
+        });
+        _ = new OwnerPeriod(town, nation, 90, "founded");
+
+        var all = NationCultureProfileDto.FromEntity(nation).Periods.Single(p => p.WindowYears == 0);
+
+        Assert.AreEqual(10, all.StartYear);
+        Assert.AreEqual(91, all.ObservedYears);
+        Assert.AreEqual(Math.Round(100d / 91, 2), all.ExpansionPerCentury);
+    }
+
+    [TestMethod]
     public void EnemyAttacksDoNotCountAsOwnAggression()
     {
         using World world = new() { CurrentYear = 100 };
