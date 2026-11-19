@@ -100,6 +100,11 @@
           Year {{ nationSnapshot.year }}: +{{ nationSnapshot.gained }} gained,
           −{{ nationSnapshot.lost }} lost
         </div>
+        <div class="nation-expansion-panel__navigation">
+          <button type="button" @click="jumpToNationChange(-1)">Previous change</button>
+          <button type="button" @click="jumpToNationPeak">Peak</button>
+          <button type="button" @click="jumpToNationChange(1)">Next change</button>
+        </div>
         <div class="nation-expansion-panel__chart-heading">
           <strong>Historical site ownership</strong>
           <span>Peak: {{ nationHistory?.peakSites ?? 0 }}</span>
@@ -1224,6 +1229,23 @@ export default defineComponent({
     const goToPresent = () => {
       stopHistoryPlayback();
       selectedYear.value = historyMaxYear.value;
+    };
+
+    const jumpToNationPeak = () => {
+      if (!nationHistory.value?.peakSites) return;
+      stopHistoryPlayback();
+      selectedYear.value = nationHistory.value.peakYear;
+    };
+
+    const jumpToNationChange = (direction: -1 | 1) => {
+      const points = nationHistory.value?.points ?? [];
+      const changes = points.filter(point => point.gained > 0 || point.lost > 0);
+      const next = direction === 1
+        ? changes.find(point => point.year > selectedYear.value)
+        : [...changes].reverse().find(point => point.year < selectedYear.value);
+      if (!next) return;
+      stopHistoryPlayback();
+      selectedYear.value = next.year;
     };
 
     const onHistorySliderInput = (event: Event) => {
@@ -2358,6 +2380,8 @@ export default defineComponent({
       stepHistoryYear,
       jumpToHistoryChange,
       goToPresent,
+      jumpToNationPeak,
+      jumpToNationChange,
       onHistorySliderInput,
       toggleHistoryPlayback,
       nationExpansionExpanded,
@@ -2601,6 +2625,23 @@ export default defineComponent({
 }
 .nation-expansion-panel__change {
   opacity: 0.85;
+}
+.nation-expansion-panel__navigation {
+  display: flex;
+  gap: 4px;
+}
+.nation-expansion-panel__navigation button {
+  flex: 1;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 4px 2px;
+  background: rgb(var(--v-theme-background));
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+.nation-expansion-panel__navigation button:hover {
+  filter: brightness(1.15);
 }
 .nation-expansion-panel svg {
   display: block;
