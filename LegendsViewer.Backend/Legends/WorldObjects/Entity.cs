@@ -391,7 +391,7 @@ public class Entity : WorldObject, IHasCoordinates
                 list.Add(new ListItemDto
                 {
                     Title = war.ToLink(true, this),
-                    Subtitle = war.Subtype,
+                    Subtitle = $"{war.GetParticipantRole(this)} | {war.Subtype}",
                     Append = HtmlStyleUtil.GetChipString($"{war.DeathCount} ✝")
                 });
             }
