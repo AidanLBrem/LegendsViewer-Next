@@ -16,6 +16,8 @@ export interface NationCulturePeriod {
     peaceAgreements: number;
     alliances: number;
     internalUpheavals: number;
+    harshEdictsIssued: number;
+    harshEdictsRevoked: number;
     expansionPerCentury: number;
     offensiveOperationsPerCentury: number;
     plundersPerCentury: number;
