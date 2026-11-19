@@ -46,6 +46,19 @@ export interface TerritoryGrid {
   colors: Map<number, string>;
 }
 
+// One bit per world tile, in row-major order. Oceans are transparent in
+// territory overlays even when a settlement's influence reaches the coast.
+export function isOceanTile(
+  oceanMask: Uint8Array | null | undefined,
+  worldWidth: number,
+  x: number,
+  y: number
+): boolean {
+  if (!oceanMask) return false;
+  const index = y * worldWidth + x;
+  return (oceanMask[index >> 3] & (1 << (index & 7))) !== 0;
+}
+
 export type YieldToBrowser = () => Promise<void>;
 
 // Bounded-resolution, bounded-influence *approximation* of settlement
@@ -56,7 +69,8 @@ export async function createTerritoryGrid(
   height: number,
   seeds: readonly TerritorySeed[],
   yieldToBrowser: YieldToBrowser = async () => {},
-  cancelled: () => boolean = () => false
+  cancelled: () => boolean = () => false,
+  oceanMask?: Uint8Array
 ): Promise<TerritoryGrid | null> {
   const rasterWidth = Math.max(1, Math.min(320, Math.ceil(width)));
   const rasterHeight = Math.max(1, Math.min(320, Math.ceil(height)));
@@ -76,6 +90,7 @@ export async function createTerritoryGrid(
   nearest.fill(-1);
   for (const seed of seeds) {
     if (seed.x < 0 || seed.x >= width || seed.y < 0 || seed.y >= height) continue;
+    if (isOceanTile(oceanMask, width, Math.floor(seed.x), Math.floor(seed.y))) continue;
     colors.set(seed.nationId, seed.color);
     const px = Math.min(rasterWidth - 1, Math.floor(seed.x * rasterWidth / width));
     const py = Math.min(rasterHeight - 1, Math.floor(seed.y * rasterHeight / height));
@@ -165,28 +180,43 @@ function rgb(color: string): [number, number, number] {
   return [112, 112, 112];
 }
 
-export function territoryGridToDataUrl(grid: TerritoryGrid): string {
+export function territoryGridToDataUrl(
+  grid: TerritoryGrid,
+  oceanMask?: Uint8Array,
+  worldWidth = grid.width,
+  worldHeight = grid.height
+): string {
   const canvas = document.createElement('canvas');
-  canvas.width = grid.width;
-  canvas.height = grid.height;
+  // The influence calculation stays capped at 320² cells, but the rendered
+  // bitmap uses world-tile resolution to clip the coastline exactly.
+  canvas.width = oceanMask ? worldWidth : grid.width;
+  canvas.height = oceanMask ? worldHeight : grid.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D rendering unavailable');
-  const pixels = ctx.createImageData(grid.width, grid.height);
+  const pixels = ctx.createImageData(canvas.width, canvas.height);
   const cache = new Map<number, [number, number, number]>();
-  for (let y = 0; y < grid.height; y++) {
-    for (let x = 0; x < grid.width; x++) {
-      const offset = y * grid.width + x;
-      const id = grid.nation[offset];
-      if (id < 0) continue;
-      if (!cache.has(id)) cache.set(id, rgb(grid.colors.get(id) ?? '#777777'));
-      const [r, g, b] = cache.get(id)!;
-      const pos = offset * 4;
-      const border = (x > 0 && grid.nation[offset - 1] !== id) ||
-        (y > 0 && grid.nation[offset - grid.width] !== id);
-      pixels.data[pos] = border ? 22 : r;
-      pixels.data[pos + 1] = border ? 26 : g;
-      pixels.data[pos + 2] = border ? 28 : b;
-      pixels.data[pos + 3] = border ? 190 : 142;
+  const previousRow = new Int32Array(canvas.width);
+  previousRow.fill(-1);
+
+  for (let y = 0; y < canvas.height; y++) {
+    const sourceY = Math.min(grid.height - 1, Math.floor(y * grid.height / canvas.height));
+    let leftId = -1;
+    for (let x = 0; x < canvas.width; x++) {
+      const sourceX = Math.min(grid.width - 1, Math.floor(x * grid.width / canvas.width));
+      const offset = sourceY * grid.width + sourceX;
+      const id = isOceanTile(oceanMask, canvas.width, x, y) ? -1 : grid.nation[offset];
+      if (id >= 0) {
+        if (!cache.has(id)) cache.set(id, rgb(grid.colors.get(id) ?? '#777777'));
+        const [r, g, b] = cache.get(id)!;
+        const pos = (y * canvas.width + x) * 4;
+        const border = (x > 0 && leftId !== id) || (y > 0 && previousRow[x] !== id);
+        pixels.data[pos] = border ? 22 : r;
+        pixels.data[pos + 1] = border ? 26 : g;
+        pixels.data[pos + 2] = border ? 28 : b;
+        pixels.data[pos + 3] = border ? 190 : 142;
+      }
+      previousRow[x] = id;
+      leftId = id;
     }
   }
   ctx.putImageData(pixels, 0, 0);
