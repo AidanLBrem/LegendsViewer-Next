@@ -3,8 +3,14 @@
     <div id="map" style="height: 100%;"></div>
     <div v-if="mapError" class="map-error" role="alert">{{ mapError }}</div>
     <div v-if="mapProgress" class="map-progress" role="status">{{ mapProgress }}</div>
-    <div class="site-color-selector">
-      <label for="site-color-mode">Site colors</label>
+    <div class="site-color-selector" :class="{ 'site-color-selector--collapsed': !siteColorsExpanded }">
+      <button type="button" class="map-panel-toggle" aria-controls="site-color-panel-content"
+        :aria-expanded="siteColorsExpanded" @click="siteColorsExpanded = !siteColorsExpanded">
+        <strong>Site colors</strong>
+        <span aria-hidden="true">{{ siteColorsExpanded ? '▾' : '▸' }}</span>
+      </button>
+      <div id="site-color-panel-content" v-show="siteColorsExpanded" class="site-color-selector__body">
+      <label for="site-color-mode">Color by</label>
       <select id="site-color-mode" v-model="siteColorMode">
         <option value="current">Owner in selected year</option>
         <option value="origin">Origin nation</option>
@@ -23,7 +29,7 @@
         <label><input type="checkbox" v-model="showHistoricalBattles" :disabled="!historyReady" /> Battles / sieges</label>
         <label><input type="checkbox" v-model="showHistoricalCampaigns" :disabled="!historyReady" /> War campaigns</label>
         <label><input type="checkbox" v-model="showHistoricalSiteOutcomes" :disabled="!historyReady" /> Conquests / raids</label>
-        <small>Estimated territories combine settlement populations and nearby sites. Population is from the imported snapshot, not a historical census. Click a map tile to inspect nominal control.</small>
+      </div>
       </div>
     </div>
     <section v-if="historyReady" class="history-stepper" aria-label="Map history">
@@ -845,7 +851,8 @@ function createOwnerLayerControl(
   ownerLayers: Record<string, L.LayerGroup>,
   warfareLayer: L.LayerGroup | null,
   onVisibilityChanged: () => void,
-  onWarfareEnabled: () => void
+  onWarfareEnabled: () => void,
+  expanded: Ref<boolean>
 ): L.Control {
   const owners = Object.entries(ownerLayers).sort(([a], [b]) => a.localeCompare(b));
   const layerIds = new Set(owners.map(([, layer]) => L.stamp(layer)));
@@ -861,20 +868,43 @@ function createOwnerLayerControl(
       L.DomEvent.disableClickPropagation(container);
       L.DomEvent.disableScrollPropagation(container);
 
-      const title = document.createElement('strong');
-      title.textContent = 'Site owners';
-      container.appendChild(title);
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'map-panel-toggle';
+      header.setAttribute('aria-controls', 'site-owner-panel-content');
+      const headerTitle = document.createElement('strong');
+      headerTitle.textContent = 'Site owners';
+      const chevron = document.createElement('span');
+      chevron.setAttribute('aria-hidden', 'true');
+      header.append(headerTitle, chevron);
+      container.appendChild(header);
+
+      const body = document.createElement('div');
+      body.id = 'site-owner-panel-content';
+      body.className = 'owner-layer-control__body';
+      const updateExpanded = () => {
+        header.setAttribute('aria-expanded', String(expanded.value));
+        chevron.textContent = expanded.value ? '▾' : '▸';
+        body.hidden = !expanded.value;
+        container.classList.toggle('owner-layer-control--collapsed', !expanded.value);
+      };
+      header.addEventListener('click', () => {
+        expanded.value = !expanded.value;
+        updateExpanded();
+      });
+      updateExpanded();
+      container.appendChild(body);
 
       const search = document.createElement('input');
       search.className = 'owner-layer-control__search';
       search.type = 'search';
       search.placeholder = `Search ${owners.length.toLocaleString()} owners`;
       search.setAttribute('aria-label', 'Search site owners');
-      container.appendChild(search);
+      body.appendChild(search);
 
       const count = document.createElement('div');
       count.className = 'owner-layer-control__count';
-      container.appendChild(count);
+      body.appendChild(count);
 
       const viewport = document.createElement('div');
       viewport.className = 'owner-layer-control__viewport';
@@ -882,7 +912,7 @@ function createOwnerLayerControl(
       const contents = document.createElement('div');
       contents.className = 'owner-layer-control__contents';
       viewport.appendChild(contents);
-      container.appendChild(viewport);
+      body.appendChild(viewport);
 
       const warLabel = document.createElement('label');
       warLabel.className = 'owner-layer-control__war';
@@ -892,7 +922,7 @@ function createOwnerLayerControl(
       warLabel.append(warCheckbox, document.createTextNode(' Present-day wars & battles'));
       if (warfareLayer != null) {
         const warLayer = warfareLayer;
-        container.appendChild(warLabel);
+        body.appendChild(warLabel);
         warCheckbox.addEventListener('change', () => {
           if (warCheckbox.checked) {
             map.addLayer(warLayer);
@@ -993,6 +1023,8 @@ export default defineComponent({
     const highlightLayer = shallowRef<LayerGroup | null>(null);
     const siteMarkersMap = new Map<number, { marker: L.Layer; popup: HTMLElement }>();
     const siteColorMode = ref<'current' | 'origin'>('current');
+    const siteColorsExpanded = ref(true);
+    const ownerPanelExpanded = ref(true);
     const showMonasteries = ref(true);
     const showCamps = ref(true);
     const showCaves = ref(true);
@@ -2047,7 +2079,8 @@ export default defineComponent({
             ownerVisibilityVersion++;
             void applyHistoryYear();
           },
-          () => { void loadWarfareOverlay(); }
+          () => { void loadWarfareOverlay(); },
+          ownerPanelExpanded
         );
 
         historyReady.value = true;
@@ -2105,6 +2138,7 @@ export default defineComponent({
     return {
       mapStore,
       siteColorMode,
+      siteColorsExpanded,
       showMonasteries,
       showCamps,
       showCaves,
@@ -2149,13 +2183,43 @@ export default defineComponent({
   /* Ensure the map and controls are positioned properly */
 }
 
+/* The two map controls collapse independently without unloading layers. */
+.map-panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 2px 0;
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.map-panel-toggle:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.map-panel-toggle span {
+  font-size: 15px;
+}
 .owner-layer-control {
+  box-sizing: border-box;
   width: 250px;
   padding: 10px;
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
   border-radius: 4px;
+}
+.owner-layer-control--collapsed {
+  width: 160px;
+}
+.owner-layer-control__body[hidden] {
+  display: none;
 }
 .owner-layer-control__search {
   display: block;
@@ -2307,6 +2371,14 @@ export default defineComponent({
   font-size: 12px;
 }
 
+.site-color-selector--collapsed {
+  width: 160px;
+}
+.site-color-selector__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .site-color-selector select {
   background: rgb(var(--v-theme-background));
   color: inherit;
