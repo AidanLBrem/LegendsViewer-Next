@@ -140,6 +140,15 @@ public class War : EventCollection, IHasComplexSubtype
                 Subtitle = $"Gained: {sites.DefenderGained.Count:N0} | Lost: {sites.DefenderLost.Count:N0} | Plundered: {sites.DefenderPlundered.Count:N0}"
             });
 
+            if (sites.Unattributed.Count > 0)
+            {
+                list.Add(new ListItemDto
+                {
+                    Title = "Other or unattributed site changes",
+                    Subtitle = $"{sites.Unattributed.Count:N0} unique sites affected by records that cannot be assigned to either war side"
+                });
+            }
+
             return list;
         }
     }
@@ -462,7 +471,8 @@ public class War : EventCollection, IHasComplexSubtype
             if ((rule.PropertyName.Equals("SitesLostCount", StringComparison.InvariantCultureIgnoreCase) ||
                  rule.PropertyName.Equals("SitesLost", StringComparison.InvariantCultureIgnoreCase)) &&
                 int.TryParse(rule.Value, out int sitesLostCount) &&
-                rule.ViolatesIntegerCriteria(SitesLost.Count, sitesLostCount))
+                rule.ViolatesIntegerCriteria(SiteOutcomes.AttackerLost
+                    .Concat(SiteOutcomes.DefenderLost).Distinct().Count(), sitesLostCount))
             {
                 return false;
             }
