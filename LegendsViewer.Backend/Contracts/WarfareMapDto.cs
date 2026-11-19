@@ -7,6 +7,30 @@ public class WarfareMapDto
 {
     public List<WarMapOverlayDto> Wars { get; set; } = [];
     public List<BattleMapMarkerDto> Battles { get; set; } = [];
+    // Recorded territorial events are distinct from battles: one battle may
+    // produce several consequences, and not every site action is a battle.
+    public List<SiteConquestMapMarkerDto> SiteConquests { get; set; } = [];
+}
+
+public class SiteConquestMapMarkerDto
+{
+    public int Id { get; set; }
+    public int SiteId { get; set; }
+    public string SiteName { get; set; } = string.Empty;
+    public string SiteLink { get; set; } = string.Empty;
+    public string Link { get; set; } = string.Empty;
+    public string Outcome { get; set; } = string.Empty;
+    public int Year { get; set; }
+    public int? AttackerId { get; set; }
+    public string AttackerName { get; set; } = string.Empty;
+    public string? AttackerLink { get; set; }
+    public string AttackerColor { get; set; } = "#E53935";
+    public int? DefenderId { get; set; }
+    public string DefenderName { get; set; } = string.Empty;
+    public string? DefenderLink { get; set; }
+    public int? WarId { get; set; }
+    public int? BattleId { get; set; }
+    public LocationDto? Coordinates { get; set; }
 }
 
 public class WarMapOverlayDto
