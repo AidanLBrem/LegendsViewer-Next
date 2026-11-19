@@ -156,6 +156,11 @@ public class World : IDisposable, IWorld
         ResolveUndergroundRegionProperties();
         ResolveWorldConstructionProperties();
 
+        // Legends XML does not populate CurrentYear directly. Derive the
+        // latest recorded year after events, collections and site ownership
+        // histories have all been resolved.
+        UpdateCurrentYearFromHistory();
+
         GenerateCivColors();
 
         Log.AppendLine(ParsingErrors.Print());
@@ -175,6 +180,32 @@ public class World : IDisposable, IWorld
             .Append(' ')
             .AppendFormat("{0:D3}", milliSeconds)
             .AppendLine(" ms");
+    }
+
+    public void UpdateCurrentYearFromHistory()
+    {
+        int latestYear = Math.Max(0, CurrentYear);
+        foreach (WorldEvent worldEvent in Events)
+        {
+            latestYear = Math.Max(latestYear, worldEvent.Year);
+        }
+
+        foreach (EventCollection collection in EventCollections)
+        {
+            latestYear = Math.Max(latestYear, collection.StartYear);
+            latestYear = Math.Max(latestYear, collection.EndYear);
+        }
+
+        foreach (Site site in Sites)
+        {
+            foreach (OwnerPeriod period in site.OwnerHistory)
+            {
+                latestYear = Math.Max(latestYear, period.StartYear);
+                latestYear = Math.Max(latestYear, period.EndYear);
+            }
+        }
+
+        CurrentYear = latestYear;
     }
 
     private void ResolveEntityIsMainCiv()
