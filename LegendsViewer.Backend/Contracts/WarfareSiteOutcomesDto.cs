@@ -51,7 +51,8 @@ public class WarfareSiteOutcomesDto
 
             // Some site events omit the attacking party. The defending party
             // can still identify the opposing side when both war sides exist.
-            if (!actionByAttacker && !actionByDefender && attacker != null && defender != null)
+            if (conquest.Attacker == null && !actionByAttacker && !actionByDefender &&
+                attacker != null && defender != null)
             {
                 actionByAttacker = IsSameSide(conquest.Defender, defender);
                 actionByDefender = IsSameSide(conquest.Defender, attacker);
