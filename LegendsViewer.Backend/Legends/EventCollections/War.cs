@@ -78,8 +78,11 @@ public class War : EventCollection, IHasComplexSubtype
         return chart;
     }
 
+    // Compute after the legends import is complete; cache the result so
+    // sorting hundreds of wars does not re-aggregate the entire world.
+    private WarfareSiteOutcomesDto? _siteOutcomes;
     public WarfareSiteOutcomesDto SiteOutcomes =>
-        WarfareSiteOutcomesDto.FromConquerings(Conquerings, Attacker, Defender);
+        _siteOutcomes ??= WarfareSiteOutcomesDto.FromWar(this);
 
     // Numeric counterparts to the detailed site lists. Keeping these on the
     // domain objects lets the existing server-side sorter order all records
