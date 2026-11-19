@@ -14,6 +14,14 @@
         <label><input type="checkbox" v-model="showCamps" :disabled="!historyReady" /> Camps</label>
         <label><input type="checkbox" v-model="showCaves" :disabled="!historyReady" /> Caves</label>
       </div>
+      <div class="site-visibility-options atlas-options" role="group" aria-label="Historical atlas overlays">
+        <strong>Historical atlas</strong>
+        <label><input type="checkbox" v-model="showEstimatedTerritories" :disabled="!historyReady" /> Estimated territories</label>
+        <label><input type="checkbox" v-model="showHistoricalBattles" :disabled="!historyReady" /> Battles / sieges</label>
+        <label><input type="checkbox" v-model="showHistoricalCampaigns" :disabled="!historyReady" /> War campaigns</label>
+        <label><input type="checkbox" v-model="showHistoricalSiteOutcomes" :disabled="!historyReady" /> Conquests / raids</label>
+        <small>Territory borders are estimates from settlement locations, not recorded boundaries.</small>
+      </div>
     </div>
     <section v-if="historyReady" class="history-stepper" aria-label="Map history">
       <div class="history-stepper__title">
@@ -46,7 +54,7 @@
         No dated site ownership records are available for this world.
       </small>
       <small v-else>
-        Sites appear when founded and disappear when destroyed, where recorded. Abandoned sites remain visible as unclaimed; terrain and warfare overlays remain present-day.
+        Sites follow recorded founding and destruction dates. Battles, sieges, campaigns and conquests follow the selected year. Territory influence is estimated, not exact. The separate modern warfare layer is independent.
       </small>
     </section>
   </div>
@@ -61,7 +69,16 @@ import L, { Map as LeafletMap, ImageOverlay, Layer, LayerGroup } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { components } from '../generated/api-schema'; // Import from the OpenAPI schema
 
-import type { WarfareMapDto, WarMapOverlayDto, BattleMapMarkerDto } from '../types/legends';
+import type { WarfareMapDto, WarMapOverlayDto, BattleMapMarkerDto, SiteConquestMapMarkerDto } from '../types/legends';
+import {
+  createTerritoryGrid,
+  territoryGridToDataUrl,
+  getTerritorySeeds,
+  getWarfareChangeYears,
+  isBattleInYear,
+  isWarInYear,
+  isSiteConquestInYear,
+} from '../utils/historicalAtlas';
 import {
   getSiteOwnerAtYear,
   getOwnershipChangeYears,
@@ -74,7 +91,7 @@ import { isSiteTypeVisible } from '../utils/siteVisibility';
 export type SiteType = components['schemas']['SiteType'];
 type SiteMarker = components['schemas']['SiteMarkerDto'] & SiteWithOwnershipHistory;
 
-export type MapTileItemType = 'site' | 'war' | 'battle';
+export type MapTileItemType = 'site' | 'war' | 'battle' | 'conquest';
 
 export interface MapTileItem {
   type: MapTileItemType;
@@ -82,7 +99,7 @@ export interface MapTileItem {
   y: number;
   layerGroup: LayerGroup;
   marker: L.Layer;
-  data: SiteAtCoordinate | WarMapOverlayDto | BattleMapMarkerDto;
+  data: SiteAtCoordinate | WarMapOverlayDto | BattleMapMarkerDto | SiteConquestMapMarkerDto;
 }
 
 function formatEntityLinkWithBadge(id: number, name?: string, color?: string): string {
@@ -258,6 +275,88 @@ function createBattlePopup(battle: BattleMapMarkerDto, router: Router): HTMLElem
   const container = createBattlePopupElement(battle);
   wireInternalLinks(container, router);
   return container;
+}
+
+function createSiteConquestPopupElement(event: SiteConquestMapMarkerDto): HTMLElement {
+  const container = document.createElement('div');
+  container.className = 'warfare-popup-item';
+  const title = document.createElement('strong');
+  title.textContent = `${event.outcome || 'Site action'} in year ${event.year}`;
+  container.appendChild(title);
+  const site = document.createElement('div');
+  site.append('Site: ');
+  if (event.siteLink) appendRichContent(site, event.siteLink);
+  else site.append(event.siteName);
+  container.appendChild(site);
+  const action = document.createElement('div');
+  if (event.link) appendRichContent(action, event.link);
+  container.appendChild(action);
+  const attacker = document.createElement('div');
+  attacker.append('Attacker: ');
+  if (event.attackerLink) appendRichContent(attacker, event.attackerLink);
+  else attacker.append(event.attackerName || 'Unknown');
+  container.appendChild(attacker);
+  const defender = document.createElement('div');
+  defender.append('Defender: ');
+  if (event.defenderLink) appendRichContent(defender, event.defenderLink);
+  else defender.append(event.defenderName || 'Unknown');
+  container.appendChild(defender);
+  if (event.battleId != null) {
+    const battle = document.createElement('div');
+    const link = document.createElement('a');
+    link.href = `/battle/${event.battleId}`;
+    link.textContent = 'Associated battle';
+    battle.appendChild(link);
+    container.appendChild(battle);
+  }
+  if (event.warId != null) {
+    const war = document.createElement('div');
+    const link = document.createElement('a');
+    link.href = `/war/${event.warId}`;
+    link.textContent = 'Associated war';
+    war.appendChild(link);
+    container.appendChild(war);
+  }
+  return container;
+}
+
+function createSiteConquestPopup(event: SiteConquestMapMarkerDto, router: Router): HTMLElement {
+  const container = createSiteConquestPopupElement(event);
+  wireInternalLinks(container, router);
+  return container;
+}
+
+function renderSiteConquestMarker(
+  event: SiteConquestMapMarkerDto,
+  layer: LayerGroup,
+  router: Router,
+  toLatLng: (x: number, y: number) => L.LatLngTuple,
+  registerItem: (item: MapTileItem) => void
+): void {
+  const coord = event.coordinates;
+  if (coord?.x == null || coord.y == null) return;
+  const destructive = event.outcome === 'Destruction';
+  const plunder = event.outcome === 'Pillaging';
+  const accent = destructive ? '#ef704f' : plunder ? '#f2be4b' : (event.attackerColor || '#d2d2d2');
+  const mdi = destructive ? 'mdi-fire' : plunder ? 'mdi-currency-usd' :
+    event.outcome === 'Invasion' ? 'mdi-shield-sword' : 'mdi-flag-variant';
+  const icon = L.divIcon({
+    className: 'atlas-outcome-marker',
+    html: `<div style="border: 2px solid ${accent}; color: ${accent}; background: #1a1a1aee; border-radius: 6px; width: 24px; height: 24px; display: grid; place-items: center; box-shadow: 0 1px 5px #000c"><i class="mdi ${mdi}" style="font-size: 17px"></i></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+  const marker = L.marker(toLatLng(coord.x, coord.y), { icon, pane: 'markerPane' });
+  marker.bindPopup(createSiteConquestPopup(event, router));
+  layer.addLayer(marker);
+  registerItem({
+    type: 'conquest',
+    x: coord.x,
+    y: coord.y,
+    layerGroup: layer,
+    marker,
+    data: event,
+  });
 }
 
 function renderWarOverlay(
@@ -562,6 +661,9 @@ function createUnifiedPickerPopup(
     if (single.type === 'war') {
       return createWarPopup(single.data as WarMapOverlayDto, router);
     }
+    if (single.type === 'conquest') {
+      return createSiteConquestPopup(single.data as SiteConquestMapMarkerDto, router);
+    }
   }
 
   const container = document.createElement('div');
@@ -607,6 +709,8 @@ function createUnifiedPickerPopup(
     } else if (item.type === 'war') {
       const war = item.data as WarMapOverlayDto;
       itemEl.appendChild(createWarPopupElement(war));
+    } else if (item.type === 'conquest') {
+      itemEl.appendChild(createSiteConquestPopupElement(item.data as SiteConquestMapMarkerDto));
     }
 
     wireInternalLinks(itemEl, router);
