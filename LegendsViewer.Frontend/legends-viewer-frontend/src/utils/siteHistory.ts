@@ -118,12 +118,23 @@ export function stepOwnershipChange(
   direction: -1 | 1,
   changeYears: readonly number[]
 ): number {
+  // Lower/upper-bound searches keep event navigation fast even in worlds with
+  // hundreds of thousands of ownership changes.
+  let low = 0;
+  let high = changeYears.length;
   if (direction === 1) {
-    const next = changeYears.find(candidate => candidate > year);
-    return next ?? year;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (changeYears[mid] <= year) low = mid + 1;
+      else high = mid;
+    }
+    return changeYears[low] ?? year;
   }
-  for (let i = changeYears.length - 1; i >= 0; i--) {
-    if (changeYears[i] < year) return changeYears[i];
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (changeYears[mid] < year) low = mid + 1;
+    else high = mid;
   }
-  return year;
+  return low > 0 ? changeYears[low - 1] : year;
 }
