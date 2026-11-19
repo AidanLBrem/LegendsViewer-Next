@@ -136,6 +136,7 @@ public class BookmarkController(
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Failed to load world export from {FilePath}", filePath);
             return StatusCode(500, $"Error parsing the XML file: {ex.Message}");
         }
     }
