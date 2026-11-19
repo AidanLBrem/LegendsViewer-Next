@@ -21,6 +21,8 @@ public class War : EventCollection, IHasComplexSubtype
     public int DeathCount { get; set; }
     public int AttackerDeathCount { get; set; }
     public int DefenderDeathCount { get; set; }
+    public WarfareSiteOutcomesDto SiteOutcomes =>
+        WarfareSiteOutcomesDto.FromConquerings(Conquerings, Attacker, Defender);
 
     public List<ListItemDto> MiscList
     {
@@ -45,6 +47,23 @@ public class War : EventCollection, IHasComplexSubtype
                     Subtitle = $"{Defender.ToLink(true, this)} (Deaths: {DefenderDeathCount} ✝)",
                 });
             }
+            WarfareSiteOutcomesDto sites = SiteOutcomes;
+            list.Add(new ListItemDto
+            {
+                Title = "Casualties",
+                Subtitle = $"Total: {DeathCount:N0} deaths | Attacker losses: {AttackerDeathCount:N0} | Defender losses: {DefenderDeathCount:N0}"
+            });
+            list.Add(new ListItemDto
+            {
+                Title = "Attacker site outcomes",
+                Subtitle = $"Gained: {sites.AttackerGained.Count:N0} | Lost: {sites.AttackerLost.Count:N0} | Plundered: {sites.AttackerPlundered.Count:N0}"
+            });
+            list.Add(new ListItemDto
+            {
+                Title = "Defender site outcomes",
+                Subtitle = $"Gained: {sites.DefenderGained.Count:N0} | Lost: {sites.DefenderLost.Count:N0} | Plundered: {sites.DefenderPlundered.Count:N0}"
+            });
+
             return list;
         }
     }
