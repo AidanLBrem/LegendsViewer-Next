@@ -30,6 +30,8 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                     :attacker-deaths="store.object?.attackerDeathCount"
                     :defender-deaths="store.object?.defenderDeathCount"
                     :total-deaths="store.object?.deathCount"
+                    :attacker-deployed="store.object?.attackerBattleDeployments"
+                    :defender-deployed="store.object?.defenderBattleDeployments"
                     :site-outcomes="store.object?.siteOutcomes" />
             </v-col>
             <v-col v-if="store.object?.attackerDeploymentsByRace?.labels?.length"
