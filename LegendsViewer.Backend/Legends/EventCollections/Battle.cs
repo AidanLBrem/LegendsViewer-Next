@@ -69,6 +69,16 @@ public class Battle : EventCollection, IHasComplexSubtype
         }
     }
 
+    // Numeric counterparts to the detailed site lists. Keeping these on the
+    // domain objects lets the existing server-side sorter order all records
+    // before pagination rather than just sorting the visible page.
+    public int AttackerSitesGained => SiteOutcomes.AttackerGained.Count;
+    public int AttackerSitesLost => SiteOutcomes.AttackerLost.Count;
+    public int AttackerSitesPlundered => SiteOutcomes.AttackerPlundered.Count;
+    public int DefenderSitesGained => SiteOutcomes.DefenderGained.Count;
+    public int DefenderSitesLost => SiteOutcomes.DefenderLost.Count;
+    public int DefenderSitesPlundered => SiteOutcomes.DefenderPlundered.Count;
+
     public List<ListItemDto> MiscList
     {
         get
