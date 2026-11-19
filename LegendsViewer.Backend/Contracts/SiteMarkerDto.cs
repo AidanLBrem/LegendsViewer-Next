@@ -30,6 +30,12 @@ public class SiteMarkerDto
         TypeAsString = site.SiteType.GetDescription();
         Type = site.SiteType;
         Coordinates = site.Coordinates;
+        // The optional sites-and-pops export provides a current snapshot,
+        // not a year-by-year demographic history.
+        PopulationCount = site.Populations.Count > 0
+            ? site.Populations.Where(pop => !pop.IsVisitors && pop.Count > 0)
+                .Sum(pop => (long)pop.Count)
+            : null;
         OwnerHistory = site.OwnerHistory
             .OrderBy(period => period.StartYear < 0 ? 0 : period.StartYear)
             .Select(period => new SiteOwnershipPeriodDto(period))
@@ -79,6 +85,7 @@ public class SiteMarkerDto
     public string TypeAsString { get; set; }
     public SiteType Type { get; set; }
     public List<Location> Coordinates { get; set; }
+    public long? PopulationCount { get; set; }
     public List<SiteOwnershipPeriodDto> OwnerHistory { get; set; }
     public int? CreatedYear { get; set; }
     public List<int> DestroyedYears { get; set; }
