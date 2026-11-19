@@ -114,7 +114,7 @@ onMounted(async () => {
                                     <router-link :to="'/entity/' + nation.id">{{ nation.name }}</router-link>
                                     <div class="text-caption text-medium-emphasis">{{ nation.race }}</div>
                                 </td>
-                                <td>{{ nation.character }}</td>
+                                <td>{{ nation.period.character }}</td>
                                 <td class="text-end">{{ nation.currentSites.toLocaleString() }}</td>
                                 <td v-for="column in rateColumns" :key="column.key" class="text-end culture-number">
                                     {{ formatRate(nation.period[column.key]) }}
