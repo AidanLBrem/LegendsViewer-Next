@@ -354,7 +354,7 @@ export async function createTerritoryGrid(
       // Unknown population has the same weight as a single ordinary site.
       const population = Number.isFinite(seed.population) ? Math.max(0, seed.population!) : 0;
       const populationScale = Math.log10(1 + population / 100);
-      const weight = (1 + Math.min(2.4, populationScale * 0.55)) /
+      const weight = (1 + Math.min(4.8, populationScale * 1.10)) /
         Math.max(1, seed.coordinateCount ?? 1);
       const radius = baseRadius * (1 + Math.min(0.45, populationScale * 0.12));
       const radiusSquared = radius * radius;
