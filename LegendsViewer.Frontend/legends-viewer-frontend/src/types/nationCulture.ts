@@ -1,5 +1,6 @@
 export interface NationCulturePeriod {
     windowYears: number;
+    character: string;
     startYear: number;
     endYear: number;
     observedYears: number;
