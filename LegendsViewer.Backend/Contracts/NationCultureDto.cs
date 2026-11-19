@@ -27,7 +27,10 @@ public sealed class NationCulturePeriodDto
     public int InternalUpheavals { get; set; }
     public int HarshEdictsIssued { get; set; }
     public int HarshEdictsRevoked { get; set; }
+    // Existing total territorial growth rate, retained for nation detail pages.
     public double ExpansionPerCentury { get; set; }
+    public double SettlementExpansionPerCentury { get; set; }
+    public double ConquestPerCentury { get; set; }
     public double OffensiveOperationsPerCentury { get; set; }
     public double PlundersPerCentury { get; set; }
     public double DiplomacyPerCentury { get; set; }
@@ -249,6 +252,8 @@ public sealed class NationCultureProfileDto
                 HarshEdictsIssued = Count("harshLaw"),
                 HarshEdictsRevoked = Count("lawRepealed"),
                 ExpansionPerCentury = Rate(conquests + settlements),
+                SettlementExpansionPerCentury = Rate(settlements),
+                ConquestPerCentury = Rate(conquests),
                 OffensiveOperationsPerCentury = Rate(offense),
                 PlundersPerCentury = Rate(plunders),
                 DiplomacyPerCentury = Rate(peace + alliances),
