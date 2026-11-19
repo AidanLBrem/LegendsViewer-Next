@@ -89,7 +89,9 @@ export function getTerritorySeeds(
     const locations = (site.coordinates ?? []).filter(location =>
       location.x != null && location.y != null &&
       Number.isFinite(location.x) && Number.isFinite(location.y));
-    const population = site.populationCount;
+    // Present-day population is not evidence of historical settlement size.
+    // Earlier years use the same unweighted influence model for all sites.
+    const population = year >= presentYear ? site.populationCount : null;
     const race = (year >= presentYear ? site.residentRace : null) || owner.ownerRace;
     for (const location of locations) {
       seeds.push({
