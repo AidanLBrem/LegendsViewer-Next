@@ -6,6 +6,7 @@ import LegendsCardList from '../components/LegendsCardList.vue';
 import ExpandableCard from '../components/ExpandableCard.vue';
 import DoughnutChart from '../components/DoughnutChart.vue';
 import WarfareGraph from '../components/WarfareGraph.vue';
+import WarfareOverviewCard from '../components/WarfareOverviewCard.vue';
 import { computed, ComputedRef } from 'vue';
 import { LegendLinkListData } from '../types/legends';
 
@@ -24,6 +25,13 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
 <template>
     <WorldObjectPage :store="store" :mapStore="mapStore" :object-type="'war'">
         <template v-slot:type-specific-before-table>
+            <v-col cols="12" xl="6" lg="12" md="12">
+                <WarfareOverviewCard
+                    :attacker-deaths="store.object?.attackerDeathCount"
+                    :defender-deaths="store.object?.defenderDeathCount"
+                    :total-deaths="store.object?.deathCount"
+                    :site-outcomes="store.object?.siteOutcomes" />
+            </v-col>
             <v-col v-if="store.object?.battleGraphData != null" cols="12" xl="4" lg="6" md="12">
                 <ExpandableCard title="Battle Graph" subtitle="Scaled representation of faction roles in battle"
                     icon="mdi-chess-bishop">
