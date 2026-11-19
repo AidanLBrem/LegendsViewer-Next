@@ -1,3 +1,5 @@
+using LegendsViewer.Backend.Contracts;
+using LegendsViewer.Backend.Extensions;
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.EventCollections;
 using LegendsViewer.Backend.Legends.Events;
@@ -62,6 +64,42 @@ public class BattleCasualtyTests
         Assert.AreEqual(128, war.DeathsByRace.Datasets.Single().Data.Sum());
         Assert.AreEqual(1, war.AttackerBattleVictories.Count);
         Assert.AreEqual(0, war.DefenderBattleVictories.Count);
+    }
+
+    [TestMethod]
+    public void OverviewSortsBattleCasualtiesNumericallyBeforePagination()
+    {
+        using var world = new World();
+        CreateWar(world);
+        var lowerLosses = new Battle([
+            P("id", "101"),
+            P("war_eventcol", "10"),
+            P("attacking_squad_race", "HUMAN"),
+            P("attacking_squad_number", "30"),
+            P("attacking_squad_deaths", "5")
+        ], world);
+        var higherLosses = new Battle([
+            P("id", "102"),
+            P("war_eventcol", "10"),
+            P("attacking_squad_race", "HUMAN"),
+            P("attacking_squad_number", "200"),
+            P("attacking_squad_deaths", "100"),
+            P("defending_squad_race", "DWARF"),
+            P("defending_squad_number", "100"),
+            P("defending_squad_deaths", "20")
+        ], world);
+
+        var result = new[] { lowerLosses, higherLosses }
+            .SortByProperty("deathCount", "desc")
+            .Skip(0).Take(1).Single();
+        Assert.AreSame(higherLosses, result);
+        Assert.AreSame(lowerLosses,
+            new[] { higherLosses, lowerLosses }.SortByProperty("attackerDeathCount", "asc").First());
+
+        WorldObjectDto overview = new(higherLosses);
+        Assert.AreEqual(120, overview.DeathCount);
+        Assert.AreEqual(100, overview.AttackerDeathCount);
+        Assert.AreEqual(20, overview.DefenderDeathCount);
     }
 
     [TestMethod]
