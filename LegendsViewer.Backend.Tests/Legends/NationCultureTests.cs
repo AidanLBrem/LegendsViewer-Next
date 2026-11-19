@@ -1,5 +1,6 @@
 using LegendsViewer.Backend.Contracts;
 using LegendsViewer.Backend.Legends;
+using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.EventCollections;
 using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.Various;
@@ -103,6 +104,93 @@ public class NationCultureTests
         Assert.AreEqual(1, recent.OffensiveOperations);
         Assert.AreEqual(0, recent.WarsInitiated);
         Assert.AreEqual(1, recent.WarsDefended);
+    }
+
+    [TestMethod]
+    public void WartimeSettlementLossesCountOnlyAttributedCapturesAndDestruction()
+    {
+        using World world = new() { CurrentYear = 150 };
+        Entity defender = new([], world) { Id = 1, Name = "Defender", IsCiv = true };
+        Entity attacker = new([], world) { Id = 2, Name = "Attacker", IsCiv = true };
+        Entity thirdParty = new([], world) { Id = 3, Name = "Outsider", IsCiv = true };
+
+        War war = new([], world)
+        {
+            Id = 40, Name = "Border War", StartYear = 80,
+            Attacker = attacker, Defender = defender
+        };
+        defender.Wars.Add(war);
+        attacker.Wars.Add(war);
+
+        Site captured = new([], world) { Id = 101, Name = "Lost Keep" };
+        Site razed = new([], world) { Id = 102, Name = "Burned Town" };
+        Site plundered = new([], world) { Id = 103, Name = "Raided Market" };
+        Site abandoned = new([], world) { Id = 104, Name = "Abandoned Hold" };
+        Site outsideWar = new([], world) { Id = 105, Name = "Unrelated Town" };
+        Site thirdPartyCapture = new([], world) { Id = 106, Name = "Outsider Capture" };
+
+        _ = new OwnerPeriod(captured, defender, 20, "founded")
+        {
+            EndYear = 110, EndCause = "taken over", Ender = attacker
+        };
+        _ = new OwnerPeriod(razed, defender, 50, "founded")
+        {
+            EndYear = 135, EndCause = "destroyed", Ender = attacker
+        };
+        _ = new OwnerPeriod(abandoned, defender, 40, "founded")
+        {
+            EndYear = 145, EndCause = "abandoned"
+        };
+        _ = new OwnerPeriod(outsideWar, defender, 55, "founded")
+        {
+            EndYear = 146, EndCause = "taken over", Ender = attacker
+        };
+
+        SiteConquered Outcome(int id, Site site, int year,
+            SiteConqueredType type, Entity winner)
+        {
+            return new SiteConquered([], world)
+            {
+                Id = id, Site = site, StartYear = year,
+                Attacker = winner, Defender = defender, ConquerType = type
+            };
+        }
+
+        war.EventCollections.Add(Outcome(1, captured, 110, SiteConqueredType.Conquest, attacker));
+        war.EventCollections.Add(Outcome(2, captured, 110, SiteConqueredType.Conquest, attacker));
+        war.EventCollections.Add(Outcome(3, razed, 135, SiteConqueredType.Destruction, attacker));
+        war.EventCollections.Add(Outcome(4, plundered, 140, SiteConqueredType.Pillaging, attacker));
+        war.EventCollections.Add(Outcome(5, thirdPartyCapture, 143, SiteConqueredType.Conquest, thirdParty));
+
+        var defenderProfile = NationCultureProfileDto.FromEntity(defender);
+        var all = defenderProfile.Periods.Single(p => p.WindowYears == 0);
+        var last25 = defenderProfile.Periods.Single(p => p.WindowYears == 25);
+
+        Assert.AreEqual(2, all.SitesLostInWar);
+        Assert.AreEqual(1, last25.SitesLostInWar);
+        Assert.AreEqual(Math.Round(200d / all.ObservedYears, 2), all.SitesLostInWarPerCentury);
+        Assert.AreEqual(Math.Round(100d / last25.ObservedYears, 2), last25.SitesLostInWarPerCentury);
+        Assert.AreEqual(2, defenderProfile.Evidence.Count(e => e.Category == "warLoss"));
+        Assert.AreEqual(0, NationCultureProfileDto.FromEntity(attacker).Periods[0].SitesLostInWar);
+    }
+
+    [TestMethod]
+    public void NonWarTerritorialLossesDoNotCountAsWartimeLosses()
+    {
+        using World world = new() { CurrentYear = 100 };
+        Entity nation = new([], world) { Id = 1, Name = "Realm", IsCiv = true };
+        Site abandoned = new([], world) { Id = 10, Name = "Old Town" };
+        _ = new OwnerPeriod(abandoned, nation, 10, "founded")
+        {
+            EndYear = 90, EndCause = "abandoned"
+        };
+
+        var profile = NationCultureProfileDto.FromEntity(nation);
+        var all = profile.Periods.Single(p => p.WindowYears == 0);
+
+        Assert.AreEqual(1, all.SitesLost);
+        Assert.AreEqual(0, all.SitesLostInWar);
+        Assert.AreEqual(0, all.SitesLostInWarPerCentury);
     }
 
     [TestMethod]
