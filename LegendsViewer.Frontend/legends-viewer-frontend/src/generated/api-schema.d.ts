@@ -14560,6 +14560,9 @@ export interface components {
             readonly miscList?: components["schemas"]["ListItemDto"][] | null;
             readonly notableDeathLinks?: string[] | null;
             deathsByRace?: components["schemas"]["ChartDataDto"];
+            attackerDeathsByRace?: components["schemas"]["ChartDataDto"];
+            defenderDeathsByRace?: components["schemas"]["ChartDataDto"];
+            readonly siteOutcomes?: components["schemas"]["WarfareSiteOutcomesDto"];
             /** Format: int32 */
             attackerDeathCount?: number;
             /** Format: int32 */
@@ -15826,6 +15829,7 @@ export interface components {
             attackerDeathCount?: number;
             /** Format: int32 */
             defenderDeathCount?: number;
+            readonly siteOutcomes?: components["schemas"]["WarfareSiteOutcomesDto"];
             readonly miscList?: components["schemas"]["ListItemDto"][] | null;
             readonly notableDeathLinks?: string[] | null;
             deathsByRace?: components["schemas"]["ChartDataDto"];
@@ -15835,6 +15839,14 @@ export interface components {
             readonly attackerToDefenderKills?: number;
             /** Format: double */
             readonly attackerToDefenderVictories?: number;
+        };
+        WarfareSiteOutcomesDto: {
+            attackerGained?: string[] | null;
+            attackerLost?: string[] | null;
+            attackerPlundered?: string[] | null;
+            defenderGained?: string[] | null;
+            defenderLost?: string[] | null;
+            defenderPlundered?: string[] | null;
         };
         WorldConstruction: {
             /** Format: int32 */
