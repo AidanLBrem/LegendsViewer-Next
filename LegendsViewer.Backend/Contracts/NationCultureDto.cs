@@ -259,9 +259,9 @@ public sealed class NationCultureProfileDto
                     AddWarLoss(takeover.Site, entry.Year, takeover.Attacker,
                         takeover.Defender ?? takeover.SiteEntity, war, "taken over");
                     break;
-                case NewSiteLeader takeover:
-                    AddWarLoss(takeover.Site, entry.Year, takeover.Attacker,
-                        takeover.Defender ?? takeover.SiteEntity, war, "captured");
+                case NewSiteLeader newLeader:
+                    AddWarLoss(newLeader.Site, entry.Year, newLeader.Attacker,
+                        newLeader.Defender ?? newLeader.SiteEntity, war, "captured");
                     break;
                 case SiteSurrendered surrender:
                     AddWarLoss(surrender.Site, entry.Year, surrender.Attacker,
@@ -271,9 +271,9 @@ public sealed class NationCultureProfileDto
                     AddWarLoss(destroyed.Site, entry.Year, destroyed.Attacker,
                         destroyed.Defender ?? destroyed.SiteEntity, war, "destroyed");
                     break;
-                case HfDestroyedSite destroyed:
-                    AddWarLoss(destroyed.Site, entry.Year, null,
-                        destroyed.DefenderCiv ?? destroyed.SiteCiv, war, "destroyed");
+                case HfDestroyedSite hfDestroyed:
+                    AddWarLoss(hfDestroyed.Site, entry.Year, null,
+                        hfDestroyed.DefenderCiv ?? hfDestroyed.SiteCiv, war, "destroyed");
                     break;
             }
         }
