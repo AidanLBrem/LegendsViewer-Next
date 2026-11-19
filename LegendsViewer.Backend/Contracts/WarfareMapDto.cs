@@ -76,6 +76,7 @@ public class BattleMapMarkerDto
     public int EndYear { get; set; }
     public bool IsActive { get; set; }
     public int DeathCount { get; set; }
+    public bool IsSiege { get; set; }
     public int AttackerDeathCount { get; set; }
     public int DefenderDeathCount { get; set; }
     public LocationDto? Coordinates { get; set; }
