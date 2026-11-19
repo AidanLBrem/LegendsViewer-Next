@@ -411,11 +411,8 @@ export function territoryGridToDataUrl(
   previousRow.fill(-1);
 
   for (let y = 0; y < canvas.height; y++) {
-    const sourceY = Math.min(grid.height - 1, Math.floor(y * grid.height / canvas.height));
     let leftId = -1;
     for (let x = 0; x < canvas.width; x++) {
-      const sourceX = Math.min(grid.width - 1, Math.floor(x * grid.width / canvas.width));
-      const offset = sourceY * grid.width + sourceX;
       const id = getTerritoryNationAtTile(grid, canvas.width, canvas.height, x, y, oceanMask) ?? -1;
       if (id >= 0) {
         if (!cache.has(id)) cache.set(id, rgb(grid.colors.get(id) ?? '#777777'));
