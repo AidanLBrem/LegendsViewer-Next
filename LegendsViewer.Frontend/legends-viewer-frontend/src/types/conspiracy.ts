@@ -8,7 +8,7 @@ export interface Conspirator {
 }
 export interface PlotReference { figureId: number; localId: number; resolved: boolean }
 export interface Conspiracy {
-  key: string; localId: number; owner: IntrigueReference; objective: string; status: string;
+  key: string; localId: number; owner: IntrigueReference; objective: string; status: string; actorCount: number;
   entity: IntrigueReference | null; artifact: IntrigueReference | null; participants: Conspirator[];
   civilizations: IntrigueReference[]; parent: PlotReference | null; delegated: PlotReference | null;
   fields: IntrigueField[];
