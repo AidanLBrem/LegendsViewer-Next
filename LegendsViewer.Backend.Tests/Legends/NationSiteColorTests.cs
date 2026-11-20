@@ -47,6 +47,56 @@ public class NationSiteColorTests
     }
 
     [TestMethod]
+    public void GenerateCivColors_RefreshesBadgesCachedBeforeThePaletteWasAssigned()
+    {
+        using World world = new();
+        var civilization = new Entity([], world)
+        {
+            Id = 40,
+            Name = "The Silver Kingdom",
+            IsCiv = true
+        };
+        var subsidiary = new Entity([], world)
+        {
+            Id = 41,
+            Name = "Silver Kingdom Garrison",
+            Parent = civilization
+        };
+        world.Entities.AddRange([civilization, subsidiary]);
+
+        // Accessing links during parsing caches the initial uncolored badges.
+        string oldCivilizationBadge = civilization.Icon;
+        string oldGarrisonBadge = subsidiary.Icon;
+
+        typeof(World).GetMethod("GenerateCivColors", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .Invoke(world, null);
+
+        Assert.AreNotEqual(Color.Empty, civilization.LineColor);
+        Assert.AreNotEqual(Color.Black.ToArgb(), civilization.LineColor.ToArgb());
+        Assert.AreEqual(civilization.LineColor, subsidiary.LineColor);
+        Assert.AreNotEqual(oldCivilizationBadge, civilization.Icon);
+        Assert.AreNotEqual(oldGarrisonBadge, subsidiary.Icon);
+        StringAssert.Contains(civilization.Icon, ColorTranslator.ToHtml(civilization.LineColor));
+        StringAssert.Contains(subsidiary.Icon, ColorTranslator.ToHtml(subsidiary.LineColor));
+    }
+
+    [TestMethod]
+    public void EntityBadge_RebuildsAfterColorChange()
+    {
+        using World world = new();
+        var entity = new Entity([], world)
+        {
+            Id = 70, Name = "The Red Kingdom", IsCiv = true, LineColor = Color.Red
+        };
+        string red = entity.Icon;
+
+        entity.LineColor = Color.Blue;
+
+        Assert.AreNotEqual(red, entity.Icon);
+        StringAssert.Contains(entity.Icon, ColorTranslator.ToHtml(Color.Blue));
+    }
+
+    [TestMethod]
     public void SiteMarker_UsesFoundingNationColorInsteadOfConquerorColor()
     {
         using World world = new();
