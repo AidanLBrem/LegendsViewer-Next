@@ -35,6 +35,20 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                     :defender-deployed="store.object?.defenderBattleDeployments"
                     :site-outcomes="store.object?.siteOutcomes" />
             </v-col>
+            <v-col v-if="store.object" cols="12" xl="6">
+                <v-card title="Lead-up to War" prepend-icon="mdi-timeline-clock-outline" variant="text">
+                    <v-card-text>
+                        <p class="text-body-2 mb-3">Recorded encounters between opposing factions and their groups in the ten years leading up to the war. Opening events are linked to the war at its recorded start.</p>
+                        <v-list v-if="store.object.leadUp?.length" max-height="320" class="overflow-y-auto">
+                            <v-list-item v-for="(entry, index) in store.object.leadUp" :key="index">
+                                <div class="text-subtitle-2">{{ entry.title }}</div>
+                                <div class="text-body-2" v-html="entry.subtitle"></div>
+                            </v-list-item>
+                        </v-list>
+                        <p v-else>No dated encounters matching these factions were found in the lead-up period.</p>
+                    </v-card-text>
+                </v-card>
+            </v-col>
             <v-col v-if="store.object?.attackerDeploymentsByRace?.labels?.length"
                 cols="12" xl="4" lg="6" md="12">
                 <ArmyCompositionCard

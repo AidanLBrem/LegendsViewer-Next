@@ -15849,6 +15849,7 @@ export interface components {
             readonly notableDeathLinks?: string[] | null;
             deathsByRace?: components["schemas"]["ChartDataDto"];
             battleGraphData?: components["schemas"]["CytoscapeData"];
+            readonly leadUp?: components["schemas"]["ListItemDto"][] | null;
             readonly battleList?: components["schemas"]["ListItemDto"][] | null;
             /** Format: double */
             readonly attackerToDefenderKills?: number;
