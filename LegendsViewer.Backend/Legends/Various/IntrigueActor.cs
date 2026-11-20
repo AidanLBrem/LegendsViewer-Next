@@ -4,19 +4,22 @@ namespace LegendsViewer.Backend.Legends.Various;
 
 public class IntrigueActor
 {
-    public int LocalId { get; set; }
+    public int LocalId { get; set; } = -1;
     public string? Role { get; set; }
     public string? Strategy { get; set; }
-    public int EntityId { get; }
-    public int HfId { get; set; }
-    public int HandleActorId { get; set; }
-    public int StrategyEnId { get; set; }
-    public int StrategyEppId { get; set; }
+    public int EntityId { get; } = -1;
+    public int HfId { get; set; } = -1;
+    public int HandleActorId { get; set; } = -1;
+    public int StrategyEnId { get; set; } = -1;
+    public int StrategyEppId { get; set; } = -1;
     public bool PromisedActorImmortality { get; set; }
     public bool PromisedMeImmortality { get; set; }
 
+    public List<IntrigueField> Fields { get; }
+
     public IntrigueActor(List<Property> properties)
     {
+        Fields = IntrigueField.Read(properties);
         foreach (Property property in properties)
         {
             switch (property.Name)
@@ -31,11 +34,11 @@ public class IntrigueActor
                 case "strategy_eppid": StrategyEppId = Convert.ToInt32(property.Value); break;
                 case "promised_actor_immortality":
                     property.Known = true;
-                    PromisedActorImmortality = true;
+                    PromisedActorImmortality = IntrigueField.Flag(property);
                     break;
                 case "promised_me_immortality":
                     property.Known = true;
-                    PromisedMeImmortality = true;
+                    PromisedMeImmortality = IntrigueField.Flag(property);
                     break;
             }
         }

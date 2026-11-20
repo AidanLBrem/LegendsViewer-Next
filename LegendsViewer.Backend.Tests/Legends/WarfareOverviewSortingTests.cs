@@ -84,7 +84,7 @@ public class WarfareOverviewSortingTests
         Assert.IsNotNull(first);
         Assert.AreEqual(3, first.TotalFilteredCount);
         Assert.AreEqual(many.Id, first.Items.Single().Id);
-        Assert.AreEqual(3, first.Items.Single().AttackerSitesGained);
+        Assert.AreEqual(3, first.Items.Single().AttackerSitesGainedCount);
         Assert.AreEqual(25, first.Items.Single().DefenderDeathCount);
 
         var secondResult = controller.Get(
@@ -94,7 +94,7 @@ public class WarfareOverviewSortingTests
             as PaginatedResponse<WorldObjectDto>;
         Assert.IsNotNull(second);
         Assert.AreEqual(medium.Id, second.Items.Single().Id);
-        Assert.AreEqual(2, second.Items.Single().DefenderSitesLost);
+        Assert.AreEqual(2, second.Items.Single().DefenderSitesLostCount);
     }
 
     [TestMethod]
@@ -235,6 +235,6 @@ public class WarfareOverviewSortingTests
         Assert.AreEqual(large.Id, page.Items.Single().Id);
         Assert.AreEqual(43, page.Items.Single().DeathCount);
         Assert.AreEqual(40, page.Items.Single().DefenderDeathCount);
-        Assert.AreEqual(2, page.Items.Single().AttackerSitesGained);
+        Assert.AreEqual(2, page.Items.Single().AttackerSitesGainedCount);
     }
 }
