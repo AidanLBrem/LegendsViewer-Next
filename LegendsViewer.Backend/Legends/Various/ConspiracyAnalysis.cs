@@ -12,7 +12,12 @@ public record PlotReferenceDto(int FigureId, int LocalId, bool Resolved);
 public record ConspiracyDto(string Key, int LocalId, IntrigueReference Owner, string Objective,
     string Status, IntrigueReference? Entity, IntrigueReference? Artifact,
     List<ConspiratorDto> Participants, List<IntrigueReference> Civilizations,
-    PlotReferenceDto? Parent, PlotReferenceDto? Delegated, List<IntrigueField> Fields);
+    PlotReferenceDto? Parent, PlotReferenceDto? Delegated, List<IntrigueField> Fields)
+{
+    // Actor IDs are local to the plot owner. Referenced targets count as recorded actors,
+    // not necessarily as willing conspirators.
+    public int ActorCount => Participants.Select(p => p.ActorId).Distinct().Count();
+}
 public record ConspiracyPageDto(List<ConspiracyDto> Items, int TotalCount, int TotalFilteredCount,
     List<IntrigueReference> Civilizations);
 
