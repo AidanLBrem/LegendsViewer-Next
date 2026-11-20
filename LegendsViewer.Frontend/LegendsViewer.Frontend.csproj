@@ -32,18 +32,10 @@
 		<Exec Command="npm run build" WorkingDirectory="$(SpaRoot)" />
 	</Target>
 
-	<!-- Generate the Vite bundle BEFORE MSBuild calculates ContentWithTargetPath. -->
-	<!-- Using Link alone on items created inside a target can leave TargetPath -->
-	<!-- as the directory name, causing MSB3024 for every JS/CSS asset. -->
-	<Target Name="CopyFilesAfterBuild"
-		BeforeTargets="AssignTargetPaths"
-		DependsOnTargets="OnPackageChange;OnSourceChange">
+	<Target Name="CopyFilesAfterBuild" BeforeTargets="BeforeBuild;IncrementalClean">
 		<ItemGroup>
-			<Content Include="$(SpaRoot)dist\**\*">
-				<TargetPath>legends-viewer-frontend\dist\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
-				<Link>%(TargetPath)</Link>
+			<Content Include="$(SpaRoot)dist\**">
 				<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-				<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 			</Content>
 		</ItemGroup>
 	</Target>
