@@ -118,6 +118,12 @@ public class XmlPlusParser : XmlParser
                 {
                     foreach (var property in _currentItem)
                     {
+                        if (CurrentSection == Section.HistoricalFigures &&
+                            property.Name is "intrigue_actor" or "intrigue_plot")
+                        {
+                            MergeIntrigue(existingProperties, property, "local_id");
+                            continue;
+                        }
                         if (CurrentSection == Section.Entities &&
                             (property.Name == "entity_link" || property.Name == "child" ||
                              property.Name == "entity_position" || property.Name == "entity_position_assignment" ||
@@ -181,6 +187,36 @@ public class XmlPlusParser : XmlParser
                 _currentItem = null;
                 await ParseAsync();
             }
+        }
+    }
+
+    // IDs are scoped to the containing figure, never globally unique.
+    public static void MergeIntrigue(List<Property> existing, Property incoming, string key)
+    {
+        var id = incoming.SubProperties?.FirstOrDefault(p => p.Name == key)?.Value;
+        var match = id == null ? null : existing.FirstOrDefault(p => p.Name == incoming.Name &&
+            p.SubProperties?.Any(child => child.Name == key && child.Value == id) == true);
+        if (match?.SubProperties == null || incoming.SubProperties == null)
+        {
+            existing.Add(incoming);
+            return;
+        }
+        foreach (var field in incoming.SubProperties)
+        {
+            if (field.Name == "plot_actor")
+            {
+                MergeIntrigue(match.SubProperties, field, "actor_id");
+                continue;
+            }
+            var previous = match.SubProperties.FirstOrDefault(p => p.Name == field.Name);
+            if (previous == null) match.SubProperties.Add(field);
+            else if (field.SubProperties == null)
+            {
+                previous.Value = field.Value;
+                previous.Known = false;
+            }
+            else if (previous.SubProperties == null) previous.SubProperties = field.SubProperties;
+            else previous.SubProperties.AddRange(field.SubProperties);
         }
     }
 

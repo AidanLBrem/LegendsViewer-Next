@@ -244,7 +244,7 @@ public class WarfareSiteOutcomesTests
 
         // The collection and event have war parent references but are not in
         // war.EventCollections or war.Events.
-        var conquest = new([P("id", "703")], world)
+        var conquest = new SiteConquered([P("id", "703")], world)
         {
             ParentCollection = setup.War,
             Site = town,

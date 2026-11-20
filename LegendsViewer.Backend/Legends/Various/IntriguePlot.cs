@@ -4,20 +4,23 @@ namespace LegendsViewer.Backend.Legends.Various;
 
 public class IntriguePlot
 {
-    public int LocalId { get; set; }
+    public int LocalId { get; set; } = -1;
     public string? Type { get; set; }
-    public int EntityId { get; }
+    public int EntityId { get; } = -1;
     public bool OnHold { get; set; }
-    public int ArtifactId { get; set; }
-    public int ActorId { get; set; }
-    public int ParentPlotId { get; set; }
-    public int ParentPlotHfId { get; set; }
-    public int DelegatedPlotId { get; set; }
-    public int DelegatedPlotHfId { get; set; }
+    public int ArtifactId { get; set; } = -1;
+    public int ActorId { get; set; } = -1;
+    public int ParentPlotId { get; set; } = -1;
+    public int ParentPlotHfId { get; set; } = -1;
+    public int DelegatedPlotId { get; set; } = -1;
+    public int DelegatedPlotHfId { get; set; } = -1;
     public List<PlotActor> PlotActors { get; set; } = [];
+
+    public List<IntrigueField> Fields { get; }
 
     public IntriguePlot(List<Property> properties)
     {
+        Fields = IntrigueField.Read(properties);
         foreach (Property property in properties)
         {
             switch (property.Name)
@@ -33,7 +36,7 @@ public class IntriguePlot
                 case "delegated_plot_hfid": DelegatedPlotHfId = Convert.ToInt32(property.Value); break;
                 case "on_hold":
                     property.Known = true;
-                    OnHold = true;
+                    OnHold = IntrigueField.Flag(property);
                     break;
                 case "plot_actor":
                     property.Known = true;
