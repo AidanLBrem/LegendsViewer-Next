@@ -1,3 +1,4 @@
+using System.Text;
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.Parser;
 using LegendsViewer.Backend.Legends.WorldObjects;
@@ -7,6 +8,12 @@ namespace LegendsViewer.Backend.Tests.Legends.Parser;
 [TestClass]
 public class HistoryParserTests
 {
+    [TestInitialize]
+    public void Initialize()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
+
     [TestMethod]
     public void ReadLeaders_AcceptsReignYearWithoutFollowingCommaAndSkipsMalformedEntries()
     {
