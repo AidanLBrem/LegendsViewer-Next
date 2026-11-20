@@ -1,5 +1,6 @@
 using LegendsViewer.Backend.Legends.Interfaces;
 using System.Text;
+using System.Globalization;
 using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.Various;
 using LegendsViewer.Backend.Legends.WorldObjects;
@@ -147,11 +148,55 @@ public class HistoryParser : IDisposable
         return !_history.EndOfStream && _currentLine.Contains(" List") && !_currentLine.Contains("[*]") && !_currentLine.Contains("%");
     }
 
+    // History exports do not always include a comma after the closing reign
+    // parenthesis. Never use an unchecked IndexOf result as a substring length.
+    private static bool TryParseLeaderRecord(string line, out string leaderName, out int reignBegan)
+    {
+        const string leaderMarker = "[*]";
+        const string reignField = "Reign Began:";
+        leaderName = string.Empty;
+        reignBegan = 0;
+
+        int markerIndex = line.IndexOf(leaderMarker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            return false;
+        }
+
+        int nameStart = markerIndex + leaderMarker.Length;
+        int birthIndex = line.IndexOf("(b", nameStart, StringComparison.Ordinal);
+        if (birthIndex <= nameStart)
+        {
+            return false;
+        }
+
+        leaderName = Formatting.ReplaceNonAscii(line.Substring(nameStart, birthIndex - nameStart).Trim());
+        int fieldIndex = line.IndexOf(reignField, birthIndex, StringComparison.OrdinalIgnoreCase);
+        if (leaderName.Length == 0 || fieldIndex < 0)
+        {
+            return false;
+        }
+
+        int yearStart = fieldIndex + reignField.Length;
+        int yearEnd = line.IndexOf(')', yearStart);
+        return yearEnd > yearStart &&
+            int.TryParse(line.AsSpan(yearStart, yearEnd - yearStart),
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out reignBegan);
+    }
+
     private void ReadLeaders()
     {
         while (LeaderStart())
         {
-            string leaderTypeString = _currentLine?.Substring(1, _currentLine.IndexOf("List", StringComparison.Ordinal) - 2) ?? "Unknown LeaderType";
+            int listIndex = _currentLine.IndexOf(" List", StringComparison.Ordinal);
+            if (listIndex <= 1)
+            {
+                _world.ParsingErrors.Report("Skipped malformed leader list heading", _currentLine);
+                ReadLine();
+                continue;
+            }
+
+            string leaderTypeString = _currentLine.Substring(1, listIndex - 1).Trim();
             string leaderType = Formatting.InitCaps(leaderTypeString);
             _currentCiv?.LeaderTypes.Add(leaderType);
             _currentCiv?.Leaders.Add([]);
@@ -160,15 +205,18 @@ public class HistoryParser : IDisposable
             {
                 if (_currentCiv != null && _currentLine.Contains("[*]"))
                 {
-                    string leaderName = Formatting.ReplaceNonAscii(_currentLine.Substring(_currentLine.IndexOf("[*]", StringComparison.Ordinal) + 4,
-                        _currentLine.IndexOf("(b", StringComparison.Ordinal) - _currentLine.IndexOf("[*]", StringComparison.Ordinal) - 5));
+                    if (!TryParseLeaderRecord(_currentLine, out string leaderName, out int reignBegan))
+                    {
+                        _world.ParsingErrors.Report("Skipped malformed leader entry", _currentLine);
+                        ReadLine();
+                        continue;
+                    }
+
                     var leaders = _world.HistoricalFigures.Where(hf =>
                             string.Equals(hf.Name, leaderName.Replace("'", "`"), StringComparison.OrdinalIgnoreCase)).ToList();
                     if (leaders.Count == 1)
                     {
                         var leader = leaders[0];
-                        int reignBegan = Convert.ToInt32(_currentLine.Substring(_currentLine.IndexOf(":", StringComparison.Ordinal) + 2,
-                            _currentLine.IndexOf("), ", StringComparison.Ordinal) - _currentLine.IndexOf(":", StringComparison.Ordinal) - 2));
                         if (_currentCiv.Leaders[_currentCiv.LeaderTypes.Count - 1].Count > 0) //End of previous leader's reign
                         {
                             HistoricalFigure? lastLeader = _currentCiv.Leaders[_currentCiv.LeaderTypes.Count - 1].LastOrDefault();
