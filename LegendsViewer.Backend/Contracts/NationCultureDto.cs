@@ -127,6 +127,26 @@ public sealed class NationCultureProfileDto
                 facts.Add(new ConquestFact(site, year, description));
             }
 
+            // Ownership periods can be attached to a subsidiary before its
+            // civilization parent is assigned. In that case the site's own
+            // history survives but the nation's SiteHistory is never updated.
+            foreach (Site site in world.Sites)
+            {
+                Entity? previousOwner = null;
+                foreach (var period in site.OwnerHistory.OrderBy(p => p.StartYear))
+                {
+                    string cause = period.StartCause?.Trim().ToLowerInvariant() ?? "";
+                    if (cause is "took over" or "taken over" or "conquered")
+                    {
+                        Record(site, period.Owner, previousOwner, period.StartYear, cause);
+                    }
+                    if (period.Owner != null)
+                    {
+                        previousOwner = period.Owner;
+                    }
+                }
+            }
+
             foreach (WorldEvent entry in world.Events)
             {
                 switch (entry)
