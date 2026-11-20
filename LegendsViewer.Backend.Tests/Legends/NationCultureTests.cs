@@ -3,6 +3,7 @@ using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.EventCollections;
 using LegendsViewer.Backend.Legends.Events;
+using LegendsViewer.Backend.Legends.Parser;
 using LegendsViewer.Backend.Legends.Various;
 using LegendsViewer.Backend.Legends.WorldObjects;
 
@@ -191,6 +192,131 @@ public class NationCultureTests
         Assert.AreEqual(1, all.SitesLost);
         Assert.AreEqual(0, all.SitesLostInWar);
         Assert.AreEqual(0, all.SitesLostInWarPerCentury);
+    }
+
+    [TestMethod]
+    public void SurrenderedSiteCountsAsConquestWithoutAnyNationOwnershipPeriod()
+    {
+        using World world = new() { CurrentYear = 100 };
+        Entity winner = new([], world) { Id = 1, Name = "Winning Realm", IsCiv = true };
+        Entity loser = new([], world) { Id = 2, Name = "Losing Realm", IsCiv = true };
+        Site site = new([], world) { Id = 1, Name = "Captured Village" };
+        world.Entities.AddRange([winner, loser]);
+        world.Sites.Add(site);
+
+        // SiteSurrendered records a capture, but does not create an OwnerPeriod.
+        // The former culture implementation therefore reported zero conquests.
+        var surrender = new SiteSurrendered(
+        [
+            new Property { Name = "attacker_civ_id", Value = "1" },
+            new Property { Name = "defender_civ_id", Value = "2" },
+            new Property { Name = "site_civ_id", Value = "2" },
+            new Property { Name = "site_id", Value = "1" }
+        ], world)
+        {
+            Id = 10,
+            Year = 60
+        };
+        world.Events.Add(surrender);
+
+        Assert.AreEqual(0, winner.SiteHistory.Count);
+        var profile = NationCultureProfileDto.FromEntity(winner);
+        var all = profile.Periods.Single(p => p.WindowYears == 0);
+        Assert.AreEqual(1, all.Conquests);
+        Assert.AreEqual(0, all.SettlementsFounded);
+        Assert.AreEqual(1, profile.Evidence.Count(e => e.Category == "conquest"));
+        Assert.AreEqual(0, NationCultureProfileDto.FromEntity(loser).Periods[0].Conquests);
+    }
+
+    [TestMethod]
+    public void ConquestCollectionAndOwnershipPeriodCountOnceAndExcludeNonConquests()
+    {
+        using World world = new() { CurrentYear = 100 };
+        Entity winner = new([], world) { Id = 1, Name = "Winning Realm", IsCiv = true };
+        Entity loser = new([], world) { Id = 2, Name = "Losing Realm", IsCiv = true };
+        Entity localGovernment = new([], world) { Id = 3, Name = "Local Government" };
+        localGovernment.SetParent(winner);
+        Site captured = new([], world) { Id = 1, Name = "Old Castle" };
+        Site raided = new([], world) { Id = 2, Name = "Trade Village" };
+        Site internalSite = new([], world) { Id = 3, Name = "Internal Town" };
+
+        _ = new OwnerPeriod(captured, winner, 60, "took over");
+        world.EventCollections.AddRange(
+        [
+            new SiteConquered([], world)
+            {
+                Id = 11, Site = captured, StartYear = 60,
+                Attacker = winner, Defender = loser, ConquerType = SiteConqueredType.Conquest
+            },
+            new SiteConquered([], world)
+            {
+                Id = 12, Site = raided, StartYear = 70,
+                Attacker = winner, Defender = loser, ConquerType = SiteConqueredType.Pillaging
+            },
+            new SiteConquered([], world)
+            {
+                Id = 13, Site = raided, StartYear = 80,
+                Attacker = winner, Defender = loser, ConquerType = SiteConqueredType.Invasion
+            },
+            new SiteConquered([], world)
+            {
+                Id = 14, Site = internalSite, StartYear = 90,
+                Attacker = winner, Defender = localGovernment, ConquerType = SiteConqueredType.Conquest
+            }
+        ]);
+
+        var profile = NationCultureProfileDto.FromEntity(winner);
+        var all = profile.Periods.Single(p => p.WindowYears == 0);
+        Assert.AreEqual(1, all.Conquests);
+        Assert.AreEqual(1, profile.Evidence.Count(e => e.Category == "conquest"));
+        Assert.AreEqual(0, profile.Periods.Single(p => p.WindowYears == 25).Conquests);
+        Assert.AreEqual(1, profile.Timeline.Sum(p => p.Conquests));
+    }
+
+    [TestMethod]
+    public void SiteOwnerHistoryIsRecoveredWhenLateParentLinkSkippedNationalHistory()
+    {
+        using World world = new() { CurrentYear = 100 };
+        Entity nation = new([], world) { Id = 1, Name = "New Overlords", IsCiv = true };
+        Entity enemy = new([], world) { Id = 2, Name = "Previous Owners", IsCiv = true };
+        Entity oldGovernment = new([], world) { Id = 3, Name = "Old Government" };
+        Entity newGovernment = new([], world) { Id = 4, Name = "New Government" };
+        Site site = new([], world) { Id = 1, Name = "Conquered Keep" };
+        oldGovernment.SetParent(enemy);
+        site.OwnerHistory.Add(new OwnerPeriod(site, oldGovernment, 10, "founded"));
+        site.OwnerHistory.Add(new OwnerPeriod(site, newGovernment, 40, "took over"));
+        newGovernment.SetParent(nation); // Parent linkage came after the ownership period.
+        world.Sites.Add(site);
+
+        Assert.AreEqual(0, nation.SiteHistory.Count);
+        var culture = NationCultureProfileDto.FromEntity(nation);
+        Assert.AreEqual(1, culture.Periods.Single(p => p.WindowYears == 0).Conquests);
+        Assert.AreEqual(0, NationCultureProfileDto.FromEntity(enemy).Periods[0].Conquests);
+    }
+
+    [TestMethod]
+    public void ConquestIsAttributedToCivilizationWhenSiteGovernmentHistoryWasNotPropagated()
+    {
+        using World world = new() { CurrentYear = 100 };
+        Entity nation = new([], world) { Id = 1, Name = "Realm", IsCiv = true };
+        Entity enemy = new([], world) { Id = 2, Name = "Enemy", IsCiv = true };
+        Entity newGovernment = new([], world) { Id = 3, Name = "New Administration" };
+        Site site = new([], world) { Id = 1, Name = "Fortress" };
+
+        // A site ownership period may be created before the subsidiary's
+        // parent link exists; AddOwnedSite does not retroactively propagate it.
+        _ = new OwnerPeriod(site, newGovernment, 40, "took over");
+        newGovernment.SetParent(nation);
+        Assert.AreEqual(0, nation.SiteHistory.Count);
+        world.EventCollections.Add(new SiteConquered([], world)
+        {
+            Id = 11, Site = site, StartYear = 40,
+            Attacker = newGovernment, Defender = enemy,
+            ConquerType = SiteConqueredType.Conquest
+        });
+
+        var culture = NationCultureProfileDto.FromEntity(nation);
+        Assert.AreEqual(1, culture.Periods.Single(p => p.WindowYears == 0).Conquests);
     }
 
     [TestMethod]
