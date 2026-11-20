@@ -67,6 +67,7 @@ public static class WorldRecordsCalculator
             Icon = "mdi-incognito",
             Cards =
             [
+                CalculateLargestConspiracies(world),
                 CalculateMastersOfDisguise(world),
                 CalculateNotoriousSyndicates(world)
             ]
@@ -618,6 +619,45 @@ public static class WorldRecordsCalculator
                 NumericValue = g.Count(),
                 Race = hf.GetRaceString(),
                 Subtitle = GetHistoricalFigureSubtitle(hf)
+            });
+        }
+
+        return card;
+    }
+
+    private static RecordCardDto CalculateLargestConspiracies(World world)
+    {
+        var card = new RecordCardDto
+        {
+            Id = "largest_conspiracies",
+            Title = "Largest Conspiracies",
+            Icon = "mdi-account-group",
+            MetricName = "Distinct recorded actors (including targets)"
+        };
+
+        var plots = ConspiracyAnalysis.Calculate(world)
+            .Where(p => p.ActorCount > 0)
+            .OrderByDescending(p => p.ActorCount)
+            .ThenBy(p => p.Owner.Id)
+            .ThenBy(p => p.LocalId)
+            .Take(10);
+
+        int rank = 1;
+        foreach (var plot in plots)
+        {
+            card.Entries.Add(new RecordEntryDto
+            {
+                Rank = rank++,
+                Id = plot.LocalId,
+                Name = plot.Objective,
+                ObjectType = "conspiracy",
+                LinkHtml = $"<a href=\"/conspiracies/{plot.Owner.Id}/{plot.LocalId}\">{System.Net.WebUtility.HtmlEncode(plot.Objective)}</a>",
+                Value = $"{plot.ActorCount} actors",
+                NumericValue = plot.ActorCount,
+                Subtitle = $"Recorded under {plot.Owner.Name}",
+                DetailText = plot.Entity == null
+                    ? plot.Status
+                    : $"Entity: {plot.Entity.Name} · {plot.Status}"
             });
         }
 

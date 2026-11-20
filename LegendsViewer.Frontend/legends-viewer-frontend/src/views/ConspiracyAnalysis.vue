@@ -9,6 +9,12 @@
       <v-col cols="12" md="3"><v-select v-model="status" :items="statuses" label="Recorded status" clearable /></v-col>
     </v-row>
     <p class="text-caption mb-3">Civilizations include plot entities and recorded actor affiliations, including former affiliations. This filter does not imply civilization sponsorship.</p>
+    <v-row class="mb-2">
+      <v-col cols="12" sm="6" md="4">
+        <v-select v-model="sortOrder" :items="sortOptions" label="Sort conspiracies" density="compact" hide-details />
+      </v-col>
+    </v-row>
+    <p class="text-caption mb-2">Actor counts include distinct recorded actor IDs, including targets; not all actors are willing conspirators.</p>
     <v-alert v-if="error" type="error" class="mb-3">{{ error }} <v-btn size="small" @click="retry++">Retry</v-btn></v-alert>
     <v-progress-linear v-if="loading" indeterminate aria-label="Loading plots" />
     <p v-if="data" class="my-3">{{ data.totalFilteredCount.toLocaleString() }} matching plots · {{ data.totalCount.toLocaleString() }} recorded in this world</p>
@@ -19,7 +25,7 @@
       <tbody><tr v-for="plot in data.items" :key="plot.key">
         <td><router-link :to="`/conspiracies/${plot.owner.id}/${plot.localId}`">{{ plot.objective }}</router-link><div class="text-caption">{{ plot.key }}</div></td>
         <td><IntrigueLink :reference="plot.owner" /></td><td><IntrigueLink :reference="plot.entity" /></td>
-        <td>{{ plot.status }}</td><td>{{ plot.participants.length }}</td>
+        <td>{{ plot.status }}</td><td>{{ plot.actorCount }}</td>
       </tr></tbody>
     </v-table>
     <v-pagination v-if="data && data.totalFilteredCount > 25" v-model="page" :length="Math.ceil(data.totalFilteredCount / 25)" :total-visible="7" />
@@ -31,7 +37,7 @@
     <v-card v-if="selected" class="mt-6" variant="outlined">
       <v-card-title class="text-wrap">{{ selected.objective }} · {{ selected.key }}</v-card-title>
       <v-card-text>
-        <p class="mb-2">Recorded under <IntrigueLink :reference="selected.owner" /> · {{ selected.status }}</p>
+        <p class="mb-2">Recorded under <IntrigueLink :reference="selected.owner" /> · {{ selected.status }} · {{ selected.actorCount }} distinct recorded actors</p>
         <p class="mb-2">Associated entity: <IntrigueLink :reference="selected.entity" /></p>
         <p v-if="selected.artifact" class="mb-2">{{ selected.objective === 'acquire artifact' ? 'Target artifact' : 'Referenced artifact' }}: <IntrigueLink :reference="selected.artifact" /></p>
         <p class="text-caption mb-3">“Not marked on hold” is not proof of an active or successful plot. Actor IDs are local to the figure who holds the record.</p>
@@ -76,20 +82,30 @@ const world = useWorldStore();
 const search = ref<string | null>('');
 const civilizationId = ref<number | null>(null);
 const status = ref<string | null>(null);
+const sortOrder = ref<'recorded' | 'actors-desc' | 'actors-asc'>('recorded');
+const sortOptions = [
+  { title: 'Recorded order', value: 'recorded' },
+  { title: 'Number of actors (most first)', value: 'actors-desc' },
+  { title: 'Number of actors (fewest first)', value: 'actors-asc' },
+];
 const page = ref(1), retry = ref(0);
 const data = ref<ConspiracyPage | null>(null), selected = ref<Conspiracy | null>(null);
 const loading = ref(false), detailLoading = ref(false), error = ref(''), detailError = ref('');
 const statuses = [{ title: 'On hold', value: 'on-hold' }, { title: 'Not marked on hold', value: 'not-on-hold' }];
 const relatedPlots = computed(() => [{ label: 'Parent plot', plot: selected.value?.parent }, { label: 'Delegated plot', plot: selected.value?.delegated }]);
-watch([search, civilizationId, status], () => { page.value = 1; });
+watch([search, civilizationId, status, sortOrder], () => { page.value = 1; });
 watch(() => world.world, () => { data.value = null; civilizationId.value = null; page.value = 1; });
-watch([search, civilizationId, status, page, retry, () => world.world], async (_, __, cleanup) => {
+watch([search, civilizationId, status, sortOrder, page, retry, () => world.world], async (_, __, cleanup) => {
   const controller = new AbortController(); cleanup(() => controller.abort());
   loading.value = true; error.value = '';
   const query = new URLSearchParams({ page: String(page.value), pageSize: '25' });
   if (search.value) query.set('search', search.value);
   if (civilizationId.value !== null) query.set('civilizationId', String(civilizationId.value));
   if (status.value) query.set('status', status.value);
+  if (sortOrder.value !== 'recorded') {
+    query.set('sort', 'actor-count');
+    query.set('direction', sortOrder.value === 'actors-asc' ? 'asc' : 'desc');
+  }
   try {
     const response = await fetch(`${API_BASE_URL}api/conspiracies?${query}`, { signal: controller.signal });
     if (!response.ok) throw new Error(`Could not load plots (${response.status}).`);

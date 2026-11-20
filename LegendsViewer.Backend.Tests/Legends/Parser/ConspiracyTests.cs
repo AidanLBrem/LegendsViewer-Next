@@ -124,6 +124,99 @@ public class ConspiracyTests
     }
 
     [TestMethod]
+    public void ActorCountSortsNumericallyBeforePaginationAndKeepsOwnerScopedActors()
+    {
+        using var world = new World();
+        world.HistoricalFigures.Add(new HistoricalFigure
+        {
+            Id = 10, Name = "First owner",
+            IntriguePlots =
+            [
+                new IntriguePlot([P("local_id", "0"), P("type", "small")])
+                {
+                    PlotActors = [new PlotActor([P("actor_id", "1")])]
+                },
+                new IntriguePlot([P("local_id", "1"), P("type", "large")])
+                {
+                    PlotActors =
+                    [
+                        new PlotActor([P("actor_id", "1")]),
+                        new PlotActor([P("actor_id", "2")]),
+                        new PlotActor([P("actor_id", "2")]),
+                        new PlotActor([P("actor_id", "3")])
+                    ]
+                },
+                new IntriguePlot([P("local_id", "2"), P("type", "empty")])
+            ]
+        });
+        world.HistoricalFigures.Add(new HistoricalFigure
+        {
+            Id = 20, Name = "Second owner",
+            IntriguePlots =
+            [
+                new IntriguePlot([P("local_id", "0"), P("type", "tied")])
+                {
+                    PlotActors =
+                    [
+                        new PlotActor([P("actor_id", "1")]),
+                        new PlotActor([P("actor_id", "2")]),
+                        new PlotActor([P("actor_id", "3")])
+                    ]
+                }
+            ]
+        });
+        var controller = new ConspiracyController(world);
+        ConspiracyPageDto Page(int page, string direction) =>
+            (ConspiracyPageDto)((OkObjectResult)controller.Get(
+                page: page, pageSize: 1, sort: "actor-count", direction: direction).Result!).Value!;
+
+        var descending = Page(1, "desc");
+        Assert.AreEqual(4, descending.TotalFilteredCount);
+        Assert.AreEqual("10:1", descending.Items.Single().Key);
+        Assert.AreEqual(3, descending.Items.Single().ActorCount);
+        Assert.AreEqual("20:0", Page(2, "desc").Items.Single().Key);
+        Assert.AreEqual("10:2", Page(1, "asc").Items.Single().Key);
+        Assert.AreEqual(0, Page(1, "asc").Items.Single().ActorCount);
+        Assert.AreEqual("10:0", Page(2, "asc").Items.Single().Key);
+
+        Assert.IsInstanceOfType(controller.Get(sort: "unknown").Result, typeof(BadRequestObjectResult));
+        Assert.IsInstanceOfType(controller.Get(sort: "actor-count", direction: "random").Result, typeof(BadRequestObjectResult));
+    }
+
+    [TestMethod]
+    public void WorldRecordsShowsLargestConspiraciesWithClickablePlotDetails()
+    {
+        using var world = new World();
+        world.HistoricalFigures.Add(new HistoricalFigure
+        {
+            Id = 12, Name = "Plot holder",
+            IntriguePlots =
+            [
+                new IntriguePlot([P("local_id", "0"), P("type", "infiltrate society")])
+                {
+                    PlotActors =
+                    [
+                        new PlotActor([P("actor_id", "1")]),
+                        new PlotActor([P("actor_id", "1")]),
+                        new PlotActor([P("actor_id", "2")])
+                    ]
+                },
+                new IntriguePlot([P("local_id", "1"), P("type", "undead world conquest")])
+                {
+                    PlotActors = [new PlotActor([P("actor_id", "1")])]
+                }
+            ]
+        });
+        var intrigue = WorldRecordsCalculator.Calculate(world).Categories.Single(c => c.Id == "intrigue");
+        var card = intrigue.Cards.Single(c => c.Id == "largest_conspiracies");
+        Assert.AreEqual(2, card.Entries.Count);
+        Assert.AreEqual(2, card.Entries[0].NumericValue);
+        StringAssert.Contains(card.Entries[0].LinkHtml, "/conspiracies/12/0");
+        StringAssert.Contains(card.Entries[0].LinkHtml, "infiltrate society");
+        Assert.AreEqual(1, card.Entries[1].NumericValue);
+    }
+
+    [TestMethod]
     public async Task OptionalRealExportSmokeTest()
     {
         var standard = Environment.GetEnvironmentVariable("LEGENDS_SMOKE_XML");
