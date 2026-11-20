@@ -274,6 +274,27 @@ public class NationCultureTests
     }
 
     [TestMethod]
+    public void SiteOwnerHistoryIsRecoveredWhenLateParentLinkSkippedNationalHistory()
+    {
+        using World world = new() { CurrentYear = 100 };
+        Entity nation = new([], world) { Id = 1, Name = "New Overlords", IsCiv = true };
+        Entity enemy = new([], world) { Id = 2, Name = "Previous Owners", IsCiv = true };
+        Entity oldGovernment = new([], world) { Id = 3, Name = "Old Government" };
+        Entity newGovernment = new([], world) { Id = 4, Name = "New Government" };
+        Site site = new([], world) { Id = 1, Name = "Conquered Keep" };
+        oldGovernment.SetParent(enemy);
+        site.OwnerHistory.Add(new OwnerPeriod(site, oldGovernment, 10, "founded"));
+        site.OwnerHistory.Add(new OwnerPeriod(site, newGovernment, 40, "took over"));
+        newGovernment.SetParent(nation); // Parent linkage came after the ownership period.
+        world.Sites.Add(site);
+
+        Assert.AreEqual(0, nation.SiteHistory.Count);
+        var culture = NationCultureProfileDto.FromEntity(nation);
+        Assert.AreEqual(1, culture.Periods.Single(p => p.WindowYears == 0).Conquests);
+        Assert.AreEqual(0, NationCultureProfileDto.FromEntity(enemy).Periods[0].Conquests);
+    }
+
+    [TestMethod]
     public void ConquestIsAttributedToCivilizationWhenSiteGovernmentHistoryWasNotPropagated()
     {
         using World world = new() { CurrentYear = 100 };
