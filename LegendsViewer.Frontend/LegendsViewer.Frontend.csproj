@@ -34,8 +34,11 @@
 
 	<Target Name="CopyFilesAfterBuild" BeforeTargets="BeforeBuild;IncrementalClean">
 		<ItemGroup>
-			<Content Include="$(SpaRoot)dist\**">
+			<!-- Keep compiled Vite assets beside index.html in the backend output. -->
+			<Content Include="$(SpaRoot)dist\**\*">
+				<Link>legends-viewer-frontend\dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
 				<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+				<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 			</Content>
 		</ItemGroup>
 	</Target>
