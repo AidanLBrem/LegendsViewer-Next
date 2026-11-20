@@ -498,7 +498,19 @@ public class Entity : WorldObject, IHasCoordinates
         }
     }
 
-    public Color LineColor { get; set; }
+    // Faction links can be materialized while the world is still parsing.
+    // Their HTML badge must be rebuilt when GenerateCivColors assigns the
+    // final palette, otherwise the initial (black/empty) badge is cached.
+    private Color _lineColor;
+    public Color LineColor
+    {
+        get => _lineColor;
+        set
+        {
+            _lineColor = value;
+            _icon = null;
+        }
+    }
 
     private string? _icon;
 
