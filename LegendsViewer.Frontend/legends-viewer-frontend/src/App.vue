@@ -119,6 +119,8 @@ const ritualItems = [
             :disabled="bookmarkStore?.isLoaded == false" />
           <v-list-item prepend-icon="mdi-incognito" title="Conspiracy Analysis" to="/conspiracies"
             :disabled="bookmarkStore?.isLoaded == false" />
+          <v-list-item prepend-icon="mdi-skull" title="Dark Forces" to="/dark-forces" :active-class="'v-list-item--active'"
+            :disabled="bookmarkStore?.isLoaded == false" />
           <v-list-item prepend-icon="mdi-trophy-outline" title="World Records" to="/records" :active-class="'v-list-item--active'"
             :disabled="bookmarkStore?.isLoaded == false" />
           <v-list-item prepend-icon="mdi-map-search-outline" title="Map" to="/map" :active-class="'v-list-item--active'"

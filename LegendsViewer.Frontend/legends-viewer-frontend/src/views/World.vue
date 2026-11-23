@@ -81,6 +81,18 @@ const eventCollectionTableHeaders: TableHeader[] = [
         </v-col>
     </v-row>
     <v-row>
+        <v-col cols="12" lg="6" md="12">
+            <v-card title="Dark Forces" subtitle="Chronicle necromancer ascents, invasions and lost realms"
+                prepend-icon="mdi-skull" variant="tonal" to="/dark-forces">
+                <v-card-text>
+                    Rank the most powerful recorded necromancers, examine defeated leaders,
+                    and compare the largest simultaneous settlement holdings in world history.
+                </v-card-text>
+                <v-card-actions><v-btn to="/dark-forces" variant="text">Explore dark forces</v-btn></v-card-actions>
+            </v-card>
+        </v-col>
+    </v-row>
+    <v-row>
         <v-col v-if="mapStore?.worldMapMid" cols="12" xl="4" lg="6" md="12">
             <!-- World Map -->
             <v-card title="World Overview Map"

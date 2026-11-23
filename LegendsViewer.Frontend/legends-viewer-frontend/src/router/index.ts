@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   { path: '/conspiracies/:figureId?/:localId?', name: 'Conspiracy Analysis', component: () => import('../views/ConspiracyAnalysis.vue') },
+  { path: '/dark-forces/:figureId?', name: 'Dark Forces', component: () => import('../views/DarkForces.vue') },
   { path: '/', name: 'Overview', component: () => import('../views/WorldOverview.vue') },
   { path: '/world', name: 'World', component: () => import('../views/World.vue') },
   { path: '/records', name: 'World Records', component: () => import('../views/WorldRecords.vue') },
