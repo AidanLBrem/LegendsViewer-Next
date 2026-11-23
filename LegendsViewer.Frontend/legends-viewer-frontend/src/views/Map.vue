@@ -1270,7 +1270,7 @@ export default defineComponent({
           status = option.id === selectedNationId.value ? 'Selected nation' :
             diplomaticStatus(pairs.get(option.id) ?? [], selectedYear.value);
         categories.set(option.id, mapCategory(nationColorMode.value, nations.get(option.id),
-          necromancerNationIds.has(option.id), practice.value, status));
+          necromancerNationIds.has(option.id), practice.value, status, option.id));
       }
       return categories;
     });
