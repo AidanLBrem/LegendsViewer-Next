@@ -41,7 +41,7 @@
         </v-card-text></v-card></v-col>
         <v-col cols="12" sm="4"><v-card variant="tonal"><v-card-text>
           <div class="text-h5">{{ pageData.fallenCount.toLocaleString() }}</div>
-          <div class="text-caption">Deceased or with lost realms</div>
+          <div class="text-caption">Killed or with lost realms</div>
         </v-card-text></v-card></v-col>
         <v-col cols="12" sm="4"><v-card variant="tonal"><v-card-text>
           <div class="text-h5">{{ pageData.maximumTerritory.toLocaleString() }}</div>
