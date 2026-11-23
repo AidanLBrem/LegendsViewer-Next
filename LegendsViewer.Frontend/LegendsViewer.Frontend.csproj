@@ -13,24 +13,28 @@
 	<ItemGroup>
 		<PackageJson Include="$(SpaRoot)package.json" />
 		<SourceFiles Include="$(SpaRoot)**\*" Exclude="$(SpaRoot)node_modules\**\*;$(SpaRoot)dist\**\*" />
+		<DistFiles Include="$(SpaRoot)dist\index.html" />
 	</ItemGroup>
 
-	<!--
-	  The Vite build creates content-hashed filenames on EVERY change.
-	  Register Content only after npm has finished creating dist. Static
-	  globs (or BeforeBuild-only globs) can capture yesterday's filenames
-	  and leave the backend's output with missing JS/CSS chunks.
-	  AssignTargetPaths is used by MSBuild's transitive project-reference
-	  content-copy pipeline, so it must see the newly generated assets.
-	-->
-	<Target Name="BuildSpaAndIncludeAssets" BeforeTargets="AssignTargetPaths">
-		<Message Importance="high" Text="Installing frontend dependencies..." />
+	<PropertyGroup>
+		<NpmInstallStampFile>$(SpaRoot)node_modules/.install-stamp</NpmInstallStampFile>
+	</PropertyGroup>
+
+	<!-- Always run npm install -->
+	<Target Name="OnPackageChange" BeforeTargets="BeforeBuild">
+		<Message Importance="high" Text="Installing npm packages..." />
 		<Exec Command="npm install" WorkingDirectory="$(SpaRoot)" />
-		<Message Importance="high" Text="Building frontend and registering generated assets..." />
+	</Target>
+
+	<!-- Always run npm run build -->
+	<Target Name="OnSourceChange" BeforeTargets="BeforeBuild">
+		<Message Importance="high" Text="Compiling WebApp..." />
 		<Exec Command="npm run build" WorkingDirectory="$(SpaRoot)" />
+	</Target>
+
+	<Target Name="CopyFilesAfterBuild" BeforeTargets="BeforeBuild;IncrementalClean">
 		<ItemGroup>
-			<Content Include="$(SpaRoot)dist\**\*">
-				<Link>legends-viewer-frontend\dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
+			<Content Include="$(SpaRoot)dist\**">
 				<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			</Content>
 		</ItemGroup>

@@ -18,23 +18,8 @@ public static class WebAppStaticServer
         var builder = WebApplication.CreateBuilder(options);
         var app = builder.Build();
         app.UseDefaultFiles(new DefaultFilesOptions { DefaultFileNames = ["index.html"] });
-
-        // The UI is rebuilt often while the same localhost port is reused.
-        // Never retain an old entry document that points at content-hashed JS
-        // or CSS chunks which were replaced by the latest Vite build.
-        var staticFileOptions = new StaticFileOptions
-        {
-            OnPrepareResponse = context =>
-            {
-                context.Context.Response.Headers.CacheControl =
-                    string.Equals(context.File.Name, "index.html", StringComparison.OrdinalIgnoreCase)
-                        ? "no-store, max-age=0"
-                        : "no-cache, must-revalidate";
-            }
-        };
-
-        app.UseStaticFiles(staticFileOptions);
-        app.MapFallbackToFile("index.html", staticFileOptions);
+        app.UseStaticFiles();
+        app.MapFallbackToFile("index.html");
 
         try
         {

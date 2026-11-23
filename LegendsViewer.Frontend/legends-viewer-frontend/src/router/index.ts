@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { retryLazyChunkOnce, clearSuccessfulChunkRetry } from '../utils/chunkRecovery'
 
 const routes = [
   { path: '/conspiracies/:figureId?/:localId?', name: 'Conspiracy Analysis', component: () => import('../views/ConspiracyAnalysis.vue') },
@@ -85,5 +86,41 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
+
+// When a client retains an older entry bundle after a frontend update, its
+// async route imports may request content-hashed files that no longer exist.
+// Retry the current document once. This is an application-level recovery,
+// not a build, deployment or static-file-server change.
+function recoverRouteChunk(error: unknown): boolean {
+  try {
+    return retryLazyChunkOnce(error, window.location.pathname,
+      window.sessionStorage, () => window.location.reload());
+  } catch {
+    return false;
+  }
+}
+
+router.onError(error => {
+  if (!recoverRouteChunk(error)) {
+    console.error('Route navigation failed:', error);
+  }
+});
+
+// Vite emits preloadError for failing JS/CSS preloads. A router error is not
+// guaranteed for CSS failures, so listen for both. The session guard ensures
+// they cannot trigger multiple reload attempts.
+window.addEventListener('vite:preloadError', event => {
+  const detail = event as Event & { payload?: unknown };
+  if (recoverRouteChunk(detail.payload)) {
+    event.preventDefault();
+  }
+});
+
+router.afterEach((to, _from, failure) => {
+  if (!failure) {
+    try { clearSuccessfulChunkRetry(to.path, window.sessionStorage); }
+    catch { /* Storage access is optional. */ }
+  }
+});
 
 export default router;
