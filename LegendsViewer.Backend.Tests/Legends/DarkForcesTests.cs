@@ -154,7 +154,7 @@ public class DarkForcesTests
         raider.StartPositionAssignment(raiderTower, 0, 0, "Leader");
         landholder.StartPositionAssignment(landholderTower, 0, 0, "Leader");
 
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 12; i++)
         {
             raiderTower.Events.Add(new AttackedSite([], _world.Object)
             {
