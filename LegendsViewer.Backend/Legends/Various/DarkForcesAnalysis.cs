@@ -47,6 +47,11 @@ public static class DarkForcesAnalysis
                         .Select(root => new { Nation = root, Site = site })))
             .GroupBy(x => x.Nation)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Site).Distinct().ToList());
+        // Some event parsers attach only to a site/region, not to the actor.
+        // Index their explicitly named subjects so those acts still appear.
+        var experimentalEvents = world.Events.OfType<HfPerformedHorribleExperiments>()
+            .Where(e => e.GroupHistoricalFigure != null)
+            .ToLookup(e => e.GroupHistoricalFigure!);
         var entitiesByNation = world.Entities.GroupBy(e => e.MapNation)
             .ToDictionary(g => g.Key, g => g.Distinct().ToList());
         // Legends+ records present-day position assignments, sometimes without
@@ -90,7 +95,7 @@ public static class DarkForcesAnalysis
                         : new[] { t.Root })
                 .Distinct().ToList();
             var sourceEvents = figure.Events.Concat(
-                    involvedEntities.SelectMany(t => t.Events))
+                    experimentalEvents[figure]).Concat(involvedEntities.SelectMany(t => t.Events))
                 .Where(e => e.Year >= 0 && e.Year <= currentYear)
                 .DistinctBy(e => e.Id)
                 .OrderBy(e => e.Year).ThenBy(e => e.Seconds72).ThenBy(e => e.Id)
@@ -110,6 +115,24 @@ public static class DarkForcesAnalysis
                 {
                     HfLearnsSecret e when e.Student == figure =>
                         ("Learned a dark secret", (Site?)null, (Entity?)null, false, "Personal"),
+                    HfGainsSecretGoal e when e.HistoricalFigure == figure =>
+                        ("Formed a secret ambition", (Site?)null, (Entity?)null, false, "Personal"),
+                    HfDoesInteraction e when e.Doer == figure &&
+                        e.Interaction?.Contains("SECRET", StringComparison.OrdinalIgnoreCase) == true =>
+                        ("Passed on a dark secret", e.Site, (Entity?)null, false, "Personal"),
+                    HfDoesInteraction e when e.Doer == figure &&
+                        (e.Interaction?.Contains("ANIMATE", StringComparison.OrdinalIgnoreCase) == true ||
+                         e.Interaction?.Contains("UNDEAD_RES", StringComparison.OrdinalIgnoreCase) == true) =>
+                        ("Practiced necromancy", e.Site, (Entity?)null, false, "Personal"),
+                    HfPerformedHorribleExperiments e when e.GroupHistoricalFigure == figure =>
+                        ("Performed horrible experiments", e.Site, (Entity?)null, false, "Personal"),
+                    HfProfanedStructure e when e.HistoricalFigure == figure =>
+                        ("Profaned a structure", e.Site, (Entity?)null, false, "Personal"),
+                    HfRecruitedUnitTypeForEntity e when e.HistoricalFigure == figure =>
+                        ("Recruited a unit type", e.Site, (Entity?)null, false, "Personal"),
+                    AddHfEntityLink e when e.HistoricalFigure == figure &&
+                        e.LinkType == HfEntityLinkType.Position && e.PositionId == 0 =>
+                        ("Assumed leadership", (Site?)null, (Entity?)null, false, "Personal"),
                     EntityCreated e when e.Creator == figure =>
                         ("Founded a faction", e.Site, (Entity?)null, false, "Personal"),
                     CreatedSite e when e.Builder == figure =>
@@ -128,6 +151,8 @@ public static class DarkForcesAnalysis
                         ("Captured a settlement", e.Site, e.Defender, false, "Associated faction"),
                     PlunderedSite e when InFaction(e.Attacker, e.Year) =>
                         ("Plundered a settlement", e.Site, e.Defender, false, "Associated faction"),
+                    EntityRampagedInSite e when InFaction(e.RampageCiv, e.Year) =>
+                        ("Faction rampaged through a site", e.Site, (Entity?)null, false, "Associated faction"),
                     FieldBattle e when e.AttackerGeneral == figure =>
                         ("Led a field battle", (Site?)null, e.Defender, false, "Named commander"),
                     FieldBattle e when InFaction(e.Attacker, e.Year) =>
