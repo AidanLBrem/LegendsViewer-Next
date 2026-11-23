@@ -13,18 +13,30 @@
       (10 × peak settlements + 8 × captures + 3 × invasions + up to 100 recorded kills),
       not a Dwarf Fortress combat statistic. Recorded deaths are distinct from
       violent defeat; territorial collapse requires evidence of lost holdings.
+      Apprentice counts include distinct people explicitly taught a necromantic
+      secret in recorded teacher–student events, not all followers or undead.
     </v-alert>
 
     <template v-if="!viewingDetail">
       <v-row>
         <v-col cols="12" sm="6" md="4">
-          <v-text-field v-model="search" label="Search necromancers or factions" clearable density="comfortable" />
+          <v-text-field v-model="search" label="Search necromancers, factions or apprentices" clearable density="comfortable" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="status" :items="statusOptions" label="Status" density="comfortable" />
         </v-col>
         <v-col cols="12" sm="6" md="5">
           <v-select v-model="sortOrder" :items="sortOptions" label="Rank or sort by" density="comfortable" />
+        </v-col>
+      </v-row>
+      <v-row class="mt-n2 mb-2">
+        <v-col cols="12" sm="6" md="3">
+          <v-text-field v-model="minApprentices" label="Min apprentices" type="number"
+            min="0" step="1" clearable density="comfortable" hide-details />
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-text-field v-model="maxApprentices" label="Max apprentices" type="number"
+            min="0" step="1" clearable density="comfortable" hide-details />
         </v-col>
       </v-row>
 
@@ -68,6 +80,7 @@
             <th class="text-end">Power index</th>
             <th class="text-end">Peak settlements</th>
             <th class="text-end">Held now</th>
+            <th class="text-end">Apprentices</th>
             <th class="text-end">Invasions</th>
             <th class="text-end">Captures</th>
             <th class="text-end">Kills</th>
@@ -85,6 +98,7 @@
             <td class="text-end">{{ figure.powerIndex.toLocaleString() }}</td>
             <td class="text-end">{{ figure.peakSettlements }}<span class="text-caption" v-if="figure.peakYear !== null"> (year {{ figure.peakYear }})</span></td>
             <td class="text-end">{{ figure.currentSettlements }}</td>
+            <td class="text-end">{{ figure.apprenticeCount }}</td>
             <td class="text-end">{{ figure.invasions }}</td>
             <td class="text-end">{{ figure.conquests }}</td>
             <td class="text-end">{{ figure.notableKills }}</td>
@@ -113,6 +127,7 @@
             <v-row>
               <v-col cols="6" md="3"><strong>{{ selected.powerIndex }}</strong><div class="text-caption">Evidence-based power index</div></v-col>
               <v-col cols="6" md="3"><strong>{{ selected.peakSettlements }}</strong><div class="text-caption">Peak settlements ({{ selected.peakYear === null ? 'date unknown' : 'year ' + selected.peakYear }})</div></v-col>
+              <v-col cols="6" md="3"><strong>{{ selected.apprenticeCount }}</strong><div class="text-caption">Recorded apprentices</div></v-col>
               <v-col cols="6" md="3"><strong>{{ selected.invasions }}</strong><div class="text-caption">Invasions</div></v-col>
               <v-col cols="6" md="3"><strong>{{ selected.conquests }}</strong><div class="text-caption">Settlements captured</div></v-col>
             </v-row>
@@ -141,6 +156,25 @@
               </v-list-item>
             </v-list>
             <p v-else>No founded or led factions can be identified from the available records.</p>
+          </v-card-text>
+        </v-card>
+
+        <v-card title="Recorded Apprentices" prepend-icon="mdi-school" variant="text" class="mb-4">
+          <v-card-text>
+            <p class="text-caption mb-2">
+              Distinct students explicitly taught a necromantic secret by this figure.
+              Each student is counted once, even if taught on multiple occasions.
+              This is not a count of faction members or raised undead.
+            </p>
+            <v-list v-if="selected.apprentices.length" density="compact" max-height="350" class="overflow-y-auto">
+              <v-list-item v-for="apprentice in selected.apprentices" :key="apprentice.figureId">
+                <v-list-item-title>
+                  <router-link :to="`/hf/${apprentice.figureId}`">{{ apprentice.name }}</router-link>
+                </v-list-item-title>
+                <v-list-item-subtitle>First recorded lesson: year {{ apprentice.firstLearnedYear }}</v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+            <p v-else>No explicitly recorded apprentices for this necromancer.</p>
           </v-card-text>
         </v-card>
 
@@ -212,9 +246,13 @@ function isDarkForce(value: unknown): value is DarkForce {
     && typeof figure.status === 'string'
     && typeof figure.powerIndex === 'number'
     && Array.isArray(figure.factions)
-    && Array.isArray(figure.timeline);
+    && Array.isArray(figure.timeline)
+    && typeof figure.apprenticeCount === 'number'
+    && Array.isArray(figure.apprentices);
 }
 const search = ref<string | null>('');
+const minApprentices = ref<string | null>(null);
+const maxApprentices = ref<string | null>(null);
 const status = ref('all');
 const sortOrder = ref('power-desc');
 const page = ref(1), retry = ref(0);
@@ -236,13 +274,15 @@ const sortOptions = [
   { title: 'Greatest territorial extent', value: 'territory-desc' },
   { title: 'Smallest territorial extent', value: 'territory-asc' },
   { title: 'Most invasions', value: 'invasions-desc' },
+  { title: 'Most apprentices', value: 'apprentices-desc' },
+  { title: 'Fewest apprentices', value: 'apprentices-asc' },
   { title: 'Fallen / defeated first', value: 'fallen-desc' },
   { title: 'Name', value: 'name-asc' },
 ];
 
-watch([search, status, sortOrder], () => { page.value = 1; });
+watch([search, status, sortOrder, minApprentices, maxApprentices], () => { page.value = 1; });
 watch(() => world.world, () => { pageData.value = null; selected.value = null; page.value = 1; });
-watch([search, status, sortOrder, page, retry, () => world.world, viewingDetail], async (_, __, cleanup) => {
+watch([search, status, sortOrder, minApprentices, maxApprentices, page, retry, () => world.world, viewingDetail], async (_, __, cleanup) => {
   const controller = new AbortController(); cleanup(() => controller.abort());
   if (viewingDetail.value) return;
   loading.value = true; error.value = '';
@@ -250,6 +290,10 @@ watch([search, status, sortOrder, page, retry, () => world.world, viewingDetail]
   const params = new URLSearchParams({ page: String(page.value), pageSize: String(pageSize), sort, direction });
   if (search.value) params.set('search', search.value);
   if (status.value !== 'all') params.set('status', status.value);
+  if (minApprentices.value !== null && /^\d+$/.test(minApprentices.value))
+    params.set('minApprentices', minApprentices.value);
+  if (maxApprentices.value !== null && /^\d+$/.test(maxApprentices.value))
+    params.set('maxApprentices', maxApprentices.value);
   try {
     const response = await fetch(`${API_BASE_URL}api/dark-forces?${params}`, { signal: controller.signal });
     if (!response.ok) throw new Error(`Could not load necromancers (${response.status})`);
