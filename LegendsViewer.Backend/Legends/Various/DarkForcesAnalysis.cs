@@ -47,6 +47,8 @@ public static class DarkForcesAnalysis
                         .Select(root => new { Nation = root, Site = site })))
             .GroupBy(x => x.Nation)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Site).Distinct().ToList());
+        var entitiesByNation = world.Entities.GroupBy(e => e.MapNation)
+            .ToDictionary(g => g.Key, g => g.Distinct().ToList());
         var result = new List<DarkForceDto>();
         foreach (HistoricalFigure figure in world.HistoricalFigures.Where(IsNecromancer))
         {
@@ -65,8 +67,14 @@ public static class DarkForcesAnalysis
                         ? (IEnumerable<Site>)sites : Enumerable.Empty<Site>())
                 .Distinct().ToList();
             var territory = CalculateTerritory(associatedSites, tenures, currentYear);
+            var involvedEntities = tenures.SelectMany(t =>
+                    t.Root.IsCiv || !t.Root.MapNation.IsCiv
+                        ? (entitiesByNation.TryGetValue(t.Root, out var members)
+                            ? (IEnumerable<Entity>)members : [t.Root])
+                        : [t.Root])
+                .Distinct().ToList();
             var sourceEvents = figure.Events.Concat(
-                    tenures.SelectMany(t => t.Root.Events))
+                    involvedEntities.SelectMany(t => t.Events))
                 .Where(e => e.Year >= 0 && e.Year <= currentYear)
                 .DistinctBy(e => e.Id)
                 .OrderBy(e => e.Year).ThenBy(e => e.Seconds72).ThenBy(e => e.Id)
