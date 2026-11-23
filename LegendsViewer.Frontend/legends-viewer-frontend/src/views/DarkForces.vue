@@ -82,6 +82,11 @@
             <th class="text-end">Peak settlements</th>
             <th class="text-end">Held now</th>
             <th class="text-end">Apprentices</th>
+            <th class="text-end">
+              <v-tooltip text="Distinct historical figures directly raised by this necromancer, not total undead units" location="top">
+                <template #activator="{ props: tooltipProps }"><span v-bind="tooltipProps">Raised HFs</span></template>
+              </v-tooltip>
+            </th>
             <th class="text-end">Invasions</th>
             <th class="text-end">Captures</th>
             <th class="text-end">Kills</th>
@@ -111,6 +116,7 @@
             <td class="text-end">{{ figure.peakSettlements }}<span class="text-caption" v-if="figure.peakYear !== null"> (year {{ figure.peakYear }})</span></td>
             <td class="text-end">{{ figure.currentSettlements }}</td>
             <td class="text-end">{{ figure.apprenticeCount }}</td>
+            <td class="text-end">{{ figure.historicalRaisedCount }}</td>
             <td class="text-end">{{ figure.invasions }}</td>
             <td class="text-end">{{ figure.conquests }}</td>
             <td class="text-end">{{ figure.notableKills }}</td>
@@ -178,6 +184,54 @@
               </v-list-item>
             </v-list>
             <p v-else>No founded or led factions can be identified from the available records.</p>
+          </v-card-text>
+        </v-card>
+
+        <v-card title="Raised from the Dead" prepend-icon="mdi-coffin" variant="text" class="mb-4">
+          <v-card-text>
+            <v-row class="mb-2">
+              <v-col cols="12" md="4">
+                <div class="text-h5">{{ selected.historicalRaisedCount.toLocaleString() }}</div>
+                <div class="text-body-2">Distinct historical figures raised</div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ selected.historicalRaiseEvents }} documented raising events, including repeat revivals
+                </div>
+              </v-col>
+              <v-col cols="12" md="4">
+                <div class="text-h5">{{ selected.nonhistoricalRaisedCount === null ? 'Unknown' : selected.nonhistoricalRaisedCount.toLocaleString() }}</div>
+                <div class="text-body-2">Nonhistorical figures raised</div>
+                <div class="text-caption text-medium-emphasis">
+                  Legends exports do not record a complete per-necromancer count of unnamed undead
+                </div>
+              </v-col>
+              <v-col cols="12" md="4">
+                <div class="text-h5">{{ selected.unidentifiedRaiseEvents.toLocaleString() }}</div>
+                <div class="text-body-2">Raising events without identified victims</div>
+                <div class="text-caption text-medium-emphasis">
+                  Event count only; each event may involve an unknown number of corpses
+                </div>
+              </v-col>
+            </v-row>
+            <p class="text-caption text-medium-emphasis mb-3">
+              Counts use directly attributed resurrection and animation events, not all
+              undead in a faction. Spontaneous resurrections, disturbed ghosts and unrelated
+              necromancers' activity are excluded. Unknown does not mean zero.
+            </p>
+            <v-list v-if="selected.raisedHistoricalFigures.length" density="compact"
+              max-height="350" class="overflow-y-auto">
+              <v-list-item v-for="raised in selected.raisedHistoricalFigures" :key="raised.figureId">
+                <v-list-item-title>
+                  <router-link :to="`/hf/${raised.figureId}`">{{ raised.name }}</router-link>
+                </v-list-item-title>
+                <v-list-item-subtitle>
+                  First documented raising: year {{ raised.firstRaisedYear }}
+                  <span v-if="raised.recordedRaiseEvents > 1">
+                    · {{ raised.recordedRaiseEvents }} recorded raisings
+                  </span>
+                </v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+            <p v-else class="text-body-2">No individually identified historical figures raised by this necromancer were recorded.</p>
           </v-card-text>
         </v-card>
 
@@ -271,7 +325,11 @@ function isDarkForce(value: unknown): value is DarkForce {
     && Array.isArray(figure.timeline)
     && typeof figure.apprenticeCount === 'number'
     && Array.isArray(figure.apprentices)
-    && Array.isArray(figure.groups);
+    && Array.isArray(figure.groups)
+    && typeof figure.historicalRaisedCount === 'number'
+    && typeof figure.historicalRaiseEvents === 'number'
+    && typeof figure.unidentifiedRaiseEvents === 'number'
+    && Array.isArray(figure.raisedHistoricalFigures);
 }
 const search = ref<string | null>('');
 const minApprentices = ref<string | null>(null);
@@ -297,6 +355,8 @@ const sortOptions = [
   { title: 'Greatest territorial extent', value: 'territory-desc' },
   { title: 'Smallest territorial extent', value: 'territory-asc' },
   { title: 'Most invasions', value: 'invasions-desc' },
+  { title: 'Most historical figures raised', value: 'raised-desc' },
+  { title: 'Fewest historical figures raised', value: 'raised-asc' },
   { title: 'Most apprentices', value: 'apprentices-desc' },
   { title: 'Fewest apprentices', value: 'apprentices-asc' },
   { title: 'Fallen / defeated first', value: 'fallen-desc' },
