@@ -1,5 +1,6 @@
 using LegendsViewer.Backend.Controllers;
 using LegendsViewer.Backend.Legends.Events;
+using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.Interfaces;
 using LegendsViewer.Backend.Legends.Parser;
 using LegendsViewer.Backend.Legends.Various;
@@ -199,7 +200,11 @@ public class DarkForcesTests
     {
         var deceased = Necromancer(1, "Dead mage");
         deceased.DeathYear = 25;
+        deceased.DeathCause = DeathCause.PutToRest;
         var survivor = Necromancer(2, "Survivor");
+        var oldAge = Necromancer(4, "Retired mage");
+        oldAge.DeathYear = 45;
+        oldAge.DeathCause = DeathCause.OldAge;
         var fallen = Necromancer(3, "Lost realm");
         var faction = Faction(10, "Dark realm");
         fallen.StartPositionAssignment(faction, 0, 0, "Leader");
@@ -208,7 +213,9 @@ public class DarkForcesTests
             { EndYear = 20, EndCause = "taken over" });
 
         var result = DarkForcesAnalysis.Calculate(_world.Object);
-        Assert.AreEqual("Deceased", result.Single(n => n.FigureId == 1).Status);
+        Assert.AreEqual("Killed / put to rest", result.Single(n => n.FigureId == 1).Status);
+        Assert.AreEqual("Deceased (cause not defeat)", result.Single(n => n.FigureId == 4).Status);
+        Assert.IsFalse(result.Single(n => n.FigureId == 4).Defeated);
         Assert.AreEqual("Realm lost", result.Single(n => n.FigureId == 3).Status);
         Assert.IsFalse(result.Single(n => n.FigureId == 2).Defeated);
 
