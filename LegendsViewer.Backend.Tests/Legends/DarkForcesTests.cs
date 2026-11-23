@@ -136,6 +136,34 @@ public class DarkForcesTests
     }
 
     [TestMethod]
+    public void CurrentLeaderAssignment_RecognizesOnlyCurrentYearWithoutBackdatingReign()
+    {
+        var figure = Necromancer(1, "Vex");
+        var other = Necromancer(2, "Deputy");
+        var tower = Faction(10, "The Ashen Tower");
+        tower.EntityPositionAssignments.Add(new EntityPositionAssignment([], _world.Object)
+            { PositionId = 0, HistoricalFigure = figure });
+        tower.EntityPositionAssignments.Add(new EntityPositionAssignment([], _world.Object)
+            { PositionId = 1, HistoricalFigure = other });
+
+        var former = Settlement(100);
+        former.OwnerHistory.Add(new OwnerPeriod(former, tower, 10, "founded")
+            { EndYear = 30 });
+        var current = Settlement(101);
+        current.OwnerHistory.Add(new OwnerPeriod(current, tower, 5, "founded"));
+
+        var result = DarkForcesAnalysis.Calculate(_world.Object);
+        var ruler = result.Single(n => n.FigureId == 1);
+        var deputy = result.Single(n => n.FigureId == 2);
+        Assert.AreEqual(1, ruler.PeakSettlements);
+        Assert.AreEqual(50, ruler.PeakYear);
+        Assert.AreEqual(1, ruler.CurrentSettlements);
+        Assert.AreEqual("Current leader (Legends+; start unknown)", ruler.Factions.Single().Evidence);
+        Assert.AreEqual(0, deputy.PeakSettlements);
+        Assert.AreEqual(0, deputy.Factions.Count);
+    }
+
+    [TestMethod]
     public void Chronicle_SeparatesPersonalAssaultFromFactionInvasion()
     {
         var figure = Necromancer(1, "Vex");
