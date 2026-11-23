@@ -20,4 +20,27 @@
 		<ProjectReference Include="..\LegendsViewer.Frontend\LegendsViewer.Frontend.csproj" />
 	</ItemGroup>
 
+	<!--
+	  Copy the newly generated Vite files into the exact directory served by
+	  WebAppStaticServer (AppContext.BaseDirectory/legends-viewer-frontend/dist).
+	  Project-reference content discovery can otherwise miss newly hashed chunks.
+	  This target runs AFTER the backend build, so all referenced assets exist
+	  before dotnet run starts the web server.
+	-->
+	<Target Name="SyncFrontendAssetsToBackend" AfterTargets="Build">
+		<PropertyGroup>
+			<_FrontendDist>$(MSBuildProjectDirectory)\..\LegendsViewer.Frontend\legends-viewer-frontend\dist\</_FrontendDist>
+			<_BackendDist>$(TargetDir)legends-viewer-frontend\dist\</_BackendDist>
+		</PropertyGroup>
+		<Error Condition="!Exists('$(_FrontendDist)index.html')"
+		       Text="Vite frontend build did not produce $(_FrontendDist)index.html" />
+		<ItemGroup>
+			<_FrontendBuiltAsset Include="$(_FrontendDist)**\*" />
+		</ItemGroup>
+		<Copy SourceFiles="@(_FrontendBuiltAsset)"
+		      DestinationFiles="@(_FrontendBuiltAsset->'$(_BackendDist)%(RecursiveDir)%(Filename)%(Extension)')"
+		      SkipUnchangedFiles="true" />
+		<Message Importance="high" Text="Synchronized @(_FrontendBuiltAsset->Count()) frontend files to $(_BackendDist)" />
+	</Target>
+
 </Project>
