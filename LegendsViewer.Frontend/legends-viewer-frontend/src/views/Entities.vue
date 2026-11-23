@@ -27,7 +27,7 @@ const tableHeaders: TableHeader[] = [
     <WorldObjectsPage :store="store" :icon="icon" :title="title" :subtitle="subtitle" :overviewTitle="overviewTitle"
         :overviewSubtitle="overviewSubtitle" :wikiKeyWord="wikiKeyWord" :tableHeaders="tableHeaders"
         :showFilters="true">
-        <template v-slot:type-specific-before-table>
+        <template v-slot:overview-content-after-table>
             <NationCultureComparison />
         </template>
         <template v-slot:type-specific-filter="{ filters }">
