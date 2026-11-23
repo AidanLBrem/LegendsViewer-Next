@@ -28,6 +28,11 @@ public class WorldObjectDto
             DefenderTroopCount = war.DefenderBattleDeployments;
             SetSiteCounts(war.SiteOutcomes);
         }
+        else if (worldObject is LegendsViewer.Backend.Legends.WorldObjects.HistoricalFigure figure)
+        {
+            BattlesWon = figure.BattlesWon;
+            BattlesLost = figure.BattlesLost;
+        }
         else if (worldObject is Battle battle)
         {
             DeathCount = battle.DeathCount;
@@ -48,6 +53,10 @@ public class WorldObjectDto
     public string Html { get; set; }
     public int EventCount { get; set; }
     public int EventCollectionCount { get; set; }
+
+    // Recorded notable-combatant battle outcomes for historical figures.
+    public int? BattlesWon { get; set; }
+    public int? BattlesLost { get; set; }
 
     public int? DeathCount { get; set; }
     public int? AttackerDeathCount { get; set; }
