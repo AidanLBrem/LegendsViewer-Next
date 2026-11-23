@@ -82,6 +82,10 @@ public static class DarkForcesAnalysis
                 if (entity == null) return false;
                 return tenures.Any(t => t.Active(year) && BelongsToFaction(entity, t.Root));
             }
+            string FactionAttribution(Entity? entity, int year) =>
+                tenures.Any(t => t.Active(year) && t.Root == entity)
+                    ? "Associated faction"
+                    : "Linked subsidiary (current affiliation; historical link unverified)";
 
             var associatedSites = tenures.SelectMany(t =>
                     sitesByNation.TryGetValue(t.Root, out var sites)
@@ -146,19 +150,19 @@ public static class DarkForcesAnalysis
                     AttackedSite e when e.AttackerGeneral == figure =>
                         ("Led an invasion", e.Site, e.Defender, true, "Named commander"),
                     AttackedSite e when InFaction(e.Attacker, e.Year) =>
-                        ("Faction invaded", e.Site, e.Defender, true, "Associated faction"),
+                        ("Faction invaded", e.Site, e.Defender, true, FactionAttribution(e.Attacker, e.Year)),
                     SiteTakenOver e when InFaction(e.Attacker, e.Year) =>
-                        ("Captured a settlement", e.Site, e.Defender, false, "Associated faction"),
+                        ("Captured a settlement", e.Site, e.Defender, false, FactionAttribution(e.Attacker, e.Year)),
                     PlunderedSite e when InFaction(e.Attacker, e.Year) =>
-                        ("Plundered a settlement", e.Site, e.Defender, false, "Associated faction"),
+                        ("Plundered a settlement", e.Site, e.Defender, false, FactionAttribution(e.Attacker, e.Year)),
                     EntityRampagedInSite e when InFaction(e.RampageCiv, e.Year) =>
-                        ("Faction rampaged through a site", e.Site, (Entity?)null, false, "Associated faction"),
+                        ("Faction rampaged through a site", e.Site, (Entity?)null, false, FactionAttribution(e.RampageCiv, e.Year)),
                     FieldBattle e when e.AttackerGeneral == figure =>
                         ("Led a field battle", (Site?)null, e.Defender, false, "Named commander"),
                     FieldBattle e when InFaction(e.Attacker, e.Year) =>
-                        ("Faction fought a field battle", (Site?)null, e.Defender, false, "Associated faction"),
+                        ("Faction fought a field battle", (Site?)null, e.Defender, false, FactionAttribution(e.Attacker, e.Year)),
                     EntityDissolved e when InFaction(e.Entity, e.Year) =>
-                        ("Faction dissolved", (Site?)null, (Entity?)null, false, "Associated faction"),
+                        ("Faction dissolved", (Site?)null, (Entity?)null, false, FactionAttribution(e.Entity, e.Year)),
                     HfDied e when e.HistoricalFigure == figure =>
                         ("Necromancer died", e.Site, (Entity?)null, false, "Personal"),
                     _ => ((string?)null, (Site?)null, (Entity?)null, false, "")
