@@ -35,19 +35,58 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                     :defender-deployed="store.object?.defenderBattleDeployments"
                     :site-outcomes="store.object?.siteOutcomes" />
             </v-col>
-            <v-col v-if="store.object" cols="12" xl="6">
+            <v-col v-if="store.object" cols="12" xl="6" lg="12" md="12">
                 <v-card title="Lead-up to War" prepend-icon="mdi-timeline-clock-outline" variant="text">
                     <v-card-text>
-                        <p class="text-body-2 mb-3">Recorded encounters between opposing factions and their groups in the ten years leading up to the war. Opening events are linked to the war at its recorded start.</p>
-                        <v-list v-if="store.object.leadUp?.length" max-height="320" class="overflow-y-auto">
+                        <p class="text-body-2 mb-3">
+                            Documented interactions between opposing coalitions over the preceding
+                            {{ store.object.leadUpYears ?? 50 }} years. Opening events are shown only
+                            when explicitly associated with this war.
+                        </p>
+                        <v-list v-if="store.object.leadUp?.length" max-height="360" class="overflow-y-auto">
                             <v-list-item v-for="(entry, index) in store.object.leadUp" :key="index">
                                 <div class="text-subtitle-2">{{ entry.title }}</div>
                                 <div class="text-body-2" v-html="entry.subtitle"></div>
                             </v-list-item>
                         </v-list>
-                        <p v-else>No dated encounters matching these factions were found in the lead-up period.</p>
+                        <p v-else class="text-body-2">No identifiable pre-war encounters were found between these factions. Check the evidence audit below to see what was filtered out.</p>
                     </v-card-text>
                 </v-card>
+            </v-col>
+            <v-col v-if="store.object" cols="12" xl="6" lg="12" md="12">
+                <v-card title="Possible Causes and Historical Context" prepend-icon="mdi-magnify-scan" variant="text">
+                    <v-card-text>
+                        <p class="text-body-2 mb-3">
+                            Clues from recorded events, not confirmed motives.
+                            The Legends export does not provide a diplomatic-relations score,
+                            cultural-ethics comparison or reliable declaration-of-war reason.
+                        </p>
+                        <v-list v-if="store.object.leadUpContext?.length" max-height="360" class="overflow-y-auto">
+                            <v-list-item v-for="(entry, index) in store.object.leadUpContext" :key="index">
+                                <div class="text-subtitle-2">{{ entry.title }}</div>
+                                <div class="text-body-2" v-html="entry.subtitle"></div>
+                            </v-list-item>
+                        </v-list>
+                    </v-card-text>
+                </v-card>
+            </v-col>
+            <v-col v-if="store.object" cols="12">
+                <v-expansion-panels variant="accordion">
+                    <v-expansion-panel title="War lead-up evidence audit">
+                        <v-expansion-panel-text>
+                            <p class="text-body-2 mb-2">
+                                Counts below describe the events attached to the factions and their identifiable governments, not every event in the world.
+                                Unresolved faction links and unsupported event types are shown separately.
+                            </p>
+                            <v-list density="compact">
+                                <v-list-item v-for="(entry, index) in store.object.leadUpDiagnostics ?? []" :key="index">
+                                    <div class="text-subtitle-2">{{ entry.title }}</div>
+                                    <div class="text-body-2" v-html="entry.subtitle"></div>
+                                </v-list-item>
+                            </v-list>
+                        </v-expansion-panel-text>
+                    </v-expansion-panel>
+                </v-expansion-panels>
             </v-col>
             <v-col v-if="store.object?.attackerDeploymentsByRace?.labels?.length"
                 cols="12" xl="4" lg="6" md="12">
