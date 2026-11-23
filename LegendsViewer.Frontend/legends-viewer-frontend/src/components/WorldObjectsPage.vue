@@ -101,6 +101,9 @@
                         <template v-slot:item.subtype="{ value }">
                             <span v-html="value"></span>
                         </template>
+                        <template v-slot:item.populationCount="{ value }">
+                            {{ typeof value === "number" ? value.toLocaleString() : "—" }}
+                        </template>
                     </v-data-table-server>
                     <section v-if="$slots['overview-content-after-table']" class="mt-6">
                         <v-divider class="mb-6"></v-divider>
