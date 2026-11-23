@@ -189,7 +189,7 @@ public static class DarkForcesAnalysis
             int kills = figure.NotableKills.Select(e => e.Id).Distinct().Count();
 
             var timeline = annotated.Select(e => new DarkForceEventDto(
-                    e.Source.Year, e.Kind, e.Source.Print(false),
+                    e.Source.Year, e.Kind, e.Source.Print(true),
                     e.Site?.Id, e.Site?.Name, e.Target?.Id, e.Target?.Name,
                     e.Invasion, firstInvasion.HasValue && e.Source.Year < firstInvasion.Value,
                     e.Attribution)).ToList();
