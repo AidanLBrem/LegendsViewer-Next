@@ -4,6 +4,7 @@ import { getTerritorySeeds, type AtlasSite } from '../utils/historicalAtlas';
 import {
   buildNationExpansionHistory,
   listHistoricalNations,
+  sortNationOptions,
   nationExpansionAtYear,
   nationExpansionChartPath,
 } from '../utils/nationExpansion';
@@ -51,6 +52,21 @@ describe('nation expansion timeline', () => {
     const dwarves = buildNationExpansionHistory(sites, 1, 100);
     expect(nationExpansionAtYear(dwarves, 0).sites).toBe(0);
     expect(nationExpansionAtYear(dwarves, 99).sites).toBe(0);
+  });
+
+  it('sorts map nations by present site population with unknowns last', () => {
+    const options = listHistoricalNations([
+      { ownerId: 1, ownerText: 'Low', populationCount: 9 },
+      { ownerId: 2, ownerText: 'High', populationCount: 100 },
+      { ownerId: 1, ownerText: 'Low', populationCount: 6 },
+      { ownerId: 3, ownerText: 'Unknown' },
+    ], 100);
+    expect(options.find(n => n.id === 1)?.currentPopulation).toBe(15);
+    expect(options.find(n => n.id === 2)?.currentPopulation).toBe(100);
+    expect(options.find(n => n.id === 3)?.currentPopulation).toBeNull();
+    expect(sortNationOptions(options, 'population-desc').map(n => n.id)).toEqual([2, 1, 3]);
+    expect(sortNationOptions(options, 'population-asc').map(n => n.id)).toEqual([1, 2, 3]);
+    expect(sortNationOptions(options, 'name-asc').map(n => n.id)).toEqual([2, 1, 3]);
   });
 
   it('draws a stepped rather than interpolated ownership curve', () => {
