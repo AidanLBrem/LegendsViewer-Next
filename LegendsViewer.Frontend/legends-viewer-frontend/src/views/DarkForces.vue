@@ -20,7 +20,7 @@
     <template v-if="!viewingDetail">
       <v-row>
         <v-col cols="12" sm="6" md="4">
-          <v-text-field v-model="search" label="Search necromancers, factions or apprentices" clearable density="comfortable" />
+          <v-text-field v-model="search" label="Search necromancers, groups or apprentices" clearable density="comfortable" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="status" :items="statusOptions" label="Status" density="comfortable" />
@@ -76,6 +76,7 @@
         <thead>
           <tr>
             <th>Necromancer</th>
+            <th>Associated group</th>
             <th>Status</th>
             <th class="text-end">Power index</th>
             <th class="text-end">Peak settlements</th>
@@ -93,6 +94,17 @@
               <div class="text-caption" v-if="figure.firstInvasionYear !== null">
                 First recorded invasion: year {{ figure.firstInvasionYear }}
               </div>
+            </td>
+            <td>
+              <template v-if="figure.groups.length">
+                <router-link :to="`/entity/${figure.groups[0].id}`">{{ figure.groups[0].name }}</router-link>
+                <div class="text-caption">
+                  {{ figure.groups[0].relationship }}
+                  <template v-if="figure.groups[0].holdingName"> · {{ figure.groups[0].holdingName }}</template>
+                  <template v-if="figure.groups.length > 1"> · +{{ figure.groups.length - 1 }} groups</template>
+                </div>
+              </template>
+              <span v-else class="text-medium-emphasis">No recorded affiliation</span>
             </td>
             <td><v-chip size="small" :color="figure.defeated ? 'secondary' : undefined">{{ figure.status }}</v-chip></td>
             <td class="text-end">{{ figure.powerIndex.toLocaleString() }}</td>
@@ -131,6 +143,14 @@
               <v-col cols="6" md="3"><strong>{{ selected.invasions }}</strong><div class="text-caption">Invasions</div></v-col>
               <v-col cols="6" md="3"><strong>{{ selected.conquests }}</strong><div class="text-caption">Settlements captured</div></v-col>
             </v-row>
+            <p v-if="selected.groups.length" class="mt-3">
+              Associated group:
+              <template v-for="(group, index) in selected.groups" :key="group.id">
+                <span v-if="index > 0"> · </span>
+                <router-link :to="`/entity/${group.id}`">{{ group.name }}</router-link>
+                <span class="text-caption"> ({{ group.relationship }})</span>
+              </template>
+            </p>
             <p class="mt-3">
               Dark secret acquired: {{ selected.awakeningYear === null ? 'not dated in export' : 'year ' + selected.awakeningYear }}.
               First documented invasion: {{ selected.firstInvasionYear === null ? 'none recorded' : 'year ' + selected.firstInvasionYear }}.
@@ -144,8 +164,10 @@
         <v-card title="Faction Foundations and Leadership" prepend-icon="mdi-castle" variant="text" class="mb-4">
           <v-card-text>
             <p class="text-caption mb-2">
-              Territory is attributed only during recorded leadership or a founded faction's lifetime
-              while its founding necromancer survived. Ordinary membership does not establish command.
+              These are the specific holdings founded or led by this necromancer.
+              Broader group membership appears above but does not grant ownership of the
+              group's entire territory or credit for every parent-faction invasion.
+              Descendant-government associations reflect the current hierarchy.
             </p>
             <v-list v-if="selected.factions.length">
               <v-list-item v-for="(faction, index) in selected.factions" :key="`${faction.id}-${index}`">
@@ -248,7 +270,8 @@ function isDarkForce(value: unknown): value is DarkForce {
     && Array.isArray(figure.factions)
     && Array.isArray(figure.timeline)
     && typeof figure.apprenticeCount === 'number'
-    && Array.isArray(figure.apprentices);
+    && Array.isArray(figure.apprentices)
+    && Array.isArray(figure.groups);
 }
 const search = ref<string | null>('');
 const minApprentices = ref<string | null>(null);
