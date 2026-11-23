@@ -72,9 +72,21 @@ public class NationDiplomacyFactorsTests
         Entity second = new([], world) { Id = 2, Name = "Second", IsCiv = true };
         Entity third = new([], world) { Id = 3, Name = "Third", IsCiv = true };
 
+        world.Entities.AddRange([first, second, third]);
+        Site meetingSite = new([], world) { Id = 10, Name = "Council Hall" };
+        world.Sites.Add(meetingSite);
+
         first.Events.Add(new AttackedSite([], world) { Year = 7, Attacker = first, Defender = second });
-        first.Events.Add(new PeaceAccepted([], world) { Year = 8, Source = first, Destination = second });
-        first.Events.Add(new PeaceRejected([], world) { Year = 9, Source = first, Destination = third });
+        first.Events.Add(new PeaceAccepted([
+            new LegendsViewer.Backend.Legends.Parser.Property { Name = "site_id", Value = "10" },
+            new LegendsViewer.Backend.Legends.Parser.Property { Name = "source", Value = "1" },
+            new LegendsViewer.Backend.Legends.Parser.Property { Name = "destination", Value = "2" }
+        ], world) { Year = 8 });
+        first.Events.Add(new PeaceRejected([
+            new LegendsViewer.Backend.Legends.Parser.Property { Name = "site_id", Value = "10" },
+            new LegendsViewer.Backend.Legends.Parser.Property { Name = "source", Value = "1" },
+            new LegendsViewer.Backend.Legends.Parser.Property { Name = "destination", Value = "3" }
+        ], world) { Year = 9 });
 
         var factors = NationDiplomacyFactorsDto.FromEntities(first, second);
 
