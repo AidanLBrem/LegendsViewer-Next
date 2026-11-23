@@ -5,33 +5,35 @@ import {
     type NationCulturePeriod, type NationCultureSummary
 } from '../types/nationCulture';
 
-type RateKey = 'settlementExpansionPerCentury' | 'conquestPerCentury' | 'sitesLostInWarPerCentury' | 'offensiveOperationsPerCentury' |
-    'plundersPerCentury' | 'diplomacyPerCentury' | 'upheavalsPerCentury';
-type SortKey = RateKey | 'name' | 'currentSites' | 'character';
+type CountKey = 'settlementsFounded' | 'conquests' | 'sitesLostInWar' | 'offensiveOperations' |
+    'sitesPlundered' | 'diplomacy' | 'internalUpheavals';
+type SortKey = CountKey | 'name' | 'currentSites' | 'character';
 type CultureRow = NationCultureSummary & { period: NationCulturePeriod };
 
 const nations = ref<NationCultureSummary[]>([]);
 const loading = ref(false);
 const error = ref('');
 const search = ref('');
-const windowYears = ref(100);
-const sortKey = ref<SortKey>('settlementExpansionPerCentury');
+const windowYears = ref(0);
+const sortKey = ref<SortKey>('settlementsFounded');
 const descending = ref(true);
 
-const rateColumns: { key: RateKey; title: string }[] = [
-    { key: 'settlementExpansionPerCentury', title: 'Expansion' },
-    { key: 'conquestPerCentury', title: 'Conquest' },
-    { key: 'sitesLostInWarPerCentury', title: 'Settlements Lost in War' },
-    { key: 'offensiveOperationsPerCentury', title: 'Offense' },
-    { key: 'plundersPerCentury', title: 'Plunder' },
-    { key: 'diplomacyPerCentury', title: 'Diplomacy' },
-    { key: 'upheavalsPerCentury', title: 'Upheaval' },
+const countColumns: { key: CountKey; title: string }[] = [
+    { key: 'settlementsFounded', title: 'Expansion' },
+    { key: 'conquests', title: 'Conquest' },
+    { key: 'sitesLostInWar', title: 'Settlements Lost in War' },
+    { key: 'offensiveOperations', title: 'Offense' },
+    { key: 'sitesPlundered', title: 'Plunder' },
+    { key: 'diplomacy', title: 'Diplomacy' },
+    { key: 'internalUpheavals', title: 'Upheaval' },
 ];
+const eventCount = (period: NationCulturePeriod, key: CountKey): number =>
+    key === 'diplomacy' ? period.peaceAgreements + period.alliances : period[key];
 const columns: { key: SortKey; title: string }[] = [
     { key: 'name', title: 'Civilization' },
     { key: 'character', title: 'Character' },
     { key: 'currentSites', title: 'Sites' },
-    ...rateColumns,
+    ...countColumns,
 ];
 const sort = (key: SortKey) => {
     if (sortKey.value === key) descending.value = !descending.value;
@@ -50,10 +52,9 @@ const sortedNations = computed<CultureRow[]>(() => nations.value
         if (sortKey.value === 'name') comparison = a.name.localeCompare(b.name);
         else if (sortKey.value === 'character') comparison = a.period.character.localeCompare(b.period.character);
         else if (sortKey.value === 'currentSites') comparison = a.currentSites - b.currentSites;
-        else comparison = a.period[sortKey.value] - b.period[sortKey.value];
+        else comparison = eventCount(a.period, sortKey.value) - eventCount(b.period, sortKey.value);
         return (descending.value ? -comparison : comparison) || a.name.localeCompare(b.name) || a.id - b.id;
     }));
-const formatRate = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 onMounted(async () => {
     loading.value = true;
@@ -92,7 +93,7 @@ onMounted(async () => {
             </v-col>
         </v-row>
         <div class="text-caption text-medium-emphasis mb-3">
-            Rates are recorded actions per 100 observed years, not official cultural values.
+            Values are total recorded events during the selected historical period, not annualized rates or official cultural values.
             Click a header to sort all civilizations. Expansion = founded settlements; Conquest = captured sites; Settlements Lost in War = confirmed wartime captures, surrenders or destruction. Reclamations and ordinary abandonment are excluded.
         </div>
         <v-progress-linear v-if="loading" color="primary" indeterminate />
@@ -122,14 +123,8 @@ onMounted(async () => {
                         </td>
                         <td>{{ nation.period.character }}</td>
                         <td class="text-end">{{ nation.currentSites.toLocaleString() }}</td>
-                        <td v-for="column in rateColumns" :key="column.key" class="text-end culture-number">
-                            <v-tooltip v-if="column.key === 'sitesLostInWarPerCentury'"
-                                :text="nation.period.sitesLostInWar.toLocaleString() + ' recorded wartime settlement losses in this period'">
-                                <template #activator="{ props: tooltipProps }">
-                                    <span v-bind="tooltipProps">{{ formatRate(nation.period[column.key]) }}</span>
-                                </template>
-                            </v-tooltip>
-                            <span v-else>{{ formatRate(nation.period[column.key]) }}</span>
+                        <td v-for="column in countColumns" :key="column.key" class="text-end culture-number">
+                            {{ eventCount(nation.period, column.key).toLocaleString() }}
                         </td>
                     </tr>
                     <tr v-if="sortedNations.length === 0">
@@ -140,7 +135,7 @@ onMounted(async () => {
         </div>
         <div class="text-caption text-medium-emphasis mt-2">
             A value of zero means no matching event was recorded, not that the civilization was peaceful.
-            See each nation for supporting events and the years used in its rates.
+            See each nation for supporting events and the years included in its totals.
         </div>
     </section>
 </template>
