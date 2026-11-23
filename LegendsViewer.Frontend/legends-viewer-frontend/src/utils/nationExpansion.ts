@@ -9,6 +9,22 @@ export interface NationOption {
   name: string;
   color: string;
   currentSites: number;
+  currentPopulation: number | null;
+}
+
+export type NationSortKey = 'sites-desc' | 'population-desc' | 'population-asc' | 'name-asc';
+
+export function sortNationOptions(options: readonly NationOption[], sortKey: NationSortKey): NationOption[] {
+  return [...options].sort((a, b) => {
+    if (sortKey === 'name-asc') return a.name.localeCompare(b.name) || a.id - b.id;
+    if (sortKey === 'population-desc' || sortKey === 'population-asc') {
+      if (a.currentPopulation == null) return b.currentPopulation == null ? a.name.localeCompare(b.name) : 1;
+      if (b.currentPopulation == null) return -1;
+      const delta = a.currentPopulation - b.currentPopulation;
+      return (sortKey === 'population-desc' ? -delta : delta) || a.name.localeCompare(b.name) || a.id - b.id;
+    }
+    return b.currentSites - a.currentSites || a.name.localeCompare(b.name) || a.id - b.id;
+  });
 }
 
 export interface NationExpansionPoint {
@@ -39,7 +55,7 @@ export function listHistoricalNations(
   const options = new Map<number, NationOption>();
   const add = (id: number | null | undefined, name: string | null | undefined, color: string | null | undefined) => {
     if (id == null || !Number.isFinite(id)) return;
-    if (!options.has(id)) options.set(id, { id, name: name || `Faction #${id}`, color: color || '#777777', currentSites: 0 });
+    if (!options.has(id)) options.set(id, { id, name: name || `Faction #${id}`, color: color || '#777777', currentSites: 0, currentPopulation: null });
   };
   for (const site of sites) {
     add(site.ownerId, site.ownerText ?? site.owner, site.color);
@@ -53,6 +69,9 @@ export function listHistoricalNations(
       option.name = current.ownerText || option.name;
       option.color = current.color || option.color;
       option.currentSites++;
+      if (typeof site.populationCount === 'number' && Number.isFinite(site.populationCount) && site.populationCount >= 0) {
+        option.currentPopulation = (option.currentPopulation ?? 0) + Math.round(site.populationCount);
+      }
     }
   }
   return [...options.values()].sort((a, b) =>
