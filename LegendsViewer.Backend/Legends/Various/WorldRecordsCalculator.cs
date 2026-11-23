@@ -24,6 +24,8 @@ public static class WorldRecordsCalculator
             Cards =
             [
                 CalculateTopSlayers(world),
+                CalculateRecordedBattleResults(world, victories: true),
+                CalculateRecordedBattleResults(world, victories: false),
                 CalculateBloodiestBattles(world),
                 CalculateFiercestDuelists(world),
                 CalculateDevastatingRampages(world)
@@ -130,6 +132,27 @@ public static class WorldRecordsCalculator
             });
         }
 
+        foreach (var (cardId, title, icon) in new[]
+        {
+            ("battle_victories", "Most Battles Won", "mdi-trophy"),
+            ("battle_defeats", "Most Battles Lost", "mdi-shield-off")
+        })
+        {
+            var leader = dto.Categories.FirstOrDefault(c => c.Id == "warfare")
+                ?.Cards.FirstOrDefault(c => c.Id == cardId)
+                ?.Entries.FirstOrDefault();
+            if (leader != null)
+            {
+                highlights.Add(new RecordHighlightDto
+                {
+                    Title = title,
+                    Value = leader.Value,
+                    Icon = icon,
+                    LinkHtml = leader.LinkHtml
+                });
+            }
+        }
+
         var topReign = dto.Categories.FirstOrDefault(c => c.Id == "sovereigns")
             ?.Cards.FirstOrDefault(c => c.Id == "longest_reigns")
             ?.Entries.FirstOrDefault();
@@ -208,6 +231,55 @@ public static class WorldRecordsCalculator
                 NumericValue = hf.NotableKills.Count,
                 Subtitle = GetHistoricalFigureSubtitle(hf),
                 DetailText = $"Slain notable figures: {string.Join(", ", hf.NotableKills.Take(3).Select(k => k.HistoricalFigure?.Name ?? "Unknown"))}"
+            });
+        }
+
+        return card;
+    }
+
+    private static RecordCardDto CalculateRecordedBattleResults(World world, bool victories)
+    {
+        var card = new RecordCardDto
+        {
+            Id = victories ? "battle_victories" : "battle_defeats",
+            Title = victories ? "Most Battles Won" : "Most Battles Lost",
+            Icon = victories ? "mdi-trophy" : "mdi-shield-off",
+            MetricName = victories ? "Battles Won" : "Battles Lost"
+        };
+
+        // Battle records identify notable participants and the winning side,
+        // but a participant is NOT necessarily the general commanding it.
+        // The separate IsCommander field tests for explicit general mentions.
+        var ranked = world.HistoricalFigures
+            .Select(hf => new
+            {
+                Figure = hf,
+                Count = victories ? hf.BattlesWon : hf.BattlesLost
+            })
+            .Where(entry => entry.Count > 0)
+            .OrderByDescending(entry => entry.Count)
+            .ThenBy(entry => entry.Figure.Name, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Figure.Id)
+            .Take(10);
+
+        int rank = 1;
+        foreach (var entry in ranked)
+        {
+            HistoricalFigure hf = entry.Figure;
+            card.Entries.Add(new RecordEntryDto
+            {
+                Rank = rank++,
+                Id = hf.Id,
+                Name = hf.Name,
+                ObjectType = "hf",
+                LinkHtml = hf.ToLink(),
+                Value = $"{entry.Count} {(victories ? "wins" : "losses")}",
+                NumericValue = entry.Count,
+                Race = hf.GetRaceString(),
+                Subtitle = GetHistoricalFigureSubtitle(hf) +
+                    (hf.IsCommander ? " · Recorded commander" : ""),
+                DetailText = "Counts recorded battles on the winning or losing side; " +
+                    "unknown outcomes, noncombatants and duplicate references are excluded."
             });
         }
 
