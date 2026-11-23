@@ -20,6 +20,9 @@ public class WorldMapController(IWorld worldDataService, IWorldMapImageGenerator
     private readonly IWorld _worldDataService = worldDataService;
     private readonly IWorldMapImageGenerator _worldMapImageGenerator = worldMapImageGenerator;
 
+    [HttpGet("nation-colors")]
+    public IActionResult GetNationColors() => Ok(NationMapColorsDto.FromWorld(_worldDataService));
+
     [HttpGet("coordinates/{type}/{id}")]
     public ActionResult<MapCoordinatesDto?> GetObjectCoordinates(string type, int id)
     {

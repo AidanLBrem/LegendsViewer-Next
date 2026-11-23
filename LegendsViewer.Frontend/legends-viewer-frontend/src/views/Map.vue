@@ -6,15 +6,42 @@
     <div class="site-color-selector" :class="{ 'site-color-selector--collapsed': !siteColorsExpanded }">
       <button type="button" class="map-panel-toggle" aria-controls="site-color-panel-content"
         :aria-expanded="siteColorsExpanded" @click="siteColorsExpanded = !siteColorsExpanded">
-        <strong>Site colors</strong>
+        <strong>Map colors</strong>
         <span aria-hidden="true">{{ siteColorsExpanded ? '▾' : '▸' }}</span>
       </button>
       <div id="site-color-panel-content" v-show="siteColorsExpanded" class="site-color-selector__body">
-        <label for="site-color-mode">Color by</label>
+        <div class="nation-color-buttons" role="group" aria-label="Color nations by">
+          <button v-for="mode in nationColorModes" :key="mode" type="button" :disabled="!historyReady"
+            :aria-pressed="nationColorMode === mode" @click="chooseNationMode(mode)">{{ mode }}</button>
+        </div>
+        <template v-if="nationColorMode === 'Nation'">
+        <label for="site-color-mode">Site colors</label>
         <select id="site-color-mode" v-model="siteColorMode">
           <option value="current">Owner in selected year</option>
           <option value="origin">Origin nation</option>
         </select>
+        </template>
+        <template v-if="nationColorMode === 'Practice'">
+          <label for="map-practice">Practice</label>
+          <select id="map-practice" v-model="practice">
+            <option v-for="option in practiceOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
+          </select>
+          <small>World-export policies where available, otherwise vanilla estimates for known civilizations.
+            Policies reflect the export date.</small>
+        </template>
+        <template v-if="nationColorMode === 'Diplomacy'">
+          <label for="map-perspective">Relations with</label>
+          <select id="map-perspective" v-model.number="selectedNationId">
+            <option v-for="nation in nationOptions" :key="nation.id" :value="nation.id">{{ nation.name }}</option>
+          </select>
+          <small>As of year {{ selectedYear }}. Unmet means no recorded contact.</small>
+        </template>
+        <template v-if="nationColorMode !== 'Nation'">
+          <span v-if="nationDataMessage" role="status">{{ nationDataMessage }}</span>
+          <div class="nation-color-legend" aria-label="Map color legend">
+            <span v-for="item in colorLegend" :key="item.label"><i :style="{backgroundColor: item.color}" />{{ item.label }}</span>
+          </div>
+        </template>
         <div class="site-visibility-options" role="group" aria-label="Visible site types">
           <label><input type="checkbox" v-model="showMonasteries" :disabled="!historyReady" /> Monasteries</label>
           <label><input type="checkbox" v-model="showCamps" :disabled="!historyReady" /> Camps</label>
@@ -135,6 +162,8 @@ import { useWorldStore } from '../stores/worldStore';
 import { useWorldMapStore } from '../stores/mapStore';
 import L, { Map as LeafletMap, ImageOverlay, Layer, LayerGroup } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { nationColorModes, mapCategory, diplomaticStatus, type NationColorMode, type NationMapData, type Relation } from '../utils/nationMapColors';
+import { practiceOptions } from '../utils/civilizationEthics';
 import { territoryLabelSvg } from '../utils/territoryLabels';
 import { components } from '../generated/api-schema'; // Import from the OpenAPI schema
 
@@ -746,6 +775,7 @@ function wireInternalLinks(container: HTMLElement, router: Router): void {
 interface NominalTerritoryInfo {
   ownerId: number | null;
   ownerLink?: string;
+  colorMeaning?: string;
   ocean: boolean;
   evidence?: { settlement: string; strength: number; runner: string | null; runnerStrength: number; anchored: boolean };
 }
@@ -761,6 +791,11 @@ function territorySummary(territory: NominalTerritoryInfo, year: number): HTMLEl
     return header;
   }
   appendRichContent(header, territory.ownerLink ?? `Faction #${territory.ownerId}`);
+  if (territory.colorMeaning) {
+    const category = document.createElement('div');
+    category.textContent = territory.colorMeaning;
+    header.appendChild(category);
+  }
   const e = territory.evidence;
   if (e) {
     const line = (label: string, link?: string) => {
@@ -1173,6 +1208,7 @@ export default defineComponent({
     let warfareLoading = false;
     let historicalWarfareData: WarfareMapDto | null = null;
     let historicalDataLoading = false;
+    let renderedCategories: Map<number, { label: string; color: string }> | null = null;
     let territorySnapshotKey = '';
     const territoryTip = L.tooltip({ direction: 'top', offset: [0, -8], interactive: false });
     let hoverKey = '';
@@ -1187,6 +1223,62 @@ export default defineComponent({
     let ownerVisibilityVersion = 0;
 
     const yieldToBrowser = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+    const nationColorMode = ref<NationColorMode>('Nation');
+    const practice = ref('SLAVERY');
+    const nationData = shallowRef<NationMapData | null>(null);
+    const nationDataMessage = ref('');
+    const loadNationData = async () => {
+      if (nationData.value || nationDataMessage.value === 'Loading nation records…') return;
+      const generation = renderGeneration;
+      nationDataMessage.value = 'Loading nation records…';
+      try {
+        const response = await fetch('http://localhost:15421/api/WorldMap/nation-colors');
+        if (!response.ok) throw Error(String(response.status));
+        const records: NationMapData = await response.json();
+        if (!disposed && generation === renderGeneration) {
+          nationData.value = records;
+          nationDataMessage.value = '';
+        }
+      } catch {
+        if (!disposed && generation === renderGeneration)
+          nationDataMessage.value = 'Nation records unavailable. Select the mode again to retry.';
+      }
+    };
+    const chooseNationMode = (mode: NationColorMode) => {
+      nationColorMode.value = mode;
+      if (mode !== 'Nation') void loadNationData();
+    };
+    const colorCategories = computed(() => {
+      const categories = new Map<number, { label: string; color: string }>();
+      const data = nationData.value;
+      if (nationColorMode.value === 'Nation' || !data) return categories;
+      const nations = new Map(data.nations.map(n => [n.id, n]));
+      const pairs = new Map<number, Relation[]>();
+      if (nationColorMode.value === 'Diplomacy') {
+        const focus = selectedNationId.value;
+        for (const r of data.relations) {
+          if (r.a !== focus && r.b !== focus) continue;
+          const peer = r.a === focus ? r.b : r.a;
+          if (!pairs.has(peer)) pairs.set(peer, []);
+          pairs.get(peer)!.push(r);
+        }
+      }
+      for (const option of nationOptions.value) {
+        let status = '';
+        if (nationColorMode.value === 'Diplomacy')
+          status = option.id === selectedNationId.value ? 'Selected nation' :
+            diplomaticStatus(pairs.get(option.id) ?? [], selectedYear.value);
+        categories.set(option.id, mapCategory(nationColorMode.value, nations.get(option.id),
+          necromancerNationIds.has(option.id), practice.value, status));
+      }
+      return categories;
+    });
+    const colorLegend = computed(() => [...new Map([...colorCategories.value.values()]
+      .map(item => [item.label, item])).values()].sort((a, b) => a.label.localeCompare(b.label)));
+    const thematicColor = (id: number | null, fallback: string) =>
+      nationColorMode.value === 'Nation' || !nationData.value || id == null
+        ? fallback : colorCategories.value.get(id)?.color ?? '#808080';
 
     const siteTypeIsVisible = (site: SiteMarker): boolean =>
       isSiteTypeVisible(site.type, {
@@ -1321,7 +1413,16 @@ export default defineComponent({
         showMonasteries.value, showCamps.value, showCaves.value,
         showNecromancers.value, filterMinorPowers.value, showBorderLines.value
       ].join(':');
-      if (key === territorySnapshotKey && territoryOverlay.value) {
+      const paint = (grid: TerritoryGrid) => {
+        const colors = new Map([...grid.colors].map(([id, original]) => [id, thematicColor(id, original)]));
+        return territoryGridToDataUrl({ ...grid, colors }, oceanMask ?? undefined, width, height, showBorderLines.value);
+      };
+      if (key === territorySnapshotKey && territoryOverlay.value && activeTerritoryGrid) {
+        if (renderedCategories !== colorCategories.value) {
+          territoryOverlay.value.setUrl(paint(activeTerritoryGrid));
+          renderedCategories = colorCategories.value;
+          clearTerritoryTip();
+        }
         if (!map.hasLayer(territoryOverlay.value)) territoryOverlay.value.addTo(map);
         if (territoryNames && !map.hasLayer(territoryNames)) territoryNames.addTo(map);
         return;
@@ -1359,7 +1460,7 @@ export default defineComponent({
       );
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
-      const image = territoryGridToDataUrl(grid, oceanMask, width, height, showBorderLines.value);
+      const image = paint(grid);
       // Count world tiles rather than downsampled raster cells, so the
       // selected year's area never includes ocean or unanchored claims.
       const landTiles = new Map<number, number>();
@@ -1396,6 +1497,7 @@ export default defineComponent({
       territoryNames = L.svgOverlay(labels, territoryOverlay.value.getBounds(), {
         pane: 'territoryPane', interactive: false,
       }).addTo(map);
+      renderedCategories = colorCategories.value;
       territorySnapshotKey = key;
     };
 
@@ -1500,7 +1602,7 @@ export default defineComponent({
               ownerLayer.addLayer(marker);
               siteMembershipChanged = true;
             }
-            const nextColor = colorForSite(site, owner.color);
+            const nextColor = thematicColor(owner.ownerId, colorForSite(site, owner.color));
             // Avoid redrawing unchanged Canvas shapes on each history step.
             if (marker.options.color !== nextColor) {
               marker.setStyle({ color: nextColor });
@@ -1527,7 +1629,7 @@ export default defineComponent({
 
     watch(
       [
-        selectedYear, siteColorMode, showMonasteries, showCamps, showCaves,
+        selectedYear, siteColorMode, colorCategories, showMonasteries, showCamps, showCaves,
         showNecromancers, filterMinorPowers, showEstimatedTerritories, showBorderLines,
         showHistoricalBattles, showHistoricalCampaigns,
         showHistoricalSiteOutcomes
@@ -1568,6 +1670,7 @@ export default defineComponent({
           runner: e.runner[cell] < 0 ? null : activeTerritoryOwners.get(e.runner[cell]) ?? `Faction #${e.runner[cell]}`,
           runnerStrength: e.runnerStrength[cell], anchored: !!e.anchors[cell],
         } : undefined,
+        colorMeaning: ownerId == null ? undefined : colorCategories.value.get(ownerId)?.label,
         ownerLink: ownerId == null ? undefined : activeTerritoryOwners.get(ownerId),
         ocean: isOceanTile(oceanMask, width, x, y),
       };
@@ -2136,6 +2239,9 @@ export default defineComponent({
       if (!width || !height || !base64Image) return;
 
       const generation = ++renderGeneration;
+      nationData.value = null;
+      nationDataMessage.value = '';
+      if (nationColorMode.value !== 'Nation') void loadNationData();
       historyReady.value = false;
       historyUpdateGeneration++;
       stopHistoryPlayback();
@@ -2261,7 +2367,7 @@ export default defineComponent({
             if (coordinate.x == null || coordinate.y == null) continue;
             const marker = createMarker(
               siteMarker.type ?? 'Unknown',
-              colorForSite(siteMarker, initialOwner.color),
+              thematicColor(initialOwner.ownerId, colorForSite(siteMarker, initialOwner.color)),
               toLatLng(coordinate.x, coordinate.y),
               siteRenderer
             );
@@ -2359,7 +2465,7 @@ export default defineComponent({
     return {
       mapStore,
       siteColorMode,
-      siteColorsExpanded,
+      siteColorsExpanded, nationColorModes, nationColorMode, chooseNationMode, colorLegend, practiceOptions, practice, nationDataMessage,
       showMonasteries,
       showCamps,
       showCaves,
@@ -2698,7 +2804,15 @@ export default defineComponent({
 .site-color-selector--collapsed {
   width: 160px;
 }
+.nation-color-buttons, .nation-color-legend { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.nation-color-buttons button { padding: 3px 6px; border: 1px solid currentColor; border-radius: 3px; }
+.nation-color-buttons button[aria-pressed="true"] { background: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-on-primary)); }
+.nation-color-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.nation-color-legend i { width: 10px; height: 10px; border-radius: 2px; }
 .site-color-selector__body {
+  max-width: min(280px, 65vw);
+  max-height: 58vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;

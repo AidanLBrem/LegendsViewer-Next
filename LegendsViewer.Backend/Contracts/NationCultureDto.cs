@@ -315,7 +315,7 @@ public sealed class NationCultureProfileDto
                     Add(entry.Year, "peace", "Peace offer accepted");
                     break;
                 case EntityAllianceFormed alliance when SameNation(alliance.InitiatingEntity, nation) ||
-                                                        SameNation(alliance.JoiningEntity, nation):
+                                                        SameNation(alliance.JoiningEntity, nation) || alliance.JoiningEntities.Any(e => SameNation(e, nation)):
                     Add(entry.Year, "alliance", "Alliance formed");
                     break;
                 case InsurrectionStarted rebellion when SameNation(rebellion.Civ, nation):
