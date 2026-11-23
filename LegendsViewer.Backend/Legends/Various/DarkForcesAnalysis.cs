@@ -228,7 +228,7 @@ public static class DarkForcesAnalysis
                 .Concat(figure.Events.OfType<HfDoesInteraction>()
                     .Where(e => e.Doer == figure && IsRaisingInteraction(e.Interaction)))
                 .Where(e => e.Year >= 0 && e.Year <= currentYear)
-                .Where(e => e is not HfRevived r || !r.Disturbance)
+                .Where(e => e is HfRevived revival ? !revival.Disturbance : true)
                 .DistinctBy(e => e.Id)
                 .ToList();
 
