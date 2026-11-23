@@ -2,6 +2,7 @@
     <v-list style="background-color: rgb(var(--v-theme-background));">
         <ThreeStateBoolFilter label="Alive" v-model="localRules.Alive" />
         <ThreeStateBoolFilter label="Deity" v-model="localRules.Deity" />
+        <ThreeStateBoolFilter label="Commander" v-model="localRules.Commander" />
         <div class="d-flex align-center justify-space-between px-4 py-2" style="width: 100%;">
             <div class="text-body-2 pr-2">Special</div>
             <v-btn-toggle density="compact" v-model="localRules.Special" divided class="flex-shrink-0">
@@ -69,6 +70,7 @@ const props = defineProps<{
 const localRules = ref({
     Alive: '',      // e.g., "true" or "false"
     Deity: '',      // e.g., "true" or "false"
+    Commander: '',  // named as a field or site attack general
     Special: '',    // e.g., "vampire", "werebeast", or "necromancer"
     AgeRuleActive: false,
     AgeOperator: null as FilterOperator | null,
@@ -87,6 +89,7 @@ useFilterRules(
   (filters) => {
     localRules.value.Alive = findRuleValue(filters, "IsAlive");
     localRules.value.Deity = findRuleValue(filters, "IsDeity");
+    localRules.value.Commander = findRuleValue(filters, "IsCommander");
 
     if (findRuleValue(filters, "IsVampire") === "true") {
         localRules.value.Special = "vampire";
@@ -111,6 +114,7 @@ useFilterRules(
     // ALIVE and DEITY filter logic
     updateBoolRule(filters, localRules.value.Alive, "IsAlive");
     updateBoolRule(filters, localRules.value.Deity, "IsDeity");
+    updateBoolRule(filters, localRules.value.Commander, "IsCommander");
 
     // AGE, BORN, DIED filter logic
     updateNumberRule(filters, localRules.value.AgeRuleActive, localRules.value.AgeOperator, localRules.value.AgeValue, "Age");
