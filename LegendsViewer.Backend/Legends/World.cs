@@ -126,6 +126,36 @@ public class World : IDisposable, IWorld
         ParsingErrors.Clear();
     }
 
+    private void ReadCivilizationEthics(string xmlFile)
+    {
+        const string suffix = "-legends.xml";
+        if (!xmlFile.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return;
+        string file = xmlFile[..^suffix.Length] + "-civ-ethics.tsv";
+        if (!File.Exists(file)) return;
+        try
+        {
+            var rows = File.ReadAllLines(file);
+            if (rows.FirstOrDefault() != "entity_id\tethic\tresponse")
+            {
+                ParsingErrors.Report("Unrecognized civilization ethics file", file);
+                return;
+            }
+            foreach (string row in rows.Skip(1))
+            {
+                string[] fields = row.Split('\t');
+                if (fields.Length == 3 && int.TryParse(fields[0], out int id)
+                    && fields[1].Length > 0 && fields[2].Length > 0 && GetEntity(id) is Entity entity)
+                {
+                    entity.ExportedEthics[fields[1]] = fields[2];
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ParsingErrors.Report("Could not read civilization ethics", ex.Message);
+        }
+    }
+
     public async Task ParseAsync(string xmlFile, string? xmlPlusFile, string? historyFile, string? sitesAndPopulationsFile, string? mapFile)
     {
         Stopwatch sw = new();
@@ -133,6 +163,7 @@ public class World : IDisposable, IWorld
 
         XmlParser xmlParser = new(this, xmlFile, xmlPlusFile);
         await xmlParser.ParseAsync();
+        ReadCivilizationEthics(xmlFile);
         if (!string.IsNullOrWhiteSpace(historyFile))
         {
             HistoryParser history = new(this, historyFile);

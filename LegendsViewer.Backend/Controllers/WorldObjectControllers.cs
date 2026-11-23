@@ -56,6 +56,15 @@ public class EntityController(IWorldObjectRepository<Entity> repository) : World
         return Ok(Repository.GetAllElements().Where(x => x.IsCiv || (x.EntityType == Legends.Enums.EntityType.Civilization && x.SiteHistory.Count > 0)));
     }
 
+    [HttpGet("ethics")]
+    public IActionResult GetCivilizationEthics()
+    {
+        return Ok(Repository.GetAllElements()
+            .Where(e => e.IsCiv || e.EntityType == Legends.Enums.EntityType.Civilization)
+            .OrderBy(e => e.Name)
+            .Select(e => new { e.Id, e.Name, Race = e.Race.Id, Responses = e.ExportedEthics }));
+    }
+
     [HttpGet("cultures")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public ActionResult<List<NationCultureSummaryDto>> GetCivilizationCultures()
@@ -64,7 +73,7 @@ public class EntityController(IWorldObjectRepository<Entity> repository) : World
             .Where(entity => entity.IsCiv || entity.EntityType == Legends.Enums.EntityType.Civilization)
             .Select(entity =>
             {
-                var profile = NationCultureProfileDto.FromEntity(entity);
+                var profile = NationCultureProfileDto.FromEntity(entity, includeCustoms: false);
                 return new NationCultureSummaryDto
                 {
                     Id = entity.Id,

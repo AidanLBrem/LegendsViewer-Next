@@ -23,6 +23,9 @@ public class Entity : WorldObject, IHasCoordinates
     public Entity? Parent { get; set; }
     public string? ParentLink => Parent?.ToLink(true, this);
 
+    [JsonIgnore]
+    public Dictionary<string, string> ExportedEthics { get; } = [];
+
     public CreatureInfo Race { get; set; } = CreatureInfo.Unknown;
 
     [JsonIgnore]

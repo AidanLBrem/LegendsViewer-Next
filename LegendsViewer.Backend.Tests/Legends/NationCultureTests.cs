@@ -13,6 +13,22 @@ namespace LegendsViewer.Backend.Tests.Legends;
 public class NationCultureTests
 {
     [TestMethod]
+    public void LawHistoryPreservesRepealsAndOnlyIncludesTheNamedGovernment()
+    {
+        using World world = new();
+        Entity nation = new([], world) { Id = 1, IsCiv = true };
+        Entity local = new([], world) { Id = 2, Parent = nation };
+        nation.Events.Add(new EntityLaw([], world) { Id = 5, Year = 10, Entity = nation, Law = EntityLawType.Harsh, LawLaid = true });
+        nation.Events.Add(new EntityLaw([], world) { Id = 9, Year = 10, Entity = nation, Law = EntityLawType.Harsh, LawLaid = false });
+        nation.Events.Add(new EntityLaw([], world) { Id = 14, Year = 11, Entity = local, Law = EntityLawType.Harsh, LawLaid = true });
+
+        var history = NationCultureProfileDto.FromEntity(nation).LawHistory;
+        CollectionAssert.AreEqual(new[] { 9, 5 }, history.Select(change => change.Id).ToArray());
+        Assert.IsFalse(history[0].Enacted);
+        Assert.AreEqual("Harsh edicts", history[0].Law);
+    }
+
+    [TestMethod]
     public void FoundingConquestAndReclamationAreSeparate()
     {
         using World world = new() { CurrentYear = 100 };

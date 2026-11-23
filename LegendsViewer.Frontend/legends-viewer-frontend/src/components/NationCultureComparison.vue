@@ -7,7 +7,7 @@ import {
 
 type RateKey = 'settlementExpansionPerCentury' | 'conquestPerCentury' | 'sitesLostInWarPerCentury' | 'offensiveOperationsPerCentury' |
     'plundersPerCentury' | 'diplomacyPerCentury' | 'upheavalsPerCentury';
-type SortKey = RateKey | 'name' | 'currentSites';
+type SortKey = RateKey | 'name' | 'currentSites' | 'character';
 type CultureRow = NationCultureSummary & { period: NationCulturePeriod };
 
 const nations = ref<NationCultureSummary[]>([]);
@@ -27,11 +27,17 @@ const rateColumns: { key: RateKey; title: string }[] = [
     { key: 'diplomacyPerCentury', title: 'Diplomacy' },
     { key: 'upheavalsPerCentury', title: 'Upheaval' },
 ];
+const columns: { key: SortKey; title: string }[] = [
+    { key: 'name', title: 'Civilization' },
+    { key: 'character', title: 'Character' },
+    { key: 'currentSites', title: 'Sites' },
+    ...rateColumns,
+];
 const sort = (key: SortKey) => {
     if (sortKey.value === key) descending.value = !descending.value;
     else {
         sortKey.value = key;
-        descending.value = key !== 'name';
+        descending.value = key !== 'name' && key !== 'character';
     }
 };
 const sortedNations = computed<CultureRow[]>(() => nations.value
@@ -42,9 +48,10 @@ const sortedNations = computed<CultureRow[]>(() => nations.value
     .sort((a, b) => {
         let comparison = 0;
         if (sortKey.value === 'name') comparison = a.name.localeCompare(b.name);
+        else if (sortKey.value === 'character') comparison = a.period.character.localeCompare(b.period.character);
         else if (sortKey.value === 'currentSites') comparison = a.currentSites - b.currentSites;
         else comparison = a.period[sortKey.value] - b.period[sortKey.value];
-        return (descending.value ? -1 : 1) * (comparison || a.name.localeCompare(b.name));
+        return (descending.value ? -comparison : comparison) || a.name.localeCompare(b.name) || a.id - b.id;
     }));
 const formatRate = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
@@ -94,23 +101,16 @@ onMounted(async () => {
             <v-table density="compact" fixed-header height="500px">
                 <thead>
                     <tr>
-                        <th class="sortable-header" @click="sort('name')">
-                            Civilization <v-icon v-if="sortKey === 'name'" size="x-small">{{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon>
-                        </th>
-                        <th>Character</th>
-                        <th class="text-end sortable-header" @click="sort('currentSites')">
-                            Sites <v-icon v-if="sortKey === 'currentSites'" size="x-small">{{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon>
-                        </th>
-                        <th v-for="column in rateColumns" :key="column.key" class="text-end sortable-header"
-                            @click="sort(column.key)">
-                            <v-tooltip :text="cultureDimensionDescriptions[column.key]" location="top">
-                                <template #activator="{ props: tooltipProps }">
-                                    <span v-bind="tooltipProps">{{ column.title }}</span>
-                                </template>
-                            </v-tooltip>
-                            <v-icon v-if="sortKey === column.key" size="x-small">
-                                {{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}
-                            </v-icon>
+                        <th v-for="column in columns" :key="column.key" scope="col"
+                            :class="{ 'text-end': column.key !== 'name' && column.key !== 'character' }"
+                            :aria-sort="sortKey === column.key ? (descending ? 'descending' : 'ascending') : undefined">
+                            <button type="button" class="sortable-header" :title="cultureDimensionDescriptions[column.key]"
+                                @click="sort(column.key)">
+                                {{ column.title }}
+                                <v-icon v-if="sortKey === column.key" size="x-small" aria-hidden="true">
+                                    {{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}
+                                </v-icon>
+                            </button>
                         </th>
                     </tr>
                 </thead>
@@ -148,7 +148,7 @@ onMounted(async () => {
 <style scoped>
 .culture-table-scroll { overflow-x: auto; }
 .culture-table-scroll :deep(table) { min-width: 1250px; }
-.sortable-header { cursor: pointer; white-space: nowrap; user-select: none; }
+.sortable-header { width: 100%; height: 100%; text-align: inherit; cursor: pointer; white-space: nowrap; user-select: none; }
 .sortable-header:hover { text-decoration: underline; }
 .culture-number { font-variant-numeric: tabular-nums; }
 </style>

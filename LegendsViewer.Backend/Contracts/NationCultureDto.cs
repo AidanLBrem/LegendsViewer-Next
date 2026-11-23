@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using LegendsViewer.Backend.Legends.Extensions;
 using LegendsViewer.Backend.Legends.Enums;
 using LegendsViewer.Backend.Legends.Interfaces;
 using LegendsViewer.Backend.Legends.EventCollections;
@@ -69,15 +70,22 @@ public sealed class NationCultureSummaryDto
     public List<NationCulturePeriodDto> Periods { get; set; } = [];
 }
 
+public sealed record CultureLawChange(int Id, int Year, string Law, bool Enacted, int? FigureId, string? FigureName);
+public sealed record CultureOccasion(int Id, string Name, List<string> Activities);
+public sealed record CultureDeity(int Id, string Name);
+
 public sealed class NationCultureProfileDto
 {
     public int EntityId { get; set; }
     public int CurrentYear { get; set; }
     public string Character { get; set; } = "";
     public int WorshippedDeities { get; set; }
+    public List<CultureLawChange> LawHistory { get; set; } = [];
+    public List<CultureOccasion> Occasions { get; set; } = [];
+    public List<CultureDeity> Deities { get; set; } = [];
     public bool IntrinsicValuesAvailable { get; set; }
     public string IntrinsicValuesNote { get; set; } =
-        "Civilization values and ethics are not parsed by this Legends Viewer importer. These are observed historical actions, not innate traits.";
+        "The Legends exports do not provide a civilization-wide table of values, ethical rules, or punishments.";
     public List<NationCulturePeriodDto> Periods { get; set; } = [];
     public List<NationCultureTimelineDto> Timeline { get; set; } = [];
     public List<NationCultureEvidenceDto> Evidence { get; set; } = [];
@@ -198,7 +206,7 @@ public sealed class NationCultureProfileDto
             _byNation.TryGetValue(nation, out var facts) ? facts : [];
     }
 
-    public static NationCultureProfileDto FromEntity(Entity nation)
+    public static NationCultureProfileDto FromEntity(Entity nation, bool includeCustoms = true)
     {
         var facts = new List<Fact>();
         void Add(int year, string category, string description, string? link = null)
@@ -539,7 +547,7 @@ public sealed class NationCultureProfileDto
             });
         }
 
-        return new NationCultureProfileDto
+        var profile = new NationCultureProfileDto
         {
             EntityId = nation.Id,
             CurrentYear = currentYear,
@@ -560,5 +568,24 @@ public sealed class NationCultureProfileDto
                     Link = f.Link
                 }).ToList()
         };
+        if (includeCustoms)
+        {
+            profile.LawHistory = nation.Events.OfType<EntityLaw>()
+                .Where(law => law.Entity == nation)
+                .OrderByDescending(law => law.Year).ThenByDescending(law => law.Id)
+                .Select(law => new CultureLawChange(law.Id, law.Year, law.LawName, law.LawLaid,
+                    law.HistoricalFigure?.Id, law.HistoricalFigure?.Name)).ToList();
+            profile.Occasions = nation.Occassions.OrderBy(o => o.Name)
+                .Select(o => new CultureOccasion(o.Id, o.Name, o.Schedules.Select(schedule =>
+                {
+                    var features = schedule.Features.Select(feature => feature.Type.Replace('_', ' ')).Distinct();
+                    var detail = string.Join(", ", features);
+                    var activity = schedule.ScheduleType.GetDescription();
+                    return detail.Length == 0 ? activity : $"{activity} ({detail})";
+                }).Distinct().ToList())).ToList();
+            profile.Deities = nation.Worshipped.OrderBy(d => d.Name)
+                .Select(d => new CultureDeity(d.Id, d.Name)).Distinct().ToList();
+        }
+        return profile;
     }
 }

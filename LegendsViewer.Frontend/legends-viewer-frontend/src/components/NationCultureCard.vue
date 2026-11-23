@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CivilizationEthics from './CivilizationEthics.vue';
 import { computed, ref, watch } from 'vue';
 import {
     cultureDimensionDescriptions, cultureWindows,
@@ -16,7 +17,7 @@ let requestNumber = 0;
 watch(() => props.entityId, async id => {
     const request = ++requestNumber;
     profile.value = null;
-    if (!id) return;
+
     loading.value = true;
     error.value = '';
     try {
@@ -30,6 +31,11 @@ watch(() => props.entityId, async id => {
         if (request === requestNumber) loading.value = false;
     }
 }, { immediate: true });
+
+const latestLaws = computed(() => {
+    const changes = profile.value?.lawHistory ?? [];
+    return changes.filter((change, i) => changes.findIndex(other => other.law === change.law) === i);
+});
 
 const period = computed<NationCulturePeriod | undefined>(() =>
     profile.value?.periods.find(p => p.windowYears === windowYears.value)
@@ -107,6 +113,38 @@ const formatRate = (number: number) => number.toLocaleString(undefined, { maximu
                 <v-progress-linear v-if="loading" indeterminate color="primary" />
                 <v-alert v-else-if="error" type="warning" variant="tonal" :text="error" />
                 <template v-else-if="profile && period">
+                    <CivilizationEthics :entity-id="entityId" />
+                    <h3 class="text-subtitle-1">Laws and edicts</h3>
+                    <p v-if="!latestLaws.length">No law changes recorded for this civilization.</p>
+                    <p v-for="change in latestLaws" :key="change.law">
+                        {{ change.law }} · Last recorded as {{ change.enacted ? 'enacted' : 'repealed' }} in year {{ change.year }}.
+                    </p>
+                    <details v-if="latestLaws.length" class="mt-2">
+                        <summary>Law history ({{ profile.lawHistory.length }})</summary>
+                        <ul class="pl-5">
+                            <li v-for="change in profile.lawHistory" :key="change.id">
+                                Year {{ change.year }} · {{ change.law }} {{ change.enacted ? 'enacted' : 'repealed' }}
+                                <template v-if="change.figureId != null"> by <router-link :to="'/hf/' + change.figureId">{{ change.figureName }}</router-link></template>
+                            </li>
+                        </ul>
+                    </details>
+                    <p class="text-caption text-medium-emphasis">Legends records changes to edicts without their individual terms.</p>
+                    <h3 class="text-subtitle-1 mt-3">Festivals and observances</h3>
+                    <details v-for="occasion in profile.occasions" :key="occasion.id">
+                        <summary>{{ occasion.name }}</summary>
+                        <ul v-if="occasion.activities.length" class="pl-5">
+                            <li v-for="activity in occasion.activities" :key="activity">{{ activity }}</li>
+                        </ul>
+                        <p v-else>No activities recorded.</p>
+                    </details>
+                    <p v-if="!profile.occasions?.length">No observances recorded. Festival schedules come from Legends Plus.</p>
+                    <h3 class="text-subtitle-1 mt-3">Worshipped deities</h3>
+                    <span v-for="(deity, index) in profile.deities" :key="deity.id">
+                        <template v-if="index"> · </template><router-link :to="'/hf/' + deity.id">{{ deity.name }}</router-link>
+                    </span>
+                    <p v-if="!profile.deities?.length">No deities named in the civilization record.</p>
+                    <p class="text-caption text-medium-emphasis mt-2">{{ profile.intrinsicValuesNote }}</p>
+                    <v-divider class="my-4" />
                     <div class="d-flex align-center flex-wrap ga-3 mb-3">
                         <v-chip color="primary" variant="tonal" prepend-icon="mdi-history">{{ period.character }}</v-chip>
                         <v-select v-model="windowYears" :items="cultureWindows" label="Historical period"
@@ -169,14 +207,6 @@ const formatRate = (number: number) => number.toLocaleString(undefined, { maximu
                                 Ten-year buckets (first and last buckets may extend beyond the selected period).
                                 A missing event is not evidence of peacefulness.
                             </div>
-                            <v-divider class="my-3" />
-                            <div class="text-subtitle-2">Recorded religion</div>
-                            <div class="text-body-2">
-                                {{ profile.worshippedDeities }} worshipped {{ profile.worshippedDeities === 1 ? 'deity' : 'deities' }} in the entity record.
-                                This does not measure religious influence.
-                            </div>
-                            <div class="text-subtitle-2 mt-3">Intrinsic cultural values and ethics</div>
-                            <div class="text-body-2 text-medium-emphasis">{{ profile.intrinsicValuesNote }}</div>
                         </v-col>
                     </v-row>
                     <v-expansion-panels variant="accordion" class="mt-4">
