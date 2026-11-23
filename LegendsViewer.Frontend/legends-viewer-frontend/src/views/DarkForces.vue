@@ -11,8 +11,8 @@
       held at the same time, reconstructed from dated site ownership. It is
       <strong>not</strong> land area. The power index is an evidence-based ranking
       (10 × peak settlements + 8 × captures + 3 × invasions + up to 100 recorded kills),
-      not a Dwarf Fortress combat statistic. Death is documented; a military defeat
-      is only inferred when territory is lost.
+      not a Dwarf Fortress combat statistic. Recorded deaths are distinct from
+      violent defeat; territorial collapse requires evidence of lost holdings.
     </v-alert>
 
     <template v-if="!viewingDetail">
