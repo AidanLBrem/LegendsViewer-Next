@@ -378,85 +378,247 @@ public class War : EventCollection, IHasComplexSubtype
     [JsonIgnore]
     public List<Battle> Battles => EventCollections.OfType<Battle>().ToList();
 
-    public List<ListItemDto> LeadUp => BuildLeadUp();
+    private const int LeadUpWindowYears = 50;
+    private LeadUpAnalysis? _leadUpAnalysis;
 
-    private List<ListItemDto> BuildLeadUp()
+    // Do not conflate a recorded incident with an explanation of why a war began.
+    // Build the three views together to keep filtering and diagnostic counts consistent.
+    public List<ListItemDto> LeadUp => AnalyzeLeadUp().Timeline;
+    public List<ListItemDto> LeadUpContext => AnalyzeLeadUp().Context;
+    public List<ListItemDto> LeadUpDiagnostics => AnalyzeLeadUp().Diagnostics;
+    public int LeadUpYears => LeadUpWindowYears;
+
+    private sealed class LeadUpAnalysis
     {
+        public List<ListItemDto> Timeline { get; } = [];
+        public List<ListItemDto> Context { get; } = [];
+        public List<ListItemDto> Diagnostics { get; } = [];
+    }
+
+    private LeadUpAnalysis AnalyzeLeadUp() => _leadUpAnalysis ??= BuildLeadUpAnalysis();
+
+    private LeadUpAnalysis BuildLeadUpAnalysis()
+    {
+        LeadUpAnalysis result = new();
         if (StartYear < 0)
-            return [];
+        {
+            result.Diagnostics.Add(new ListItemDto
+            {
+                Title = "No known start year",
+                Subtitle = "The war has no dated start, so a pre-war timeline cannot be reconstructed."
+            });
+            return result;
+        }
 
-        // Groups can change hands. Use the dated ownership records that the
-        // parser used to associate a local government with a civilization.
-        var attackerGroups = AttackingParticipants.SelectMany(entity => entity.SiteHistory)
-            .Where(period => period.Owner != null).ToLookup(period => period.Owner!);
-        var defenderGroups = DefendingParticipants.SelectMany(entity => entity.SiteHistory)
-            .Where(period => period.Owner != null).ToLookup(period => period.Owner!);
+        int firstYear = Math.Max(0, StartYear - LeadUpWindowYears);
+        var attacking = AttackingParticipants.ToHashSet();
+        var defending = DefendingParticipants.ToHashSet();
+        if (Attacker != null) attacking.Add(Attacker);
+        if (Defender != null) defending.Add(Defender);
 
-        int Side(Entity? entity, int year)
+        // A local government can change owners. Resolve membership for the
+        // *year of each incident*, rather than using only its current parent.
+        var attackerPeriods = attacking.SelectMany(e => e.SiteHistory)
+            .Where(p => p.Owner != null).ToLookup(p => p.Owner!);
+        var defenderPeriods = defending.SelectMany(e => e.SiteHistory)
+            .Where(p => p.Owner != null).ToLookup(p => p.Owner!);
+
+        int SideAt(Entity? entity, int year)
         {
             if (entity == null)
                 return 0;
-            bool attacking = AttackingParticipants.Contains(entity);
-            bool defending = DefendingParticipants.Contains(entity);
-            if (!attacking && !defending)
+
+            bool isAttacker = attacking.Contains(entity);
+            bool isDefender = defending.Contains(entity);
+            if (isAttacker || isDefender)
+                return isAttacker == isDefender ? 0 : isAttacker ? 1 : -1;
+
+            static bool Active(OwnerPeriod p, int y) =>
+                p.StartYear <= y && (p.EndYear < 0 || y < p.EndYear);
+
+            bool hasPeriods = attackerPeriods.Contains(entity) || defenderPeriods.Contains(entity);
+            isAttacker = attackerPeriods[entity].Any(p => Active(p, year));
+            isDefender = defenderPeriods[entity].Any(p => Active(p, year));
+
+            // Undated subsidiary groups have only a parent link. This is a
+            // weaker fallback; NEVER override known historical owner periods.
+            if (!hasPeriods)
             {
-                bool Active(OwnerPeriod period) => period.StartYear <= year &&
-                    (period.EndYear < 0 || year < period.EndYear);
-                attacking = attackerGroups[entity].Any(Active);
-                defending = defenderGroups[entity].Any(Active);
+                isAttacker = attacking.Any(root => entity.Parent == root ||
+                    (root.IsCiv && entity.CurrentCiv == root));
+                isDefender = defending.Any(root => entity.Parent == root ||
+                    (root.IsCiv && entity.CurrentCiv == root));
             }
-            return attacking == defending ? 0 : attacking ? 1 : -1;
+            return isAttacker == isDefender ? 0 : isAttacker ? 1 : -1;
         }
 
-        var candidates = AttackingParticipants.Concat(attackerGroups.Select(group => group.Key)).Distinct();
-        var rows = new List<ListItemDto>();
-        foreach (var incident in candidates.SelectMany(member => member.Events)
-                     .Where(e => e.Year >= Math.Max(0, StartYear - 10) && e.Year <= StartYear)
-                     .DistinctBy(e => e.Id)
-                     .OrderBy(e => e.Year).ThenBy(e => e.Seconds72).ThenBy(e => e.Id))
+        // Search both sides. Include groups represented by ownership periods
+        // and undated child governments, not just events attached to attackers.
+        var roots = attacking.Concat(defending).ToHashSet();
+        var linkedGroups = (World?.Entities ?? []).Where(e => e != null && !roots.Contains(e) &&
+            (roots.Contains(e.Parent!) || (e.CurrentCiv != null && roots.Contains(e.CurrentCiv))));
+        var members = roots.Concat(attackerPeriods.Select(g => g.Key))
+            .Concat(defenderPeriods.Select(g => g.Key)).Concat(linkedGroups).Distinct().ToList();
+        var attached = members.SelectMany(e => e.Events)
+            .Where(e => e.Year >= firstYear && e.Year <= StartYear).ToList();
+        var incidents = attached.DistinctBy(e => e.Id)
+            .OrderBy(e => e.Year).ThenBy(e => e.Seconds72).ThenBy(e => e.Id).ToList();
+
+        int unsupported = 0, unknownFaction = 0, otherFaction = 0, excludedAtStart = 0;
+        int inferredAffiliations = 0;
+        int disputeCount = 0, hostileCount = 0, diplomaticCount = 0;
+        int otherCampaigns = 0;
+
+        foreach (var incident in incidents)
         {
+            (Entity? first, Entity? second, string? label, bool hostile) = incident switch
+            {
+                FirstContact e => (e.Contactor, e.Contacted, "First contact", false),
+                SiteDispute e => (e.Entity1, e.Entity2, "Site dispute", false),
+                DiplomatLost e => (e.Entity, e.InvolvedEntity, "Missing diplomat", false),
+                Merchant e when e.Seizure || e.LostValue || e.AllDead || e.HardShip =>
+                    (e.Source, e.Destination, "Caravan incident", false),
+                AgreementRejected e => (e.Source, e.Destination, "Rejected agreement", false),
+                PeaceRejected e => (e.Source, e.Destination, "Peace rejected", false),
+                PeaceAccepted e => (e.Source, e.Destination, "Peace accepted", false),
+                SiteTributeForced e => (e.Attacker, e.Defender ?? e.SiteEntity, "Forced tribute", true),
+                PlunderedSite e => (e.Attacker, e.Defender ?? e.SiteEntity, "Plunder", true),
+                AttackedSite e => (e.Attacker, e.Defender ?? e.SiteEntity, "Site attack", true),
+                FieldBattle e => (e.Attacker, e.Defender, "Field battle", true),
+                _ => (null, null, null, false)
+            };
+
+            if (label == null)
+            {
+                unsupported++;
+                continue;
+            }
+
+            int firstSide = SideAt(first, incident.Year);
+            int secondSide = SideAt(second, incident.Year);
+
+            // Count military activity by the attacking coalition elsewhere,
+            // without misrepresenting it as an incident against this opponent.
+            if (hostile && firstSide == 1 && secondSide != -1 && incident.Year >= StartYear - 10)
+                otherCampaigns++;
+
+            if (firstSide == 0 || secondSide == 0)
+            {
+                unknownFaction++;
+                continue;
+            }
+            if (firstSide == secondSide)
+            {
+                otherFaction++;
+                continue;
+            }
+
             bool atStart = false;
             if (incident.Year == StartYear)
             {
-                if (StartSeconds72 < 0 || incident.Month == 0 || incident.Seconds72 < 0 ||
-                    incident.Seconds72 > StartSeconds72)
+                // Never attribute an undated same-year encounter to the prelude.
+                // Events exactly at the start must belong to THIS war.
+                if (StartSeconds72 < 0 || incident.Month == 0 ||
+                    incident.Seconds72 < 0 || incident.Seconds72 > StartSeconds72)
+                {
+                    excludedAtStart++;
                     continue;
-
+                }
                 atStart = incident.Seconds72 == StartSeconds72;
                 if (atStart)
                 {
-                    var collection = incident.ParentCollection;
-                    while (collection != null && collection != this)
-                        collection = collection.ParentCollection;
-                    if (collection == null)
+                    EventCollection? parent = incident.ParentCollection;
+                    while (parent != null && parent != this)
+                        parent = parent.ParentCollection;
+                    if (parent == null)
+                    {
+                        excludedAtStart++;
                         continue;
+                    }
                 }
             }
 
-            (Entity? first, Entity? second, string label) = incident switch
+            // Current parentage is not a dated historical affiliation. Mark
+            // these as possible coalition links rather than established ones.
+            bool inferred = new Entity?[] { first, second }.OfType<Entity>().Any(e =>
+                !roots.Contains(e) && !attackerPeriods.Contains(e) &&
+                !defenderPeriods.Contains(e));
+            if (inferred)
+                inferredAffiliations++;
+            result.Timeline.Add(new ListItemDto
             {
-                FirstContact e => (e.Contactor, e.Contacted, "First contact"),
-                SiteDispute e => (e.Entity1, e.Entity2, "Dispute"),
-                DiplomatLost e => (e.Entity, e.InvolvedEntity, "Missing diplomat"),
-                Merchant e when e.Seizure || e.LostValue || e.AllDead || e.HardShip =>
-                    (e.Source, e.Destination, "Caravan incident"),
-                AgreementRejected e => (e.Source, e.Destination, "Rejected agreement"),
-                PeaceRejected e => (e.Source, e.Destination, "Peace rejected"),
-                PeaceAccepted e => (e.Source, e.Destination, "Peace accepted"),
-                SiteTributeForced e => (e.Attacker, e.Defender, "Forced tribute"),
-                PlunderedSite e => (e.Attacker, e.Defender, "Plunder"),
-                AttackedSite e => (e.Attacker, e.Defender, "Site attack"),
-                FieldBattle e => (e.Attacker, e.Defender, "Field battle"),
-                _ => (null, null, "")
-            };
-            if (Side(first, incident.Year) * Side(second, incident.Year) == -1)
-                rows.Add(new ListItemDto
-                {
-                    Title = atStart ? $"War opening · {label}" : label,
-                    Subtitle = incident.Print(true, this)
-                });
+                Title = (atStart ? "War opening · " : "") +
+                    (inferred ? "Possible affiliation · " : "") + label,
+                Subtitle = incident.Print(true, this)
+            });
+            if (incident is SiteDispute)
+                disputeCount++;
+            else if (hostile)
+                hostileCount++;
+            else
+                diplomaticCount++;
         }
-        return rows;
+
+        // Prior wars provide historical context even if no individual encounter
+        // is present in the lead-up window. They are NOT treated as war triggers.
+        var priorWars = (World?.Wars ?? []).Where(w => w != this &&
+                w.StartYear >= 0 && w.StartYear < StartYear &&
+                w.EndYear >= 0 && w.EndYear < StartYear &&
+                (SideAt(w.Attacker, w.StartYear) * SideAt(w.Defender, w.StartYear) == -1))
+            .OrderByDescending(w => w.StartYear).ThenBy(w => w.Id).ToList();
+
+        if (disputeCount > 0)
+            result.Context.Add(new ListItemDto
+            {
+                Title = $"{disputeCount} recorded site dispute(s)",
+                Subtitle = "Documented disputes between the two coalitions in the lead-up window; these may be relevant, but causation is not established."
+            });
+        if (hostileCount > 0)
+            result.Context.Add(new ListItemDto
+            {
+                Title = $"{hostileCount} military incident(s) involving both sides",
+                Subtitle = "Recorded attacks, plunderings, battles or forced tribute between the factions; includes opening events when recorded."
+            });
+        if (diplomaticCount > 0)
+            result.Context.Add(new ListItemDto
+            {
+                Title = $"{diplomaticCount} diplomatic or contact event(s)",
+                Subtitle = "Recorded contact, diplomacy or trade disruptions. These are evidence of interaction, not necessarily worsening relations."
+            });
+        if (priorWars.Count > 0)
+            result.Context.Add(new ListItemDto
+            {
+                Title = $"{priorWars.Count} previous war(s) between these factions",
+                Subtitle = string.Join("; ", priorWars.Take(5).Select(w => $"{w.ToLink(true, this)} (year {w.StartYear})")) +
+                    (priorWars.Count > 5 ? "; and earlier wars" : "")
+            });
+        if (otherCampaigns > 0)
+            result.Context.Add(new ListItemDto
+            {
+                Title = $"{otherCampaigns} other military incident(s) involving the attacking side",
+                Subtitle = "Campaigns against other or unidentified factions during the preceding ten years; context for expansion, not evidence of a motive for this war."
+            });
+        if (result.Context.Count == 0)
+            result.Context.Add(new ListItemDto
+            {
+                Title = "No documented cause identified",
+                Subtitle = "There may be no surviving pre-war events, or the export may not identify the factions. Do not interpret an empty timeline as proof of an unprovoked war."
+            });
+
+        void Diagnostic(string title, string subtitle) =>
+            result.Diagnostics.Add(new ListItemDto { Title = title, Subtitle = subtitle });
+
+        Diagnostic("Search window", $"Years {firstYear}–{StartYear} (up to {LeadUpWindowYears} years before the war); dated earlier-in-year events only.");
+        Diagnostic("Histories searched", $"{members.Count} coalition entities and linked governments, including both war sides.");
+        Diagnostic("Attached records examined", $"{incidents.Count} unique dated records within the window ({attached.Count - incidents.Count} duplicate links collapsed).");
+        Diagnostic("Displayed incidents", $"{result.Timeline.Count} cross-coalition events, including verified opening events.");
+        Diagnostic("Unsupported event types", $"{unsupported} records do not have a supported two-party event classification.");
+        Diagnostic("Unresolved faction links", $"{unknownFaction} classified records lack two identifiable opposing sides; this includes events whose XML omits faction IDs.");
+        Diagnostic("Undated group affiliations", $"{inferredAffiliations} displayed incident(s) relied on current parentage because no dated owner period was available; these are marked as possible links.");
+        Diagnostic("Other or same-side records", $"{otherFaction} classified records involved the same side rather than opposing war coalitions.");
+        Diagnostic("Excluded at war start", $"{excludedAtStart} events occurred after the start, were undated that year, or were opening events belonging to another war.");
+        Diagnostic("Previous wars", $"{priorWars.Count} earlier completed wars found involving both coalitions.");
+        return result;
     }
 
     public List<ListItemDto> BattleList

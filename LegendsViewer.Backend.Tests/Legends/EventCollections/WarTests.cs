@@ -2,6 +2,7 @@ using LegendsViewer.Backend.Legends.EventCollections;
 using LegendsViewer.Backend.Legends.Events;
 using LegendsViewer.Backend.Legends.Interfaces;
 using LegendsViewer.Backend.Legends.Parser;
+using LegendsViewer.Backend.Legends.Various;
 using LegendsViewer.Backend.Legends.WorldObjects;
 using Moq;
 
@@ -34,22 +35,118 @@ public class WarTests
     [TestMethod]
     public void LeadUp_OrdersOpposingIncidentsAndRequiresWarLinkAtStart()
     {
-        var war = new War([], _mockWorld.Object) { StartYear = 20, StartSeconds72 = 100 };
+        var war = new War([], _mockWorld.Object) { StartYear = 80, StartSeconds72 = 100 };
         war.RegisterParticipant(_attacker, true);
         war.RegisterParticipant(_defender, false);
         SiteDispute Incident(int id, int year, int tick, Entity opponent) =>
             new([], _mockWorld.Object) { Id = id, Year = year, Seconds72 = tick,
                 Entity1 = opponent, Entity2 = _attacker };
 
-        var earlier = Incident(1, 10, 0, _defender);
-        var opening = Incident(2, 20, 100, _defender);
+        var earlier = Incident(1, 70, 0, _defender);
+        var opening = Incident(2, 80, 100, _defender);
         opening.ParentCollection = war;
-        _attacker.Events.AddRange([opening, earlier, earlier, Incident(3, 9, 0, _defender),
-            Incident(4, 20, 101, _defender), Incident(5, 20, 100, _defender),
-            Incident(6, 19, 0, _parentEntity)]);
+        _attacker.Events.AddRange([opening, earlier, earlier, Incident(3, 29, 0, _defender),
+            Incident(4, 80, 101, _defender), Incident(5, 80, 100, _defender),
+            Incident(6, 79, 0, _parentEntity)]);
 
         CollectionAssert.AreEqual(new[] { "Dispute", "War opening · Dispute" },
             war.LeadUp.Select(row => row.Title).ToArray());
+    }
+
+    [TestMethod]
+    public void LeadUp_IncludesDefenderOnlyEventsAndFiftyYearHistory()
+    {
+        var war = new War([], _mockWorld.Object) { StartYear = 100, StartSeconds72 = 100 };
+        war.RegisterParticipant(_attacker, true);
+        war.RegisterParticipant(_defender, false);
+
+        var defenderOnly = new SiteDispute([], _mockWorld.Object)
+        {
+            Id = 100, Year = 51, Seconds72 = 0, Entity1 = _defender, Entity2 = _attacker
+        };
+        var tooOld = new SiteDispute([], _mockWorld.Object)
+        {
+            Id = 101, Year = 49, Seconds72 = 0, Entity1 = _defender, Entity2 = _attacker
+        };
+        _defender.Events.AddRange([tooOld, defenderOnly]);
+
+        Assert.AreEqual(1, war.LeadUp.Count);
+        Assert.AreEqual("Site dispute", war.LeadUp.Single().Title);
+        Assert.AreEqual(50, war.LeadUpYears);
+        Assert.IsTrue(war.LeadUpDiagnostics.Any(d => d.Title == "Displayed incidents"));
+    }
+
+    [TestMethod]
+    public void LeadUp_FollowsHistoricalLocalGovernmentOwnership()
+    {
+        _attacker.IsCiv = true;
+        _defender.IsCiv = true;
+        var local = new Entity([], _mockWorld.Object)
+        {
+            Id = 23, Name = "Local government", Parent = _attacker
+        };
+        var site = new Site([], _mockWorld.Object) { Id = 24, Name = "Outpost" };
+        var owned = new OwnerPeriod(site, local, 10, "founded") { EndYear = 20 };
+        _attacker.SiteHistory.Add(owned);
+        _mockWorld.Setup(w => w.Entities).Returns([_attacker, _defender, local]);
+
+        var war = new War([], _mockWorld.Object) { StartYear = 30, StartSeconds72 = 100 };
+        war.RegisterParticipant(_attacker, true);
+        war.RegisterParticipant(_defender, false);
+        local.Events.AddRange([
+            new SiteDispute([], _mockWorld.Object)
+                { Id = 200, Year = 15, Seconds72 = 0, Entity1 = local, Entity2 = _defender },
+            new SiteDispute([], _mockWorld.Object)
+                { Id = 201, Year = 25, Seconds72 = 0, Entity1 = local, Entity2 = _defender }
+        ]);
+
+        Assert.AreEqual(1, war.LeadUp.Count, "The post-transfer dispute must not be attributed to the former owner.");
+        Assert.IsTrue(war.LeadUpDiagnostics.Any(d => d.Title == "Unresolved faction links" &&
+            d.Subtitle!.Contains("1 classified")));
+    }
+
+    [TestMethod]
+    public void LeadUp_ProvidesPriorWarContextWithoutClaimingItsCause()
+    {
+        var prior = new War([], _mockWorld.Object)
+        {
+            Id = 40, Name = "Old conflict", StartYear = 5, EndYear = 15,
+            Attacker = _attacker, Defender = _defender
+        };
+        _mockWorld.Setup(w => w.Wars).Returns([prior]);
+        var war = new War([], _mockWorld.Object)
+        {
+            Id = 41, StartYear = 90, StartSeconds72 = 100
+        };
+        war.RegisterParticipant(_attacker, true);
+        war.RegisterParticipant(_defender, false);
+
+        Assert.AreEqual(0, war.LeadUp.Count);
+        Assert.IsTrue(war.LeadUpContext.Any(c => c.Title!.Contains("previous war")));
+        Assert.IsTrue(war.LeadUpContext.Any(c => c.Subtitle!.Contains("Old conflict")));
+    }
+
+    [TestMethod]
+    public void LeadUp_AuditsUnattributableAndForeignOpeningEvents()
+    {
+        var war = new War([], _mockWorld.Object)
+        {
+            Id = 80, StartYear = 20, StartSeconds72 = 100
+        };
+        war.RegisterParticipant(_attacker, true);
+        war.RegisterParticipant(_defender, false);
+
+        var foreignOpening = new SiteDispute([], _mockWorld.Object)
+            { Id = 81, Year = 20, Seconds72 = 100, Entity1 = _attacker, Entity2 = _defender };
+        var noFaction = new PeaceRejected([], _mockWorld.Object)
+            { Id = 82, Year = 19, Seconds72 = 0 };
+        _attacker.Events.AddRange([foreignOpening, noFaction]);
+
+        Assert.AreEqual(0, war.LeadUp.Count);
+        Assert.IsTrue(war.LeadUpDiagnostics.Any(d =>
+            d.Title == "Excluded at war start" && d.Subtitle!.Contains("1 events")));
+        Assert.IsTrue(war.LeadUpDiagnostics.Any(d =>
+            d.Title == "Unresolved faction links" && d.Subtitle!.Contains("1 classified")));
     }
 
     [TestMethod]
