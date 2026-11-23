@@ -28,7 +28,7 @@ public class DarkForcesController(IWorld world) : ControllerBase
             (minApprentices.HasValue && maxApprentices.HasValue &&
              minApprentices.Value > maxApprentices.Value))
             return BadRequest("Apprentice filters must be nonnegative and minimum cannot exceed maximum.");
-        if (sort is not (null or "power" or "territory" or "invasions" or "fallen" or "name" or "apprentices"))
+        if (sort is not (null or "power" or "territory" or "invasions" or "fallen" or "name" or "apprentices" or "raised"))
             return BadRequest("Unknown sort field.");
         if (direction is not (null or "asc" or "desc"))
             return BadRequest("Unknown sort direction.");
@@ -39,6 +39,7 @@ public class DarkForcesController(IWorld world) : ControllerBase
                 n.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase) ||
                 n.Factions.Any(f => f.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)) ||
                 n.Groups.Any(g => g.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                n.RaisedHistoricalFigures.Any(h => h.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)) ||
                 n.Apprentices.Any(a => a.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))) &&
             (!minApprentices.HasValue || n.ApprenticeCount >= minApprentices.Value) &&
             (!maxApprentices.HasValue || n.ApprenticeCount <= maxApprentices.Value) &&
@@ -57,6 +58,10 @@ public class DarkForcesController(IWorld world) : ControllerBase
                 ? matching.OrderBy(n => n.PeakSettlements).ThenBy(n => n.FigureId)
                 : matching.OrderByDescending(n => n.PeakSettlements)
                     .ThenByDescending(n => n.Conquests).ThenBy(n => n.FigureId),
+            "raised" => direction == "asc"
+                ? matching.OrderBy(n => n.HistoricalRaisedCount).ThenBy(n => n.FigureId)
+                : matching.OrderByDescending(n => n.HistoricalRaisedCount)
+                    .ThenByDescending(n => n.HistoricalRaiseEvents).ThenBy(n => n.FigureId),
             "apprentices" => direction == "asc"
                 ? matching.OrderBy(n => n.ApprenticeCount).ThenBy(n => n.FigureId)
                 : matching.OrderByDescending(n => n.ApprenticeCount)
@@ -77,7 +82,7 @@ public class DarkForcesController(IWorld world) : ControllerBase
         };
         // The entire chronicle is fetched on demand when a figure is selected.
         var items = sorted.Skip((page - 1) * pageSize).Take(pageSize)
-            .Select(n => n with { Timeline = [], Apprentices = [] }).ToList();
+            .Select(n => n with { Timeline = [], Apprentices = [], RaisedHistoricalFigures = [] }).ToList();
         return Ok(new DarkForcesPageDto(
             items, all.Count, matching.Count, all.Count(n => n.Defeated),
             all.Sum(n => n.Invasions), all.Count == 0 ? 0 : all.Max(n => n.PeakSettlements)));
