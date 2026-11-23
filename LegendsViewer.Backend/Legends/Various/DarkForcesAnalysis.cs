@@ -9,6 +9,9 @@ namespace LegendsViewer.Backend.Legends.Various;
 // These are settlement-based measures. Legends does not encode the physical
 // boundary or military strength of a necromancer's empire for every year.
 public sealed record DarkForceFactionDto(int Id, string Name, int FromYear, int? ThroughYear, string Evidence);
+// Apprentices are people explicitly taught a dark secret by this figure,
+// not everyone who follows, serves or belongs to their faction.
+public sealed record DarkForceApprenticeDto(int FigureId, string Name, int FirstLearnedYear);
 public sealed record DarkForceEventDto(
     int Year, string Kind, string Description, int? SiteId, string? SiteName,
     int? TargetEntityId, string? TargetEntityName, bool IsInvasion, bool IsPrelude,
@@ -18,7 +21,8 @@ public sealed record DarkForceDto(
     int? DefeatYear, int PeakSettlements, int? PeakYear, int CurrentSettlements,
     int Invasions, int Conquests, int NotableKills, int PowerIndex,
     List<DarkForceFactionDto> Factions, List<DarkForceEventDto> Timeline,
-    int RecordedEvents, int? FirstInvasionYear);
+    int RecordedEvents, int? FirstInvasionYear, int ApprenticeCount,
+    List<DarkForceApprenticeDto> Apprentices);
 public sealed record DarkForcesPageDto(
     List<DarkForceDto> Items, int TotalCount, int TotalFilteredCount,
     int FallenCount, int TotalInvasions, int MaximumTerritory);
@@ -187,6 +191,21 @@ public static class DarkForcesAnalysis
                 .Where(e => e.Source is SiteTakenOver && e.Site != null)
                 .DistinctBy(e => (e.Site!.Id, e.Source.Year)).Count();
             int kills = figure.NotableKills.Select(e => e.Id).Distinct().Count();
+            // The parser attaches HfLearnsSecret to both teacher and student.
+            // Count distinct recorded students rather than the number of
+            // lessons, as a student can be taught repeatedly.
+            var apprentices = figure.Events.OfType<HfLearnsSecret>()
+                .Where(e => e.Teacher == figure && e.Student != null &&
+                    e.Student != figure && e.Year >= 0 && e.Year <= currentYear)
+                .GroupBy(e => e.Student!.Id)
+                .Select(group =>
+                {
+                    var first = group.OrderBy(e => e.Year).ThenBy(e => e.Id).First();
+                    return new DarkForceApprenticeDto(first.Student!.Id,
+                        first.Student.Name, first.Year);
+                })
+                .OrderBy(a => a.FirstLearnedYear).ThenBy(a => a.Name).ThenBy(a => a.FigureId)
+                .ToList();
 
             var timeline = annotated.Select(e => new DarkForceEventDto(
                     e.Source.Year, e.Kind, e.Source.Print(true),
@@ -230,7 +249,8 @@ public static class DarkForcesAnalysis
                 status, defeated, figure.DeathYear >= 0 ? figure.DeathYear : null,
                 territory.Peak, territory.PeakYear, territory.Current, invasions, conquests,
                 kills, PowerIndex(territory.Peak, conquests, invasions, kills),
-                factionList, timeline.Take(300).ToList(), timeline.Count, firstInvasion));
+                factionList, timeline.Take(300).ToList(), timeline.Count, firstInvasion,
+                apprentices.Count, apprentices));
         }
         return result.OrderBy(r => r.FigureId).ToList();
     }
