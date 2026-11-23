@@ -136,6 +136,63 @@ public class DarkForcesTests
     }
 
     [TestMethod]
+    public void IndependentNecromancerGroup_SubholdingLeaderDoesNotInheritTheParentRealmOrArmy()
+    {
+        var groupRuler = Necromancer(1, "Ag");
+        var subholdingRuler = Necromancer(2, "Sumost");
+        var parentGroup = Faction(10, "The Black Conclave");
+        var subholding = Faction(11, "The Ash Tower");
+        var otherSubholding = Faction(12, "The Black Fortress");
+        subholding.Parent = parentGroup;
+        otherSubholding.Parent = parentGroup;
+        var enemy = Faction(20, "Human Kingdom", true);
+
+        groupRuler.StartPositionAssignment(parentGroup, 0, 0, "Leader");
+        subholdingRuler.StartPositionAssignment(subholding, 10, 0, "Tower ruler");
+        subholdingRuler.RelatedEntities.Add(new EntityLink([], _world.Object)
+            { Entity = parentGroup, Type = EntityLinkType.Member });
+        subholdingRuler.RelatedEntities.Add(new EntityLink([], _world.Object)
+            { Entity = subholding, Type = EntityLinkType.Position, PositionId = 0 });
+
+        var parentSite = Settlement(100);
+        parentSite.OwnerHistory.Add(new OwnerPeriod(parentSite, parentGroup, 5, "founded"));
+        var towerSite = Settlement(101);
+        towerSite.OwnerHistory.Add(new OwnerPeriod(towerSite, subholding, 12, "founded"));
+        var otherSite = Settlement(102);
+        otherSite.OwnerHistory.Add(new OwnerPeriod(otherSite, otherSubholding, 14, "founded"));
+
+        parentGroup.Events.Add(new AttackedSite([], _world.Object)
+            { Id = 201, Year = 25, Attacker = parentGroup, Defender = enemy, Site = parentSite });
+        subholding.Events.Add(new AttackedSite([], _world.Object)
+            { Id = 202, Year = 26, Attacker = subholding, Defender = enemy, Site = towerSite });
+        otherSubholding.Events.Add(new AttackedSite([], _world.Object)
+            { Id = 203, Year = 27, Attacker = otherSubholding, Defender = enemy, Site = otherSite });
+
+        var figures = DarkForcesAnalysis.Calculate(_world.Object);
+        var main = figures.Single(f => f.FigureId == 1);
+        var local = figures.Single(f => f.FigureId == 2);
+
+        Assert.AreEqual(3, main.PeakSettlements);
+        Assert.AreEqual(3, main.CurrentSettlements);
+        Assert.AreEqual(3, main.Invasions);
+        Assert.AreEqual(parentGroup.Id, main.Factions.Single().Id);
+        Assert.AreEqual("Group leader / founder", main.Groups.Single().Relationship);
+
+        Assert.AreEqual(1, local.PeakSettlements);
+        Assert.AreEqual(1, local.CurrentSettlements);
+        Assert.AreEqual(1, local.Invasions);
+        Assert.AreEqual(subholding.Id, local.Factions.Single().Id);
+        Assert.AreEqual(parentGroup.Id, local.Groups.Single().Id);
+        Assert.AreEqual("Subholding leader / founder", local.Groups.Single().Relationship);
+        Assert.AreEqual(subholding.Id, local.Groups.Single().HoldingId);
+
+        var controller = new DarkForcesController(_world.Object);
+        var byGroup = (DarkForcesPageDto)((OkObjectResult)
+            controller.Get(search: "Black Conclave").Result!).Value!;
+        Assert.AreEqual(2, byGroup.TotalFilteredCount);
+    }
+
+    [TestMethod]
     public void CurrentLeaderAssignment_RecognizesOnlyCurrentYearWithoutBackdatingReign()
     {
         var figure = Necromancer(1, "Vex");
