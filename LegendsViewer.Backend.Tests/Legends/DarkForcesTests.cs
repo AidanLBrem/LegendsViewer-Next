@@ -30,7 +30,7 @@ public class DarkForcesTests
         _world.Setup(w => w.Entities).Returns(_entities);
         _world.Setup(w => w.Sites).Returns(_sites);
         _world.Setup(w => w.ParsingErrors).Returns(new ParsingErrors());
-        _world.Setup(w => w.Events).Returns([]);
+        _world.Setup(w => w.Events).Returns(new List<WorldEvent>());
     }
 
     private HistoricalFigure Necromancer(int id, string name)
@@ -113,6 +113,25 @@ public class DarkForcesTests
         var result = DarkForcesAnalysis.Calculate(_world.Object).Single();
         Assert.AreEqual(0, result.PeakSettlements);
         Assert.AreEqual(0, result.Factions.Count);
+    }
+
+    [TestMethod]
+    public void LocalLeadership_DoesNotInheritParentCivilizationsTerritory()
+    {
+        var leader = Necromancer(1, "Vex");
+        var kingdom = Faction(10, "The Kingdom", true);
+        var local = Faction(11, "Tower Government");
+        local.Parent = kingdom;
+        leader.StartPositionAssignment(local, 0, 0, "Local ruler");
+
+        var kingdomSite = Settlement(100);
+        kingdomSite.OwnerHistory.Add(new OwnerPeriod(kingdomSite, kingdom, 1, "founded"));
+        var localSite = Settlement(101);
+        localSite.OwnerHistory.Add(new OwnerPeriod(localSite, local, 1, "founded"));
+
+        var result = DarkForcesAnalysis.Calculate(_world.Object).Single();
+        Assert.AreEqual(1, result.PeakSettlements);
+        Assert.AreEqual(1, result.CurrentSettlements);
     }
 
     [TestMethod]
