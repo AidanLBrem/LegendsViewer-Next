@@ -16,6 +16,9 @@ export interface SiteOwnershipPeriod {
 }
 
 export interface SiteWithOwnershipHistory {
+  originOwnerId?: number | null;
+  originOwnerText?: string | null;
+  originColor?: string | null;
   ownerHistory?: SiteOwnershipPeriod[] | null;
   createdYear?: number | null;
   destroyedYears?: number[] | null;

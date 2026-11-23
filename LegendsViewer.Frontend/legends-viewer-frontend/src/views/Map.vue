@@ -1382,6 +1382,12 @@ export default defineComponent({
       return territoryChangeYears[Math.max(0, low - 1)] ?? 0;
     };
 
+    const paintTerritories = (grid: TerritoryGrid) => {
+      const colors = new Map([...grid.colors].map(([id, original]) => [id, thematicColor(id, original)]));
+      return territoryGridToDataUrl({ ...grid, colors }, oceanMask ?? undefined,
+        worldStore.world?.width, worldStore.world?.height, showBorderLines.value);
+    };
+
     const refreshTerritories = async (generation: number) => {
       const map = leafletMap.value;
       if (!map || disposed) return;
@@ -1389,11 +1395,6 @@ export default defineComponent({
         territoryNames?.remove();
         if (territoryOverlay.value) map.removeLayer(territoryOverlay.value);
         clearTerritoryTip();
-        activeTerritoryGrid = null;
-        activeTerritoryOwners.clear();
-        territoryLandTiles.value = new Map();
-        territorySnapshotKey = '';
-        return;
       }
 
       const width = worldStore.world?.width ?? 0;
@@ -1411,15 +1412,12 @@ export default defineComponent({
       const key = [
         territoryBoundaryYear(year), ownerVisibilityVersion,
         showMonasteries.value, showCamps.value, showCaves.value,
-        showNecromancers.value, filterMinorPowers.value, showBorderLines.value
+        showNecromancers.value, filterMinorPowers.value, showBorderLines.value, showEstimatedTerritories.value
       ].join(':');
-      const paint = (grid: TerritoryGrid) => {
-        const colors = new Map([...grid.colors].map(([id, original]) => [id, thematicColor(id, original)]));
-        return territoryGridToDataUrl({ ...grid, colors }, oceanMask ?? undefined, width, height, showBorderLines.value);
-      };
+      if (key === territorySnapshotKey && activeTerritoryGrid && !showEstimatedTerritories.value) return;
       if (key === territorySnapshotKey && territoryOverlay.value && activeTerritoryGrid) {
         if (renderedCategories !== colorCategories.value) {
-          territoryOverlay.value.setUrl(paint(activeTerritoryGrid));
+          territoryOverlay.value.setUrl(paintTerritories(activeTerritoryGrid));
           renderedCategories = colorCategories.value;
           clearTerritoryTip();
         }
@@ -1455,12 +1453,12 @@ export default defineComponent({
       }
       const grid = await createTerritoryGrid(
         width, height, seeds, yieldToBrowser,
-        () => disposed || generation !== historyUpdateGeneration || !showEstimatedTerritories.value,
+        () => disposed || generation !== historyUpdateGeneration,
         oceanMask, landComponents ?? undefined, terrainTiles
       );
       if (!grid || disposed || generation !== historyUpdateGeneration) return;
 
-      const image = paint(grid);
+
       // Count world tiles rather than downsampled raster cells, so the
       // selected year's area never includes ocean or unanchored claims.
       const landTiles = new Map<number, number>();
@@ -1478,6 +1476,9 @@ export default defineComponent({
       clearTerritoryTip();
       activeTerritoryGrid = grid;
       activeTerritoryOwners = ownerLinks;
+      territorySnapshotKey = key;
+      if (!showEstimatedTerritories.value) return;
+      const image = paintTerritories(grid);
       if (!territoryOverlay.value) {
         const bounds: L.LatLngBoundsExpression = [[0, 0], [height * 8, width * 8]];
         territoryOverlay.value = L.imageOverlay(image, bounds, {
@@ -1498,7 +1499,6 @@ export default defineComponent({
         pane: 'territoryPane', interactive: false,
       }).addTo(map);
       renderedCategories = colorCategories.value;
-      territorySnapshotKey = key;
     };
 
     const refreshHistoricalWarfare = async (generation: number) => {
@@ -1629,13 +1629,29 @@ export default defineComponent({
 
     watch(
       [
-        selectedYear, siteColorMode, colorCategories, showMonasteries, showCamps, showCaves,
+        selectedYear, siteColorMode, showMonasteries, showCamps, showCaves,
         showNecromancers, filterMinorPowers, showEstimatedTerritories, showBorderLines,
         showHistoricalBattles, showHistoricalCampaigns,
         showHistoricalSiteOutcomes
       ],
       () => { void applyHistoryYear(); }
     );
+
+    // Changing diplomatic perspective repaints existing layers without dismissing
+    // the popup that the click just opened or rebuilding its warfare marker.
+    watch(colorCategories, () => {
+      if (!historyReady.value || disposed) return;
+      for (const { site, marker } of siteLayers) {
+        const owner = getSiteOwnerAtYear(site, selectedYear.value, historyMaxYear.value);
+        const color = thematicColor(owner.ownerId, colorForSite(site, owner.color));
+        if (marker.options.color !== color) marker.setStyle({ color });
+      }
+      if (showEstimatedTerritories.value && activeTerritoryGrid && territoryOverlay.value) {
+        territoryOverlay.value.setUrl(paintTerritories(activeTerritoryGrid));
+        renderedCategories = colorCategories.value;
+        clearTerritoryTip();
+      }
+    });
 
     // This will hold the LayerGroups for different owners
     const ownerLayers: Record<string, LayerGroup> = Object.create(null);
@@ -1652,8 +1668,7 @@ export default defineComponent({
       const map = leafletMap.value;
       const width = worldStore.world?.width ?? 0;
       const height = worldStore.world?.height ?? 0;
-      if (!map || !showEstimatedTerritories.value || !territoryOverlay.value ||
-          !map.hasLayer(territoryOverlay.value) || !activeTerritoryGrid || !width || !height) {
+      if (!map || !activeTerritoryGrid || !width || !height || x < 0 || y < 0 || x >= width || y >= height) {
         return null;
       }
 
@@ -1705,12 +1720,43 @@ export default defineComponent({
       );
     };
 
+    const siteNationAt = (site: SiteMarker) =>
+      nationColorMode.value === 'Nation' && siteColorMode.value === 'origin'
+        ? site.originOwnerId : getSiteOwnerAtYear(site, selectedYear.value, historyMaxYear.value).ownerId;
+
+    const selectMapNation = (items: MapTileItem[], territory: NominalTerritoryInfo | null) => {
+      const owners = items.filter(item => item.type === 'site')
+        .map(item => siteNationAt((item.data as SiteAtCoordinate).marker))
+        .filter((id): id is number => id != null);
+      const controller = territory?.ownerId;
+      const id = controller != null && owners.includes(controller) ? controller : owners[0] ?? controller;
+      if (id != null) selectedNationId.value = id;
+    };
+
+    const tilePopup = (items: MapTileItem[], territory: NominalTerritoryInfo | null) => {
+      const popup = createUnifiedPickerPopup(items, router, selectedYear.value, historyMaxYear.value, territory);
+      const owners = new Set(items.filter(item => item.type === 'site')
+        .map(item => siteNationAt((item.data as SiteAtCoordinate).marker)).filter(id => id != null));
+      if (owners.size > 1) {
+        for (const id of owners) {
+          const nation = nationOptions.value.find(n => n.id === id);
+          if (!nation) continue;
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = 'Select ' + nation.name;
+          button.className = 'map-nation-choice';
+          button.onclick = () => { selectedNationId.value = nation.id; };
+          popup.appendChild(button);
+        }
+      }
+      return popup;
+    };
+
     const bindTileMarkerPopup = (marker: L.Layer, x: number, y: number) => {
       if ('bindPopup' in marker && typeof (marker as any).bindPopup === 'function') {
         (marker as any).bindPopup(() => {
           const activeItems = getActiveItemsAtTile(x, y);
-          return createUnifiedPickerPopup(activeItems, router, selectedYear.value, historyMaxYear.value,
-            getNominalControllerAtTile(x, y));
+          return tilePopup(activeItems, getNominalControllerAtTile(x, y));
         }, { minWidth: 220 });
       }
     };
@@ -1810,6 +1856,12 @@ export default defineComponent({
         // Do not mutate marker layers in response to their own overlay events.
         // Visibility changes are handled explicitly by the owner controls.
         leafletMap.value.on('zoomend', syncTileBadges);
+        // Leaflet markers can consume clicks before they reach the map.
+        // Resolve their location directly, keeping the marker's own popup behavior.
+        leafletMap.value.on('layeradd', ({ layer }: L.LayerEvent) => {
+          if (!(layer instanceof L.Marker || layer instanceof L.Path) || !layer.options.interactive) return;
+          layer.off('click', selectNationBelowOverlay).on('click', selectNationBelowOverlay);
+        });
         leafletMap.value.on('click', selectSiteAtMapClick);
         leafletMap.value.on('mousemove', showTerritoryTip);
         leafletMap.value.on('mouseout zoomstart movestart popupopen', clearTerritoryTip);
@@ -1910,13 +1962,21 @@ export default defineComponent({
       return [(height - y) * scale - 0.5 * scale, x * scale + 0.5 * scale];
     };
 
+    const selectNationBelowOverlay = (event: L.LeafletMouseEvent) => {
+      const height = worldStore.world?.height;
+      if (!height || isRenderingSites || disposed) return;
+      const x = Math.floor(event.latlng.lng / 8);
+      const y = Math.floor(height - event.latlng.lat / 8);
+      selectMapNation(getActiveItemsAtTile(x, y), getNominalControllerAtTile(x, y));
+    };
+
     // Canvas-drawn sites are often smaller than a screen pixel at overview
     // zoom. Resolve clicks using the world tile grid, not vector hit testing.
     const selectSiteAtMapClick = (event: L.LeafletMouseEvent) => {
       const map = leafletMap.value;
       if (!map || isRenderingSites || disposed) return;
 
-      // Let independently interactive warfare markers handle their own clicks.
+      // Overlay clicks already selected their nation and opened their own popup.
       const source = (event as L.LeafletMouseEvent & { sourceTarget?: L.Evented }).sourceTarget;
       if (source && source !== map) return;
 
@@ -1960,12 +2020,16 @@ export default defineComponent({
       }
 
       const territory = getNominalControllerAtTile(tileX, tileY);
-      if (territory?.ownerId != null) selectedNationId.value = territory.ownerId;
+      const snapped = selectedX !== tileX || selectedY !== tileY;
+      // A nearby marker must not steal a click inside a different visible nation's borders.
+      if (snapped && showEstimatedTerritories.value && territory?.ownerId != null)
+        selectMapNation([], territory);
+      else
+        selectMapNation(items, territory);
       if (items.length === 0 && !territory) return;
       L.popup({ minWidth: 220 })
         .setLatLng(items.length ? toLatLng(selectedX, selectedY) : event.latlng)
-        .setContent(createUnifiedPickerPopup(items, router, selectedYear.value, historyMaxYear.value,
-          territory))
+        .setContent(tilePopup(items, territory))
         .openOn(map);
     };
 
@@ -2519,6 +2583,7 @@ export default defineComponent({
   stroke-linejoin: round;
   paint-order: stroke fill;
 }
+.map-nation-choice { display: block; margin-top: 4px; text-decoration: underline; }
 .nominal-territory-info {
   border-bottom: 1px solid #7775;
   margin-bottom: 8px;

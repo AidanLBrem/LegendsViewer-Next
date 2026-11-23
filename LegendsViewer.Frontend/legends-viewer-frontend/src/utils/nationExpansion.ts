@@ -42,6 +42,7 @@ export function listHistoricalNations(
     if (!options.has(id)) options.set(id, { id, name: name || `Faction #${id}`, color: color || '#777777', currentSites: 0 });
   };
   for (const site of sites) {
+    add(site.originOwnerId, site.originOwnerText, site.originColor);
     add(site.ownerId, site.ownerText ?? site.owner, site.color);
     for (const period of site.ownerHistory ?? []) {
       add(period.ownerId, period.ownerText ?? period.owner, period.color);
