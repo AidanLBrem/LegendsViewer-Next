@@ -38,6 +38,7 @@ public class DarkForcesController(IWorld world) : ControllerBase
             (string.IsNullOrWhiteSpace(search) ||
                 n.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase) ||
                 n.Factions.Any(f => f.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                n.Groups.Any(g => g.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase)) ||
                 n.Apprentices.Any(a => a.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))) &&
             (!minApprentices.HasValue || n.ApprenticeCount >= minApprentices.Value) &&
             (!maxApprentices.HasValue || n.ApprenticeCount <= maxApprentices.Value) &&

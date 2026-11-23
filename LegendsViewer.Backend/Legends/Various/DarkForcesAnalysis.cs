@@ -9,6 +9,7 @@ namespace LegendsViewer.Backend.Legends.Various;
 // These are settlement-based measures. Legends does not encode the physical
 // boundary or military strength of a necromancer's empire for every year.
 public sealed record DarkForceFactionDto(int Id, string Name, int FromYear, int? ThroughYear, string Evidence);
+public sealed record DarkForceGroupDto(int Id, string Name, string Relationship, int? HoldingId, string? HoldingName);
 // Apprentices are people explicitly taught a dark secret by this figure,
 // not everyone who follows, serves or belongs to their faction.
 public sealed record DarkForceApprenticeDto(int FigureId, string Name, int FirstLearnedYear);
@@ -22,7 +23,7 @@ public sealed record DarkForceDto(
     int Invasions, int Conquests, int NotableKills, int PowerIndex,
     List<DarkForceFactionDto> Factions, List<DarkForceEventDto> Timeline,
     int RecordedEvents, int? FirstInvasionYear, int ApprenticeCount,
-    List<DarkForceApprenticeDto> Apprentices);
+    List<DarkForceApprenticeDto> Apprentices, List<DarkForceGroupDto> Groups);
 public sealed record DarkForcesPageDto(
     List<DarkForceDto> Items, int TotalCount, int TotalFilteredCount,
     int FallenCount, int TotalInvasions, int MaximumTerritory);
@@ -45,19 +46,23 @@ public static class DarkForcesAnalysis
         int currentYear = Math.Max(0, world.CurrentYear);
         // Index candidate settlements once. Large Legends exports can contain
         // many thousands of sites and hundreds of necromancers.
-        var sitesByNation = world.Sites.SelectMany(site =>
+        // Index by the actual owner AND each ancestor, not by MapNation alone.
+        // A necromancer leading a subholding must not inherit parent/sibling holdings.
+        var sitesByFaction = world.Sites.SelectMany(site =>
                 site.OwnerHistory.Where(p => p.Owner != null)
-                    .SelectMany(p => new[] { p.Owner!, p.Owner!.MapNation }.Distinct()
-                        .Select(root => new { Nation = root, Site = site })))
-            .GroupBy(x => x.Nation)
+                    .SelectMany(p => SelfAndParents(p.Owner!)
+                        .Select(root => new { Root = root, Site = site })))
+            .GroupBy(x => x.Root)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Site).Distinct().ToList());
         // Some event parsers attach only to a site/region, not to the actor.
         // Index their explicitly named subjects so those acts still appear.
         var experimentalEvents = world.Events.OfType<HfPerformedHorribleExperiments>()
             .Where(e => e.GroupHistoricalFigure != null)
             .ToLookup(e => e.GroupHistoricalFigure!);
-        var entitiesByNation = world.Entities.GroupBy(e => e.MapNation)
-            .ToDictionary(g => g.Key, g => g.Distinct().ToList());
+        var entitiesByFaction = world.Entities.SelectMany(entity =>
+                SelfAndParents(entity).Select(root => new { Root = root, Entity = entity }))
+            .GroupBy(x => x.Root)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Entity).Distinct().ToList());
         // Legends+ records present-day position assignments, sometimes without
         // a dated appointment event in the standard Legends export. These can
         // establish current leadership, but NOT past years of command.
@@ -92,15 +97,13 @@ public static class DarkForcesAnalysis
                     : "Linked subsidiary (current affiliation; historical link unverified)";
 
             var associatedSites = tenures.SelectMany(t =>
-                    sitesByNation.TryGetValue(t.Root, out var sites)
+                    sitesByFaction.TryGetValue(t.Root, out var sites)
                         ? (IEnumerable<Site>)sites : Enumerable.Empty<Site>())
                 .Distinct().ToList();
             var territory = CalculateTerritory(associatedSites, tenures, currentYear);
             var involvedEntities = tenures.SelectMany(t =>
-                    t.Root.IsCiv || !t.Root.MapNation.IsCiv
-                        ? (entitiesByNation.TryGetValue(t.Root, out var members)
-                            ? (IEnumerable<Entity>)members : new[] { t.Root })
-                        : new[] { t.Root })
+                    entitiesByFaction.TryGetValue(t.Root, out var members)
+                        ? (IEnumerable<Entity>)members : new[] { t.Root })
                 .Distinct().ToList();
             var sourceEvents = figure.Events.Concat(
                     experimentalEvents[figure]).Concat(involvedEntities.SelectMany(t => t.Events))
@@ -245,12 +248,13 @@ public static class DarkForcesAnalysis
             var factionList = tenures.OrderBy(t => t.Start).ThenBy(t => t.Root.Id)
                 .Select(t => new DarkForceFactionDto(t.Root.Id, t.Root.Name, t.Start,
                     t.EndExclusive > currentYear ? null : t.EndExclusive - 1, t.Evidence)).ToList();
+            var groups = GetAssociatedGroups(figure, tenures);
             result.Add(new DarkForceDto(figure.Id, figure.Name, awakening,
                 status, defeated, figure.DeathYear >= 0 ? figure.DeathYear : null,
                 territory.Peak, territory.PeakYear, territory.Current, invasions, conquests,
                 kills, PowerIndex(territory.Peak, conquests, invasions, kills),
                 factionList, timeline.Take(300).ToList(), timeline.Count, firstInvasion,
-                apprentices.Count, apprentices));
+                apprentices.Count, apprentices, groups));
         }
         return result.OrderBy(r => r.FigureId).ToList();
     }
@@ -268,10 +272,9 @@ public static class DarkForcesAnalysis
         void Add(Entity? entity, int fromYear, int? throughYear, string evidence)
         {
             if (entity == null) return;
-            // Leadership of a local government inside an ordinary civilization
-            // does not imply command of the entire civilization.
-            Entity root = entity.IsCiv || !entity.MapNation.IsCiv
-                ? entity.MapNation : entity;
+            // Preserve exactly the founded/led holding. MapNation is for
+            // identifying its broader group, NEVER expanding personal control.
+            Entity root = entity;
             int from = Math.Max(0, fromYear);
             int endExclusive = Math.Min(currentYear + 1,
                 throughYear.HasValue ? throughYear.Value + 1 : currentYear + 1);
@@ -301,14 +304,58 @@ public static class DarkForcesAnalysis
         return tenures.Distinct().ToList();
     }
 
-    private static bool BelongsToFaction(Entity? entity, Entity root)
+    private static IEnumerable<Entity> SelfAndParents(Entity entity)
     {
-        if (entity == null) return false;
-        if (entity == root) return true;
-        // Full organizational roll-up is only appropriate for a sovereign
-        // civilization or independent non-civilization faction, never a local
-        // government nested under a third-party civilization.
-        return (root.IsCiv || !root.MapNation.IsCiv) && entity.MapNation == root;
+        // The parent relationship is a present-day hierarchy. Treat matching
+        // descendant activity as associated, rather than proven historical command.
+        HashSet<Entity> visited = [];
+        Entity? current = entity;
+        while (current != null && visited.Add(current))
+        {
+            yield return current;
+            // A sovereign civilization never inherits another civilization's assets.
+            if (current.IsCiv) yield break;
+            current = current.Parent;
+        }
+    }
+
+    private static bool BelongsToFaction(Entity? entity, Entity root) =>
+        entity != null && SelfAndParents(entity).Contains(root);
+
+    private static List<DarkForceGroupDto> GetAssociatedGroups(
+        HistoricalFigure figure, IReadOnlyList<Tenure> tenures)
+    {
+        var links = figure.RelatedEntities
+            .Where(l => l.Entity != null && l.Type is
+                EntityLinkType.Member or EntityLinkType.FormerMember or
+                EntityLinkType.Position or EntityLinkType.FormerPosition)
+            .ToList();
+        // Group membership and territorial command are deliberately separate.
+        // Collapse membership links to the parent organization for display only.
+        var groups = links.Select(l => l.Entity!.MapNation)
+            .Concat(tenures.Select(t => t.Root.MapNation))
+            .Distinct()
+            .ToList();
+
+        return groups.Select(group =>
+        {
+            var groupTenure = tenures.FirstOrDefault(t => t.Root == group);
+            var subholding = tenures.FirstOrDefault(t => t.Root != group &&
+                BelongsToFaction(t.Root, group));
+            bool currentMember = links.Any(l => l.Entity!.MapNation == group &&
+                l.Type is EntityLinkType.Member or EntityLinkType.Position);
+            string relationship = groupTenure != null
+                ? "Group leader / founder"
+                : subholding != null ? "Subholding leader / founder"
+                : currentMember ? "Member" : "Former member";
+            return new DarkForceGroupDto(group.Id, group.Name, relationship,
+                subholding?.Root.Id, subholding?.Root.Name);
+        })
+        .OrderBy(g => g.Relationship == "Former member" ? 1 : 0)
+        .ThenBy(g => g.Relationship == "Group leader / founder" ? 0 :
+                     g.Relationship == "Subholding leader / founder" ? 1 : 2)
+        .ThenBy(g => g.Name)
+        .ToList();
     }
 
     private sealed record TerritoryResult(int Peak, int? PeakYear, int Current);
