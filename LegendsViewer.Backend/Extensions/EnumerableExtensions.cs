@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using LegendsViewer.Backend.Legends;
 
 namespace LegendsViewer.Backend.Extensions;
 
@@ -13,8 +14,17 @@ public static class EnumerableExtensions
             return source;
         }
 
-        // Get the property by name
-        PropertyInfo? propertyInfo = typeof(T).GetProperty(sortKey, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+        // Overview rows expose a formatted HTML link under "html", but their
+        // backing WorldObject has a plain Name instead. Sort by that text,
+        // not by presentation markup or a nonexistent reflection property.
+        // This applies to all WorldObject listing endpoints, including the
+        // Factions and Groups Overview and event-collection listings.
+        string propertyName = typeof(WorldObject).IsAssignableFrom(typeof(T)) &&
+            sortKey.Equals("html", StringComparison.OrdinalIgnoreCase)
+            ? nameof(WorldObject.Name) : sortKey;
+
+        PropertyInfo? propertyInfo = typeof(T).GetProperty(propertyName,
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
 
         if (propertyInfo == null)
         {
