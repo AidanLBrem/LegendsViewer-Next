@@ -93,6 +93,10 @@ public class World : IDisposable, IWorld
     public ParsingErrors ParsingErrors { get; } = new ParsingErrors();
 
     private WorldRecordsDto? _cachedWorldRecords;
+    private IReadOnlyList<DarkForceDto>? _cachedDarkForces;
+    public IReadOnlyList<DarkForceDto> GetOrComputeDarkForces() =>
+        _cachedDarkForces ??= DarkForcesAnalysis.Calculate(this);
+
 
     public WorldRecordsDto GetOrComputeWorldRecords()
     {
@@ -1181,5 +1185,6 @@ public class World : IDisposable, IWorld
         Log.Clear();
         ParsingErrors.Clear();
         _cachedWorldRecords = null;
+        _cachedDarkForces = null;
     }
 }
