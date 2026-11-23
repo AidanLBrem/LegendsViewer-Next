@@ -81,6 +81,53 @@ public class Entity : WorldObject, IHasCoordinates
 
     public List<Population> Populations { get; set; } = [];
 
+    // Match the population card: prefer the larger count for overlapping
+    // site and legends_plus race records, rather than double-counting them.
+    // Missing exports are unknown, not zero.
+    [JsonIgnore]
+    public int? PopulationCount
+    {
+        get
+        {
+            var byRace = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var population in Populations)
+            {
+                if (population.Count <= 0) continue;
+                var id = population.Race?.Id?.Trim();
+                var name = population.Race?.NamePlural?.Trim();
+                string key = !string.IsNullOrEmpty(id) ? id :
+                    !string.IsNullOrEmpty(name) ? name : "Unknown";
+                byRace[key] = byRace.GetValueOrDefault(key) + population.Count;
+            }
+
+            int legendsPlusCount = EntityPopulation?.Count ?? 0;
+            if (legendsPlusCount > 0)
+            {
+                var raceId = EntityPopulation?.Race?.Id?.Trim();
+                var raceName = EntityPopulation?.Race?.NamePlural?.Trim();
+                var matching = Populations.FirstOrDefault(population =>
+                    population.Count > 0 &&
+                    ((!string.IsNullOrEmpty(raceId) &&
+                      string.Equals(population.Race?.Id, raceId, StringComparison.OrdinalIgnoreCase)) ||
+                     (!string.IsNullOrEmpty(raceName) &&
+                      string.Equals(population.Race?.NamePlural, raceName, StringComparison.OrdinalIgnoreCase))));
+                if (matching != null)
+                {
+                    string key = !string.IsNullOrEmpty(matching.Race?.Id) ? matching.Race.Id.Trim() :
+                        !string.IsNullOrEmpty(matching.Race?.NamePlural) ? matching.Race.NamePlural.Trim() : "Unknown";
+                    byRace[key] = Math.Max(byRace.GetValueOrDefault(key), legendsPlusCount);
+                }
+                else
+                {
+                    string key = !string.IsNullOrEmpty(raceId) ? raceId :
+                        !string.IsNullOrEmpty(raceName) ? raceName : "Unknown";
+                    byRace[key] = Math.Max(byRace.GetValueOrDefault(key), legendsPlusCount);
+                }
+            }
+            return byRace.Count == 0 ? null : byRace.Values.Sum();
+        }
+    }
+
     [JsonIgnore]
     public Structure? OriginStructure { get; set; }
     public string? OriginStructureLink => OriginStructure?.ToLink(true, this);
