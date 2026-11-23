@@ -154,9 +154,24 @@ public static class DarkForcesAnalysis
                     (p.EndCause?.Contains("taken over", StringComparison.OrdinalIgnoreCase) == true ||
                      p.EndCause?.Contains("destroy", StringComparison.OrdinalIgnoreCase) == true ||
                      p.EndCause?.Contains("conquer", StringComparison.OrdinalIgnoreCase) == true));
-            bool realmLost = territory.Peak > 0 && territory.Current == 0 && lossRecorded;
-            bool defeated = figure.DeathYear >= 0 || realmLost;
-            string status = figure.DeathYear >= 0 ? "Deceased" :
+            // "Territory currently commanded" can be zero because a leadership
+            // term ended, while the faction itself still survives. Do not call
+            // that a military defeat unless the recorded faction holdings vanished.
+            bool factionStillHoldsLand = associatedSites.Any(site =>
+                site.OwnerHistory.Any(p => p.EndYear < 0 &&
+                    tenures.Any(t => BelongsToFaction(p.Owner, t.Root))));
+            bool realmLost = territory.Peak > 0 && !factionStillHoldsLand && lossRecorded;
+            bool killed = figure.DeathYear >= 0 &&
+                (figure.DeathEvent?.Slayer != null || figure.DeathCause is
+                    DeathCause.PutToRest or DeathCause.Struck or DeathCause.Murdered or
+                    DeathCause.Shot or DeathCause.DragonsFire or DeathCause.Slaughtered or
+                    DeathCause.ExecutedGeneric or DeathCause.ExecutedFedToBeasts or
+                    DeathCause.ExecutedBurnedAlive or DeathCause.ExecutedCrucified or
+                    DeathCause.ExecutedDrowned or DeathCause.ExecutedHackedToPieces or
+                    DeathCause.ExecutedBuriedAlive or DeathCause.ExecutedBeheaded);
+            bool defeated = killed || realmLost;
+            string status = killed ? "Killed / put to rest" :
+                figure.DeathYear >= 0 ? "Deceased (cause not defeat)" :
                 realmLost ? "Realm lost" : "No recorded downfall";
             var factionList = tenures.OrderBy(t => t.Start).ThenBy(t => t.Root.Id)
                 .Select(t => new DarkForceFactionDto(t.Root.Id, t.Root.Name, t.Start,
