@@ -119,6 +119,11 @@ public static class DarkForcesAnalysis
                 {
                     HfLearnsSecret e when e.Student == figure =>
                         ("Learned a dark secret", (Site?)null, (Entity?)null, false, "Personal"),
+                    HfLearnsSecret e when e.Teacher == figure =>
+                        ("Taught a dark secret", (Site?)null, (Entity?)null, false, "Personal"),
+                    HfDoesInteraction e when e.Target == figure &&
+                        e.Interaction?.Contains("SECRET", StringComparison.OrdinalIgnoreCase) == true =>
+                        ("Received a dark secret", e.Site, (Entity?)null, false, "Personal"),
                     HfGainsSecretGoal e when e.HistoricalFigure == figure =>
                         ("Formed a secret ambition", (Site?)null, (Entity?)null, false, "Personal"),
                     HfDoesInteraction e when e.Doer == figure &&
