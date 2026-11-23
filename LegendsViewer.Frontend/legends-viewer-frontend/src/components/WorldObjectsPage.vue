@@ -27,7 +27,7 @@
             </v-card>
         </v-col>
     </v-row>
-    <v-row>
+    <v-row v-if="$slots['type-specific-before-table']">
         <slot name="type-specific-before-table"></slot>
     </v-row>
     <v-row>
@@ -102,6 +102,10 @@
                             <span v-html="value"></span>
                         </template>
                     </v-data-table-server>
+                    <section v-if="$slots['overview-content-after-table']" class="mt-6">
+                        <v-divider class="mb-6"></v-divider>
+                        <slot name="overview-content-after-table"></slot>
+                    </section>
                 </v-card-text>
                 <template v-slot:append>
                     <v-chip class="ma-2" color="cyan" label>

@@ -63,84 +63,86 @@ onMounted(async () => {
 </script>
 
 <template>
-    <v-col cols="12">
-        <v-card title="Civilization Culture Comparison" subtitle="Compare observed historical behavior across all civilizations" variant="text">
-            <template #prepend><v-icon class="mr-2" icon="mdi-scale-balance" size="32px" /></template>
-            <v-card-text>
-                <v-row dense class="mb-2">
-                    <v-col cols="12" sm="5" md="4">
-                        <v-text-field v-model="search" label="Search civilization or race" prepend-inner-icon="mdi-magnify"
-                            density="compact" variant="outlined" hide-details />
-                    </v-col>
-                    <v-col cols="12" sm="4" md="3">
-                        <v-select v-model="windowYears" :items="cultureWindows" label="Historical period"
-                            density="compact" variant="outlined" hide-details />
-                    </v-col>
-                    <v-col cols="12" sm="3" md="5" class="d-flex align-center justify-end">
-                        <span class="text-caption text-medium-emphasis">{{ sortedNations.length }} civilizations</span>
-                    </v-col>
-                </v-row>
-                <div class="text-caption text-medium-emphasis mb-3">
-                    Rates are recorded actions per 100 observed years, not official cultural values.
-                    Click a header to sort all civilizations. Expansion = founded settlements; Conquest = captured sites; Settlements Lost in War = confirmed wartime captures, surrenders or destruction. Reclamations and ordinary abandonment are excluded.
-                </div>
-                <v-progress-linear v-if="loading" color="primary" indeterminate />
-                <v-alert v-else-if="error" type="warning" variant="tonal" :text="error" />
-                <div v-else class="culture-table-scroll">
-                    <v-table density="compact" fixed-header height="500px">
-                        <thead>
-                            <tr>
-                                <th class="sortable-header" @click="sort('name')">
-                                    Civilization <v-icon v-if="sortKey === 'name'" size="x-small">{{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon>
-                                </th>
-                                <th>Character</th>
-                                <th class="text-end sortable-header" @click="sort('currentSites')">
-                                    Sites <v-icon v-if="sortKey === 'currentSites'" size="x-small">{{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon>
-                                </th>
-                                <th v-for="column in rateColumns" :key="column.key" class="text-end sortable-header"
-                                    @click="sort(column.key)">
-                                    <v-tooltip :text="cultureDimensionDescriptions[column.key]" location="top">
-                                        <template #activator="{ props: tooltipProps }">
-                                            <span v-bind="tooltipProps">{{ column.title }}</span>
-                                        </template>
-                                    </v-tooltip>
-                                    <v-icon v-if="sortKey === column.key" size="x-small">
-                                        {{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}
-                                    </v-icon>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="nation in sortedNations" :key="nation.id">
-                                <td>
-                                    <router-link :to="'/entity/' + nation.id">{{ nation.name }}</router-link>
-                                    <div class="text-caption text-medium-emphasis">{{ nation.race }}</div>
-                                </td>
-                                <td>{{ nation.period.character }}</td>
-                                <td class="text-end">{{ nation.currentSites.toLocaleString() }}</td>
-                                <td v-for="column in rateColumns" :key="column.key" class="text-end culture-number">
-                                    <v-tooltip v-if="column.key === 'sitesLostInWarPerCentury'"
-                                        :text="nation.period.sitesLostInWar.toLocaleString() + ' recorded wartime settlement losses in this period'">
-                                        <template #activator="{ props: tooltipProps }">
-                                            <span v-bind="tooltipProps">{{ formatRate(nation.period[column.key]) }}</span>
-                                        </template>
-                                    </v-tooltip>
-                                    <span v-else>{{ formatRate(nation.period[column.key]) }}</span>
-                                </td>
-                            </tr>
-                            <tr v-if="sortedNations.length === 0">
-                                <td colspan="10" class="text-medium-emphasis">No matching civilizations.</td>
-                            </tr>
-                        </tbody>
-                    </v-table>
-                </div>
-                <div class="text-caption text-medium-emphasis mt-2">
-                    A value of zero means no matching event was recorded, not that the civilization was peaceful.
-                    See each nation for supporting events and the years used in its rates.
-                </div>
-            </v-card-text>
-        </v-card>
-    </v-col>
+    <section class="nation-culture-comparison" aria-labelledby="civilization-culture-heading">
+        <div class="d-flex align-center mb-4">
+            <v-icon class="mr-3" icon="mdi-scale-balance" size="32px" />
+            <div>
+                <h3 id="civilization-culture-heading" class="text-h6">Civilization Culture Comparison</h3>
+                <p class="text-body-2 text-medium-emphasis">Compare observed historical behavior across all civilizations</p>
+            </div>
+        </div>
+        <v-row dense class="mb-2">
+            <v-col cols="12" sm="5" md="4">
+                <v-text-field v-model="search" label="Search civilization or race" prepend-inner-icon="mdi-magnify"
+                    density="compact" variant="outlined" hide-details />
+            </v-col>
+            <v-col cols="12" sm="4" md="3">
+                <v-select v-model="windowYears" :items="cultureWindows" label="Historical period"
+                    density="compact" variant="outlined" hide-details />
+            </v-col>
+            <v-col cols="12" sm="3" md="5" class="d-flex align-center justify-end">
+                <span class="text-caption text-medium-emphasis">{{ sortedNations.length }} civilizations</span>
+            </v-col>
+        </v-row>
+        <div class="text-caption text-medium-emphasis mb-3">
+            Rates are recorded actions per 100 observed years, not official cultural values.
+            Click a header to sort all civilizations. Expansion = founded settlements; Conquest = captured sites; Settlements Lost in War = confirmed wartime captures, surrenders or destruction. Reclamations and ordinary abandonment are excluded.
+        </div>
+        <v-progress-linear v-if="loading" color="primary" indeterminate />
+        <v-alert v-else-if="error" type="warning" variant="tonal" :text="error" />
+        <div v-else class="culture-table-scroll">
+            <v-table density="compact" fixed-header height="500px">
+                <thead>
+                    <tr>
+                        <th class="sortable-header" @click="sort('name')">
+                            Civilization <v-icon v-if="sortKey === 'name'" size="x-small">{{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon>
+                        </th>
+                        <th>Character</th>
+                        <th class="text-end sortable-header" @click="sort('currentSites')">
+                            Sites <v-icon v-if="sortKey === 'currentSites'" size="x-small">{{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon>
+                        </th>
+                        <th v-for="column in rateColumns" :key="column.key" class="text-end sortable-header"
+                            @click="sort(column.key)">
+                            <v-tooltip :text="cultureDimensionDescriptions[column.key]" location="top">
+                                <template #activator="{ props: tooltipProps }">
+                                    <span v-bind="tooltipProps">{{ column.title }}</span>
+                                </template>
+                            </v-tooltip>
+                            <v-icon v-if="sortKey === column.key" size="x-small">
+                                {{ descending ? 'mdi-arrow-down' : 'mdi-arrow-up' }}
+                            </v-icon>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="nation in sortedNations" :key="nation.id">
+                        <td>
+                            <router-link :to="'/entity/' + nation.id">{{ nation.name }}</router-link>
+                            <div class="text-caption text-medium-emphasis">{{ nation.race }}</div>
+                        </td>
+                        <td>{{ nation.period.character }}</td>
+                        <td class="text-end">{{ nation.currentSites.toLocaleString() }}</td>
+                        <td v-for="column in rateColumns" :key="column.key" class="text-end culture-number">
+                            <v-tooltip v-if="column.key === 'sitesLostInWarPerCentury'"
+                                :text="nation.period.sitesLostInWar.toLocaleString() + ' recorded wartime settlement losses in this period'">
+                                <template #activator="{ props: tooltipProps }">
+                                    <span v-bind="tooltipProps">{{ formatRate(nation.period[column.key]) }}</span>
+                                </template>
+                            </v-tooltip>
+                            <span v-else>{{ formatRate(nation.period[column.key]) }}</span>
+                        </td>
+                    </tr>
+                    <tr v-if="sortedNations.length === 0">
+                        <td colspan="10" class="text-medium-emphasis">No matching civilizations.</td>
+                    </tr>
+                </tbody>
+            </v-table>
+        </div>
+        <div class="text-caption text-medium-emphasis mt-2">
+            A value of zero means no matching event was recorded, not that the civilization was peaceful.
+            See each nation for supporting events and the years used in its rates.
+        </div>
+    </section>
 </template>
 
 <style scoped>

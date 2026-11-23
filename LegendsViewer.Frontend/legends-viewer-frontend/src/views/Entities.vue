@@ -10,7 +10,7 @@ const store = useEntityStore();
 const icon = "mdi-account-group";
 const title = "Factions and Groups";
 const subtitle = "Explore the Influential Factions and Groups Shaping History";
-const overviewSubtitle = "Browse and search all entities";
+const overviewSubtitle = "Browse factions and groups, and compare civilization cultures";
 const overviewTitle = "Overview";
 const wikiKeyWord = "entity";
 const tableHeaders: TableHeader[] = [
@@ -27,7 +27,7 @@ const tableHeaders: TableHeader[] = [
     <WorldObjectsPage :store="store" :icon="icon" :title="title" :subtitle="subtitle" :overviewTitle="overviewTitle"
         :overviewSubtitle="overviewSubtitle" :wikiKeyWord="wikiKeyWord" :tableHeaders="tableHeaders"
         :showFilters="true">
-        <template v-slot:type-specific-before-table>
+        <template v-slot:overview-content-after-table>
             <NationCultureComparison />
         </template>
         <template v-slot:type-specific-filter="{ filters }">
