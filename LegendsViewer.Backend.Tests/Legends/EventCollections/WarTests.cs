@@ -32,6 +32,27 @@ public class WarTests
     }
 
     [TestMethod]
+    public void LeadUp_OrdersOpposingIncidentsAndRequiresWarLinkAtStart()
+    {
+        var war = new War([], _mockWorld.Object) { StartYear = 20, StartSeconds72 = 100 };
+        war.RegisterParticipant(_attacker, true);
+        war.RegisterParticipant(_defender, false);
+        SiteDispute Incident(int id, int year, int tick, Entity opponent) =>
+            new([], _mockWorld.Object) { Id = id, Year = year, Seconds72 = tick,
+                Entity1 = opponent, Entity2 = _attacker };
+
+        var earlier = Incident(1, 10, 0, _defender);
+        var opening = Incident(2, 20, 100, _defender);
+        opening.ParentCollection = war;
+        _attacker.Events.AddRange([opening, earlier, earlier, Incident(3, 9, 0, _defender),
+            Incident(4, 20, 101, _defender), Incident(5, 20, 100, _defender),
+            Incident(6, 19, 0, _parentEntity)]);
+
+        CollectionAssert.AreEqual(new[] { "Dispute", "War opening · Dispute" },
+            war.LeadUp.Select(row => row.Title).ToArray());
+    }
+
+    [TestMethod]
     public void Constructor_WithValidProperties_ParsesCorrectly()
     {
         var props = new List<Property>

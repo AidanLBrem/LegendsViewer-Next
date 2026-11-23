@@ -378,6 +378,87 @@ public class War : EventCollection, IHasComplexSubtype
     [JsonIgnore]
     public List<Battle> Battles => EventCollections.OfType<Battle>().ToList();
 
+    public List<ListItemDto> LeadUp => BuildLeadUp();
+
+    private List<ListItemDto> BuildLeadUp()
+    {
+        if (StartYear < 0)
+            return [];
+
+        // Groups can change hands. Use the dated ownership records that the
+        // parser used to associate a local government with a civilization.
+        var attackerGroups = AttackingParticipants.SelectMany(entity => entity.SiteHistory)
+            .Where(period => period.Owner != null).ToLookup(period => period.Owner!);
+        var defenderGroups = DefendingParticipants.SelectMany(entity => entity.SiteHistory)
+            .Where(period => period.Owner != null).ToLookup(period => period.Owner!);
+
+        int Side(Entity? entity, int year)
+        {
+            if (entity == null)
+                return 0;
+            bool attacking = AttackingParticipants.Contains(entity);
+            bool defending = DefendingParticipants.Contains(entity);
+            if (!attacking && !defending)
+            {
+                bool Active(OwnerPeriod period) => period.StartYear <= year &&
+                    (period.EndYear < 0 || year < period.EndYear);
+                attacking = attackerGroups[entity].Any(Active);
+                defending = defenderGroups[entity].Any(Active);
+            }
+            return attacking == defending ? 0 : attacking ? 1 : -1;
+        }
+
+        var candidates = AttackingParticipants.Concat(attackerGroups.Select(group => group.Key)).Distinct();
+        var rows = new List<ListItemDto>();
+        foreach (var incident in candidates.SelectMany(member => member.Events)
+                     .Where(e => e.Year >= Math.Max(0, StartYear - 10) && e.Year <= StartYear)
+                     .DistinctBy(e => e.Id)
+                     .OrderBy(e => e.Year).ThenBy(e => e.Seconds72).ThenBy(e => e.Id))
+        {
+            bool atStart = false;
+            if (incident.Year == StartYear)
+            {
+                if (StartSeconds72 < 0 || incident.Month == 0 || incident.Seconds72 < 0 ||
+                    incident.Seconds72 > StartSeconds72)
+                    continue;
+
+                atStart = incident.Seconds72 == StartSeconds72;
+                if (atStart)
+                {
+                    var collection = incident.ParentCollection;
+                    while (collection != null && collection != this)
+                        collection = collection.ParentCollection;
+                    if (collection == null)
+                        continue;
+                }
+            }
+
+            (Entity? first, Entity? second, string label) = incident switch
+            {
+                FirstContact e => (e.Contactor, e.Contacted, "First contact"),
+                SiteDispute e => (e.Entity1, e.Entity2, "Dispute"),
+                DiplomatLost e => (e.Entity, e.InvolvedEntity, "Missing diplomat"),
+                Merchant e when e.Seizure || e.LostValue || e.AllDead || e.HardShip =>
+                    (e.Source, e.Destination, "Caravan incident"),
+                AgreementRejected e => (e.Source, e.Destination, "Rejected agreement"),
+                PeaceRejected e => (e.Source, e.Destination, "Peace rejected"),
+                PeaceAccepted e => (e.Source, e.Destination, "Peace accepted"),
+                SiteTributeForced e => (e.Attacker, e.Defender, "Forced tribute"),
+                PlunderedSite e => (e.Attacker, e.Defender, "Plunder"),
+                AttackedSite e => (e.Attacker, e.Defender, "Site attack"),
+                FieldBattle e => (e.Attacker, e.Defender, "Field battle"),
+                _ => (null, null, "")
+            };
+            if (Side(first, incident.Year) * Side(second, incident.Year) == -1)
+                rows.Add(new ListItemDto
+                {
+                    Title = atStart ? $"War opening · {label}" : label,
+                    Subtitle = incident.Print(true, this)
+                });
+        }
+        return rows;
+    }
+
     public List<ListItemDto> BattleList
     {
         get
