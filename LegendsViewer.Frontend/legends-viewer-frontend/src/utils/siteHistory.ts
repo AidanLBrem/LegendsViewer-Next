@@ -16,6 +16,8 @@ export interface SiteOwnershipPeriod {
 }
 
 export interface SiteWithOwnershipHistory {
+  // Population is an export-date snapshot; it is not a historical time series.
+  populationCount?: number | null;
   ownerHistory?: SiteOwnershipPeriod[] | null;
   createdYear?: number | null;
   destroyedYears?: number[] | null;
