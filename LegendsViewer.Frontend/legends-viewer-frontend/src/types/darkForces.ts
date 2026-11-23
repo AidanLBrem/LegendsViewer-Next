@@ -6,6 +6,12 @@ export interface DarkForceFaction {
   evidence: string;
 }
 
+export interface DarkForceApprentice {
+  figureId: number;
+  name: string;
+  firstLearnedYear: number;
+}
+
 export interface DarkForceEvent {
   year: number;
   kind: string;
@@ -37,6 +43,8 @@ export interface DarkForce {
   timeline: DarkForceEvent[];
   recordedEvents: number;
   firstInvasionYear: number | null;
+  apprenticeCount: number;
+  apprentices: DarkForceApprentice[];
 }
 
 export interface DarkForcesPage {

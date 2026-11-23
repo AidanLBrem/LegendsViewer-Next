@@ -192,6 +192,86 @@ public class DarkForcesTests
     }
 
     [TestMethod]
+    public void Apprentices_CountUniqueRecordedStudents_AndRetainFirstLesson()
+    {
+        var mentor = Necromancer(1, "The Black Tutor");
+        var studentA = new HistoricalFigure([], _world.Object) { Id = 10, Name = "First Student" };
+        var studentB = new HistoricalFigure([], _world.Object) { Id = 11, Name = "Second Student" };
+        _figures.AddRange([studentA, studentB]);
+
+        // Repeated lessons, self-teaching, unknown students, and undated/future
+        // events must not inflate the number of apprentices.
+        mentor.Events.AddRange([
+            new HfLearnsSecret([], _world.Object)
+                { Id = 101, Year = 12, Teacher = mentor, Student = studentA },
+            new HfLearnsSecret([], _world.Object)
+                { Id = 102, Year = 16, Teacher = mentor, Student = studentA },
+            new HfLearnsSecret([], _world.Object)
+                { Id = 103, Year = 14, Teacher = mentor, Student = studentB },
+            new HfLearnsSecret([], _world.Object)
+                { Id = 104, Year = 17, Teacher = mentor, Student = mentor },
+            new HfLearnsSecret([], _world.Object)
+                { Id = 105, Year = 18, Teacher = mentor, Student = null },
+            new HfLearnsSecret([], _world.Object)
+                { Id = 106, Year = 55, Teacher = mentor, Student = new HistoricalFigure { Id = 12 } }
+        ]);
+
+        var result = DarkForcesAnalysis.Calculate(_world.Object).Single();
+        Assert.AreEqual(2, result.ApprenticeCount);
+        CollectionAssert.AreEquivalent(new[] { 10, 11 },
+            result.Apprentices.Select(a => a.FigureId).ToArray());
+        Assert.AreEqual(12, result.Apprentices.Single(a => a.FigureId == 10).FirstLearnedYear);
+        Assert.AreEqual("Second Student", result.Apprentices.Single(a => a.FigureId == 11).Name);
+    }
+
+    [TestMethod]
+    public void Apprentices_AreSearchableByNameOrCount_AndSortableBeforePagination()
+    {
+        var renowned = Necromancer(1, "Renowned Tutor");
+        var minor = Necromancer(2, "Minor Tutor");
+        var unaffiliated = Necromancer(3, "Unaffiliated");
+        var students = new[]
+        {
+            new HistoricalFigure([], _world.Object) { Id = 10, Name = "Ashen Apprentice" },
+            new HistoricalFigure([], _world.Object) { Id = 11, Name = "Ruby Apprentice" },
+            new HistoricalFigure([], _world.Object) { Id = 12, Name = "Silent Apprentice" }
+        };
+        _figures.AddRange(students);
+        renowned.Events.AddRange([
+            new HfLearnsSecret([], _world.Object)
+                { Id = 1, Year = 2, Teacher = renowned, Student = students[0] },
+            new HfLearnsSecret([], _world.Object)
+                { Id = 2, Year = 3, Teacher = renowned, Student = students[1] }
+        ]);
+        minor.Events.Add(new HfLearnsSecret([], _world.Object)
+            { Id = 3, Year = 4, Teacher = minor, Student = students[2] });
+
+        var controller = new DarkForcesController(_world.Object);
+        DarkForcesPageDto Page(ActionResult<DarkForcesPageDto> response) =>
+            (DarkForcesPageDto)((OkObjectResult)response.Result!).Value!;
+
+        var sorted = Page(controller.Get(sort: "apprentices", pageSize: 1));
+        Assert.AreEqual(1, sorted.Items.Single().FigureId);
+        Assert.AreEqual(2, sorted.Items.Single().ApprenticeCount);
+        Assert.AreEqual(0, sorted.Items.Single().Apprentices.Count,
+            "List endpoint omits apprentice detail records; detail endpoint retains them.");
+
+        var least = Page(controller.Get(sort: "apprentices", direction: "asc", pageSize: 1));
+        Assert.AreEqual(3, least.Items.Single().FigureId);
+        Assert.AreEqual(1, Page(controller.Get(search: "Ruby Apprentice")).TotalFilteredCount);
+        Assert.AreEqual(1, Page(controller.Get(minApprentices: 2)).TotalFilteredCount);
+        Assert.AreEqual(1, Page(controller.Get(minApprentices: 1, maxApprentices: 1)).TotalFilteredCount);
+        Assert.AreEqual(1, Page(controller.Get(maxApprentices: 0)).TotalFilteredCount);
+
+        Assert.IsInstanceOfType(controller.Get(minApprentices: -1).Result, typeof(BadRequestObjectResult));
+        Assert.IsInstanceOfType(controller.Get(minApprentices: 3, maxApprentices: 1).Result,
+            typeof(BadRequestObjectResult));
+
+        var detail = (DarkForceDto)((OkObjectResult)controller.GetFigure(1).Result!).Value!;
+        Assert.AreEqual(2, detail.Apprentices.Count);
+    }
+
+    [TestMethod]
     public void Sorting_UsesPowerOrTerritoryBeforePagination()
     {
         var raider = Necromancer(1, "Raider");
