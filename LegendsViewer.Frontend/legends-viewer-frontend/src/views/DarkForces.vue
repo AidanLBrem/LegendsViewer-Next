@@ -160,7 +160,7 @@
                   <v-chip v-if="event.isPrelude" size="x-small" variant="outlined">Prelude</v-chip>
                   <v-chip v-if="event.isInvasion" size="x-small" color="error" variant="tonal">Invasion</v-chip>
                 </div>
-                <div class="text-body-2">{{ event.description }}</div>
+                <div class="text-body-2" v-html="event.description"></div>
                 <div class="text-caption mt-1">
                   <router-link v-if="event.siteId !== null" :to="`/site/${event.siteId}`">
                     {{ event.siteName || 'Site' }}
