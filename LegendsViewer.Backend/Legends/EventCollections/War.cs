@@ -411,10 +411,10 @@ public class War : EventCollection, IHasComplexSubtype
         }
 
         int firstYear = Math.Max(0, StartYear - LeadUpWindowYears);
-        var attacking = AttackingParticipants.Concat(Attacker != null ? [Attacker] : Enumerable.Empty<Entity>())
-            .Distinct().ToHashSet();
-        var defending = DefendingParticipants.Concat(Defender != null ? [Defender] : Enumerable.Empty<Entity>())
-            .Distinct().ToHashSet();
+        var attacking = AttackingParticipants.ToHashSet();
+        var defending = DefendingParticipants.ToHashSet();
+        if (Attacker != null) attacking.Add(Attacker);
+        if (Defender != null) defending.Add(Defender);
 
         // A local government can change owners. Resolve membership for the
         // *year of each incident*, rather than using only its current parent.
@@ -567,7 +567,7 @@ public class War : EventCollection, IHasComplexSubtype
         if (hostileCount > 0)
             result.Context.Add(new ListItemDto
             {
-                Title = $"{hostileCount} earlier military incident(s)",
+                Title = $"{hostileCount} military incident(s) involving both sides",
                 Subtitle = "Recorded attacks, plunderings, battles or forced tribute between the factions; includes opening events when recorded."
             });
         if (diplomaticCount > 0)
