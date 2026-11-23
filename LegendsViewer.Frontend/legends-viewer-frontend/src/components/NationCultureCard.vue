@@ -10,7 +10,7 @@ const props = defineProps<{ entityId: number }>();
 const profile = ref<NationCultureProfile | null>(null);
 const loading = ref(false);
 const error = ref('');
-const windowYears = ref(100);
+const windowYears = ref(0);
 const evidenceCategory = ref('all');
 let requestNumber = 0;
 
@@ -40,15 +40,15 @@ const latestLaws = computed(() => {
 const period = computed<NationCulturePeriod | undefined>(() =>
     profile.value?.periods.find(p => p.windowYears === windowYears.value)
 );
-const rateRows = computed(() => {
+const activityRows = computed(() => {
     const p = period.value;
     if (!p) return [];
     return [
-        { title: 'Expansion', value: p.expansionPerCentury, key: 'expansionPerCentury', icon: 'mdi-map-marker-plus' },
-        { title: 'Offensive warfare', value: p.offensiveOperationsPerCentury, key: 'offensiveOperationsPerCentury', icon: 'mdi-sword-cross' },
-        { title: 'Plundering', value: p.plundersPerCentury, key: 'plundersPerCentury', icon: 'mdi-sack' },
-        { title: 'Diplomacy', value: p.diplomacyPerCentury, key: 'diplomacyPerCentury', icon: 'mdi-handshake' },
-        { title: 'Internal upheaval', value: p.upheavalsPerCentury, key: 'upheavalsPerCentury', icon: 'mdi-alert-circle-outline' },
+        { title: 'Expansion', value: p.settlementsFounded + p.conquests, key: 'expansion', icon: 'mdi-map-marker-plus' },
+        { title: 'Offensive warfare', value: p.offensiveOperations, key: 'offensiveOperations', icon: 'mdi-sword-cross' },
+        { title: 'Plundering', value: p.sitesPlundered, key: 'sitesPlundered', icon: 'mdi-sack' },
+        { title: 'Diplomacy', value: p.peaceAgreements + p.alliances, key: 'diplomacy', icon: 'mdi-handshake' },
+        { title: 'Internal upheaval', value: p.internalUpheavals, key: 'internalUpheavals', icon: 'mdi-alert-circle-outline' },
     ];
 });
 const countRows = computed(() => {
@@ -102,7 +102,6 @@ const maxTimelineValue = computed(() => Math.max(1, ...visibleTimeline.value.map
 )));
 const barHeight = (value: number) =>
     value === 0 ? '0%' : Math.max(3, Math.round(value * 100 / maxTimelineValue.value)) + '%';
-const formatRate = (number: number) => number.toLocaleString(undefined, { maximumFractionDigits: 2 });
 </script>
 
 <template>
@@ -154,17 +153,17 @@ const formatRate = (number: number) => number.toLocaleString(undefined, { maximu
                         </span>
                     </div>
                     <div class="text-caption text-medium-emphasis mb-2">
-                        Rates are recorded events per 100 observed years, not in-game personality values or 0–100 scores.
-                        Select a dimension for its calculation.
+                        Values are total recorded events during the selected period, not rates, in-game personality values or 0–100 scores.
+                        Hover over a dimension for its definition.
                     </div>
                     <v-row dense>
-                        <v-col v-for="row in rateRows" :key="row.key" cols="6" sm="4" lg>
+                        <v-col v-for="row in activityRows" :key="row.key" cols="6" sm="4" lg>
                             <v-tooltip :text="cultureDimensionDescriptions[row.key]" location="top">
                                 <template #activator="{ props: tooltipProps }">
                                     <v-sheet border rounded class="pa-3 culture-metric" v-bind="tooltipProps">
                                         <v-icon :icon="row.icon" color="primary" size="small" />
-                                        <div class="text-h6 font-weight-bold">{{ formatRate(row.value) }}</div>
-                                        <div class="text-caption">{{ row.title }} / century</div>
+                                        <div class="text-h6 font-weight-bold">{{ row.value.toLocaleString() }}</div>
+                                        <div class="text-caption">{{ row.title }}</div>
                                     </v-sheet>
                                 </template>
                             </v-tooltip>
