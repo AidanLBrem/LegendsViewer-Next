@@ -37,7 +37,7 @@ public class DarkForcesController(IWorld world) : ControllerBase
             {
                 "fallen" => n.Defeated,
                 "surviving" => !n.Defeated,
-                "deceased" => n.Status == "Deceased",
+                "deceased" => n.DefeatYear.HasValue,
                 "realm-lost" => n.Status == "Realm lost",
                 _ => true
             })).ToList();
