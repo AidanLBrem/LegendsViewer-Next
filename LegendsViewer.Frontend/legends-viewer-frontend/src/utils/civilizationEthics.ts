@@ -65,14 +65,22 @@ export interface EthicsNation {
     responses: Record<string, string>;
 }
 
-export function ethicsSource(nation: EthicsNation) {
+export function ethicsSource(nation: Pick<EthicsNation, 'race' | 'responses'>) {
     if (Object.keys(nation.responses).length) return 'World export';
     return races.includes(nation.race.toLowerCase()) ? 'Vanilla estimate' : 'Unknown';
 }
 
-function policy(nation: EthicsNation, key: string, defaults: number[]) {
+function policy(nation: Pick<EthicsNation, 'race' | 'responses'>, key: string, defaults: number[]) {
     if (ethicsSource(nation) === 'World export') return responses.indexOf(nation.responses[key]);
     return defaults[races.indexOf(nation.race.toLowerCase())] ?? -1;
+}
+
+export const practiceOptions = issues.map(([key, label]) => ({ key, label }));
+
+export function practicePolicy(nation: Pick<EthicsNation, 'race' | 'responses'>, key: string) {
+    const entry = issues.find(([token]) => token === key);
+    const index = entry ? policy(nation, key, entry[2]) : -1;
+    return { index, label: labels[index] ?? 'Unknown' };
 }
 
 export function compareEthics(nation: EthicsNation, other?: EthicsNation) {

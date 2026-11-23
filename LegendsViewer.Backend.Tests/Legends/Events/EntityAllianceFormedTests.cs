@@ -18,6 +18,23 @@ public class EntityAllianceFormedTests
     }
 
     [TestMethod]
+    public void MapIncludesBothJoiningNations()
+    {
+        using var world = new Backend.Legends.World();
+        for (int id = 0; id < 3; id++)
+            world.Entities.Add(new Entity([], world) { Id = id, IsCiv = true });
+        var alliance = new EntityAllianceFormed([
+            new Property { Name = "initiating_enid", Value = "0" },
+            new Property { Name = "joining_enid", Value = "1" },
+            new Property { Name = "joining_enid", Value = "2" }
+        ], world) { Year = 42 };
+        world.Events.Add(alliance);
+        var relations = Backend.Contracts.NationMapColorsDto.FromWorld(world).Relations;
+        CollectionAssert.AreEquivalent(new[] { 1, 2 }, relations.Where(r => r.A == 0 && r.Year == 42 && r.Kind == "alliance")
+            .Select(r => r.B).ToArray());
+    }
+
+    [TestMethod]
     public void Constructor_WithValidProperties_ParsesCorrectly()
     {
         var properties = new List<Property>

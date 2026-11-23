@@ -11,6 +11,9 @@ public class EntityAllianceFormed : WorldEvent
     public Entity? InitiatingEntity { get; set; }
     public Entity? JoiningEntity { get; set; }
 
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<Entity> JoiningEntities { get; } = [];
+
     public EntityAllianceFormed(List<Property> properties, IWorld world) : base(properties, world)
     {
         foreach (Property property in properties)
@@ -18,20 +21,24 @@ public class EntityAllianceFormed : WorldEvent
             switch (property.Name)
             {
                 case "initiating_enid": InitiatingEntity = world.GetEntity(Convert.ToInt32(property.Value)); break;
-                case "joining_enid": JoiningEntity = world.GetEntity(Convert.ToInt32(property.Value)); break;
+                case "joining_enid":
+                    JoiningEntity = world.GetEntity(Convert.ToInt32(property.Value));
+                    if (JoiningEntity != null && !JoiningEntities.Contains(JoiningEntity))
+                        JoiningEntities.Add(JoiningEntity);
+                    break;
             }
         }
 
 
         InitiatingEntity?.AddEvent(this);
-        JoiningEntity?.AddEvent(this);
+        foreach (var member in JoiningEntities) member.AddEvent(this);
     }
 
     public override string Print(bool link = true, DwarfObject? pov = null)
     {
         var sb = new StringBuilder();
         sb.Append(GetYearTime());
-        sb.Append(JoiningEntity?.ToLink(link, pov, this));
+        sb.Append(JoiningEntities.Count > 0 ? string.Join(", ", JoiningEntities.Select(e => e.ToLink(link, pov, this))) : JoiningEntity?.ToLink(link, pov, this));
         sb.Append(" swore to support ");
         sb.Append(InitiatingEntity?.ToLink(link, pov, this));
         sb.Append(" in war if the latter did likewise");
