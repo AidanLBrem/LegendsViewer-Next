@@ -465,6 +465,7 @@ public class War : EventCollection, IHasComplexSubtype
             .OrderBy(e => e.Year).ThenBy(e => e.Seconds72).ThenBy(e => e.Id).ToList();
 
         int unsupported = 0, unknownFaction = 0, otherFaction = 0, excludedAtStart = 0;
+        int inferredAffiliations = 0;
         int disputeCount = 0, hostileCount = 0, diplomaticCount = 0;
         int otherCampaigns = 0;
 
@@ -537,9 +538,17 @@ public class War : EventCollection, IHasComplexSubtype
                 }
             }
 
+            // Current parentage is not a dated historical affiliation. Mark
+            // these as possible coalition links rather than established ones.
+            bool inferred = new Entity?[] { first, second }.OfType<Entity>().Any(e =>
+                !roots.Contains(e) && !attackerPeriods.Contains(e) &&
+                !defenderPeriods.Contains(e));
+            if (inferred)
+                inferredAffiliations++;
             result.Timeline.Add(new ListItemDto
             {
-                Title = atStart ? $"War opening · {label}" : label,
+                Title = (atStart ? "War opening · " : "") +
+                    (inferred ? "Possible affiliation · " : "") + label,
                 Subtitle = incident.Print(true, this)
             });
             if (incident is SiteDispute)
@@ -605,6 +614,7 @@ public class War : EventCollection, IHasComplexSubtype
         Diagnostic("Displayed incidents", $"{result.Timeline.Count} cross-coalition events, including verified opening events.");
         Diagnostic("Unsupported event types", $"{unsupported} records do not have a supported two-party event classification.");
         Diagnostic("Unresolved faction links", $"{unknownFaction} classified records lack two identifiable opposing sides; this includes events whose XML omits faction IDs.");
+        Diagnostic("Undated group affiliations", $"{inferredAffiliations} displayed incident(s) relied on current parentage because no dated owner period was available; these are marked as possible links.");
         Diagnostic("Other or same-side records", $"{otherFaction} classified records involved the same side rather than opposing war coalitions.");
         Diagnostic("Excluded at war start", $"{excludedAtStart} events occurred after the start, were undated that year, or were opening events belonging to another war.");
         Diagnostic("Previous wars", $"{priorWars.Count} earlier completed wars found involving both coalitions.");
