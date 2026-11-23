@@ -43,7 +43,8 @@ public static class DarkForcesAnalysis
         // many thousands of sites and hundreds of necromancers.
         var sitesByNation = world.Sites.SelectMany(site =>
                 site.OwnerHistory.Where(p => p.Owner != null)
-                    .Select(p => new { Nation = p.Owner!.MapNation, Site = site }))
+                    .SelectMany(p => new[] { p.Owner!, p.Owner!.MapNation }.Distinct()
+                        .Select(root => new { Nation = root, Site = site })))
             .GroupBy(x => x.Nation)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Site).Distinct().ToList());
         var result = new List<DarkForceDto>();
@@ -56,8 +57,7 @@ public static class DarkForcesAnalysis
             bool InFaction(Entity? entity, int year)
             {
                 if (entity == null) return false;
-                return tenures.Any(t => t.Active(year) &&
-                    (entity == t.Root || entity.MapNation == t.Root));
+                return tenures.Any(t => t.Active(year) && BelongsToFaction(entity, t.Root));
             }
 
             var associatedSites = tenures.SelectMany(t =>
@@ -142,7 +142,7 @@ public static class DarkForcesAnalysis
             bool lossRecorded = annotated.Any(e => e.Source is EntityDissolved) ||
                 associatedSites.SelectMany(s => s.OwnerHistory).Any(p =>
                     p.EndYear >= 0 && tenures.Any(t =>
-                        p.Owner != null && (p.Owner == t.Root || p.Owner.MapNation == t.Root)) &&
+                        BelongsToFaction(p.Owner, t.Root)) &&
                     (p.EndCause?.Contains("taken over", StringComparison.OrdinalIgnoreCase) == true ||
                      p.EndCause?.Contains("destroy", StringComparison.OrdinalIgnoreCase) == true ||
                      p.EndCause?.Contains("conquer", StringComparison.OrdinalIgnoreCase) == true));
@@ -174,7 +174,10 @@ public static class DarkForcesAnalysis
         void Add(Entity? entity, int fromYear, int? throughYear, string evidence)
         {
             if (entity == null) return;
-            Entity root = entity.MapNation;
+            // Leadership of a local government inside an ordinary civilization
+            // does not imply command of the entire civilization.
+            Entity root = entity.IsCiv || !entity.MapNation.IsCiv
+                ? entity.MapNation : entity;
             int from = Math.Max(0, fromYear);
             int endExclusive = Math.Min(currentYear + 1,
                 throughYear.HasValue ? throughYear.Value + 1 : currentYear + 1);
@@ -201,6 +204,16 @@ public static class DarkForcesAnalysis
         return tenures.Distinct().ToList();
     }
 
+    private static bool BelongsToFaction(Entity? entity, Entity root)
+    {
+        if (entity == null) return false;
+        if (entity == root) return true;
+        // Full organizational roll-up is only appropriate for a sovereign
+        // civilization or independent non-civilization faction, never a local
+        // government nested under a third-party civilization.
+        return (root.IsCiv || !root.MapNation.IsCiv) && entity.MapNation == root;
+    }
+
     private sealed record TerritoryResult(int Peak, int? PeakYear, int Current);
 
     private static TerritoryResult CalculateTerritory(IEnumerable<Site> sites,
@@ -215,7 +228,7 @@ public static class DarkForcesAnalysis
             {
                 foreach (var tenure in tenures)
                 {
-                    if (period.Owner != tenure.Root && period.Owner!.MapNation != tenure.Root)
+                    if (!BelongsToFaction(period.Owner, tenure.Root))
                         continue;
                     int start = Math.Max(Math.Max(0, period.StartYear), tenure.Start);
                     int end = Math.Min(period.EndYear < 0 ? currentYear + 1 : period.EndYear,
