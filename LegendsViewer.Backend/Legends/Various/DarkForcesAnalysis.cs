@@ -49,13 +49,29 @@ public static class DarkForcesAnalysis
             .ToDictionary(g => g.Key, g => g.Select(x => x.Site).Distinct().ToList());
         var entitiesByNation = world.Entities.GroupBy(e => e.MapNation)
             .ToDictionary(g => g.Key, g => g.Distinct().ToList());
+        // Legends+ records present-day position assignments, sometimes without
+        // a dated appointment event in the standard Legends export. These can
+        // establish current leadership, but NOT past years of command.
+        var currentRulers = world.Entities
+            .Select(e => new
+            {
+                Entity = e,
+                Leader = e.EntityPositionAssignments
+                    .Where(a => a.PositionId >= 0)
+                    .OrderBy(a => a.PositionId).FirstOrDefault()?.HistoricalFigure
+            })
+            .Where(e => e.Leader != null)
+            .GroupBy(e => e.Leader!)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Entity).Distinct().ToList());
         var result = new List<DarkForceDto>();
         foreach (HistoricalFigure figure in world.HistoricalFigures.Where(IsNecromancer))
         {
             // Mere membership of a civilization does not mean this necromancer
             // commanded the civilization. Only founding or recorded leadership
             // grants territorial and faction-military attribution.
-            var tenures = GetTenures(figure, currentYear);
+            var tenures = GetTenures(figure, currentYear,
+                currentRulers.TryGetValue(figure, out var currentPositions)
+                    ? currentPositions : []);
             bool InFaction(Entity? entity, int year)
             {
                 if (entity == null) return false;
@@ -70,8 +86,8 @@ public static class DarkForcesAnalysis
             var involvedEntities = tenures.SelectMany(t =>
                     t.Root.IsCiv || !t.Root.MapNation.IsCiv
                         ? (entitiesByNation.TryGetValue(t.Root, out var members)
-                            ? (IEnumerable<Entity>)members : [t.Root])
-                        : [t.Root])
+                            ? (IEnumerable<Entity>)members : new[] { t.Root })
+                        : new[] { t.Root })
                 .Distinct().ToList();
             var sourceEvents = figure.Events.Concat(
                     involvedEntities.SelectMany(t => t.Events))
@@ -191,7 +207,8 @@ public static class DarkForcesAnalysis
             t.Type.Contains("necromancer", StringComparison.OrdinalIgnoreCase)) ||
         figure.Events.OfType<HfLearnsSecret>().Any(e => e.Student == figure);
 
-    private static List<Tenure> GetTenures(HistoricalFigure figure, int currentYear)
+    private static List<Tenure> GetTenures(HistoricalFigure figure, int currentYear,
+        IEnumerable<Entity> currentlyLedEntities)
     {
         var tenures = new List<Tenure>();
         void Add(Entity? entity, int fromYear, int? throughYear, string evidence)
@@ -224,6 +241,9 @@ public static class DarkForcesAnalysis
         foreach (var link in figure.RelatedEntities.Where(l =>
                      (l.Type is EntityLinkType.Position or EntityLinkType.FormerPosition) && l.PositionId == 0))
             Add(link.Entity, link.StartYear, link.EndYear < 0 ? null : link.EndYear, "Recorded position link");
+        if (figure.DeathYear < 0)
+            foreach (var entity in currentlyLedEntities)
+                Add(entity, currentYear, null, "Current leader (Legends+; start unknown)");
         return tenures.Distinct().ToList();
     }
 
