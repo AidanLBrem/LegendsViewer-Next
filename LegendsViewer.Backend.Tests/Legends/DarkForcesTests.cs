@@ -329,6 +329,88 @@ public class DarkForcesTests
     }
 
     [TestMethod]
+    public void RaisingCounts_DistinguishDistinctHistoricalFigures_RepeatedEventsAndUnknownTargets()
+    {
+        var necromancer = Necromancer(1, "Corpse Caller");
+        var other = Necromancer(2, "Other Caller");
+        var first = new HistoricalFigure([], _world.Object) { Id = 10, Name = "First Revenant" };
+        var second = new HistoricalFigure([], _world.Object) { Id = 11, Name = "Second Revenant" };
+        _figures.AddRange([first, second]);
+
+        // The revival parser links events to the victim, NOT the raiser.
+        // Records should still be attributed by the explicit Actor field.
+        var events = _world.Object.Events;
+        events.AddRange([
+            new HfRevived([], _world.Object)
+                { Id = 100, Year = 10, Actor = necromancer, HistoricalFigure = first },
+            new HfRevived([], _world.Object)
+                { Id = 101, Year = 15, Actor = necromancer, HistoricalFigure = first, RaisedBefore = true },
+            new HfDoesInteraction([], _world.Object)
+                { Id = 102, Year = 16, Doer = necromancer, Target = first, Interaction = "ANIMATE_CORPSE" },
+            new HfDoesInteraction([], _world.Object)
+                { Id = 103, Year = 17, Doer = necromancer, Target = second, Interaction = "UNDEAD_RES" },
+            new HfDoesInteraction([], _world.Object)
+                { Id = 104, Year = 18, Doer = necromancer, Interaction = "ANIMATE_CORPSE" },
+            new HfRevived([], _world.Object)
+                { Id = 105, Year = 19, HistoricalFigure = second },
+            new HfRevived([], _world.Object)
+                { Id = 106, Year = 20, Actor = necromancer, HistoricalFigure = second, Disturbance = true },
+            new HfRevived([], _world.Object)
+                { Id = 107, Year = 21, Actor = other, HistoricalFigure = second },
+            new HfDoesInteraction([], _world.Object)
+                { Id = 108, Year = 22, Doer = necromancer, Target = first, Interaction = "SECRET_OF_LIFE_AND_DEATH" },
+            new HfRevived([], _world.Object)
+                { Id = 109, Year = 51, Actor = necromancer, HistoricalFigure = second }
+        ]);
+        var analysis = DarkForcesAnalysis.Calculate(_world.Object);
+        var record = analysis.Single(x => x.FigureId == necromancer.Id);
+
+        Assert.AreEqual(2, record.HistoricalRaisedCount);
+        Assert.AreEqual(4, record.HistoricalRaiseEvents);
+        Assert.IsNull(record.NonhistoricalRaisedCount,
+            "Legends does not report the number of unnamed corpses raised.");
+        Assert.AreEqual(1, record.UnidentifiedRaiseEvents);
+        Assert.AreEqual(2, record.RaisedHistoricalFigures.Count);
+        Assert.AreEqual(10, record.RaisedHistoricalFigures.Single(x => x.FigureId == 10).FirstRaisedYear);
+        Assert.AreEqual(3, record.RaisedHistoricalFigures.Single(x => x.FigureId == 10).RecordedRaiseEvents);
+        Assert.IsTrue(record.Timeline.Any(e => e.Kind == "Raised a historical figure"),
+            "An actor-attributed HF revival must appear without being attached to the actor's Events list.");
+        Assert.AreEqual(1, analysis.Single(x => x.FigureId == other.Id).HistoricalRaisedCount);
+    }
+
+    [TestMethod]
+    public void RaisingCounts_CanSortAndSearchByHistoricalFigureName()
+    {
+        var firstNecromancer = Necromancer(1, "One");
+        var secondNecromancer = Necromancer(2, "Two");
+        var returned = new HistoricalFigure([], _world.Object) { Id = 10, Name = "Fallen Guardian" };
+        var returnedAgain = new HistoricalFigure([], _world.Object) { Id = 11, Name = "Unquiet Guardian" };
+        _figures.AddRange([returned, returnedAgain]);
+        _world.Object.Events.AddRange([
+            new HfRevived([], _world.Object)
+                { Id = 200, Year = 7, Actor = secondNecromancer, HistoricalFigure = returned },
+            new HfRevived([], _world.Object)
+                { Id = 201, Year = 8, Actor = secondNecromancer, HistoricalFigure = returnedAgain }
+        ]);
+
+        var controller = new DarkForcesController(_world.Object);
+        DarkForcesPageDto Page(ActionResult<DarkForcesPageDto> response) =>
+            (DarkForcesPageDto)((OkObjectResult)response.Result!).Value!;
+
+        var sorted = Page(controller.Get(sort: "raised", pageSize: 1));
+        Assert.AreEqual(secondNecromancer.Id, sorted.Items.Single().FigureId);
+        Assert.AreEqual(2, sorted.Items.Single().HistoricalRaisedCount);
+        Assert.AreEqual(0, sorted.Items.Single().RaisedHistoricalFigures.Count,
+            "Keep the list endpoint lightweight; the detail endpoint retains figure names.");
+        Assert.AreEqual(1, Page(controller.Get(search: "Fallen Guardian")).TotalFilteredCount);
+        Assert.AreEqual(1, Page(controller.Get(sort: "raised", direction: "asc", pageSize: 1))
+            .Items.Single().FigureId);
+
+        var detail = (DarkForceDto)((OkObjectResult)controller.GetFigure(secondNecromancer.Id).Result!).Value!;
+        Assert.AreEqual(2, detail.RaisedHistoricalFigures.Count);
+    }
+
+    [TestMethod]
     public void Sorting_UsesPowerOrTerritoryBeforePagination()
     {
         var raider = Necromancer(1, "Raider");

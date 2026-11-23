@@ -20,6 +20,13 @@ export interface DarkForceApprentice {
   firstLearnedYear: number;
 }
 
+export interface DarkForceRaisedFigure {
+  figureId: number;
+  name: string;
+  firstRaisedYear: number;
+  recordedRaiseEvents: number;
+}
+
 export interface DarkForceEvent {
   year: number;
   kind: string;
@@ -54,6 +61,11 @@ export interface DarkForce {
   apprenticeCount: number;
   apprentices: DarkForceApprentice[];
   groups: DarkForceGroup[];
+  historicalRaisedCount: number;
+  historicalRaiseEvents: number;
+  nonhistoricalRaisedCount: number | null;
+  unidentifiedRaiseEvents: number;
+  raisedHistoricalFigures: DarkForceRaisedFigure[];
 }
 
 export interface DarkForcesPage {
