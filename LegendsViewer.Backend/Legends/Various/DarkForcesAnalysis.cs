@@ -13,6 +13,8 @@ public sealed record DarkForceGroupDto(int Id, string Name, string Relationship,
 // Apprentices are people explicitly taught a dark secret by this figure,
 // not everyone who follows, serves or belongs to their faction.
 public sealed record DarkForceApprenticeDto(int FigureId, string Name, int FirstLearnedYear);
+public sealed record DarkForceRaisedFigureDto(
+    int FigureId, string Name, int FirstRaisedYear, int RecordedRaiseEvents);
 public sealed record DarkForceEventDto(
     int Year, string Kind, string Description, int? SiteId, string? SiteName,
     int? TargetEntityId, string? TargetEntityName, bool IsInvasion, bool IsPrelude,
@@ -23,7 +25,10 @@ public sealed record DarkForceDto(
     int Invasions, int Conquests, int NotableKills, int PowerIndex,
     List<DarkForceFactionDto> Factions, List<DarkForceEventDto> Timeline,
     int RecordedEvents, int? FirstInvasionYear, int ApprenticeCount,
-    List<DarkForceApprenticeDto> Apprentices, List<DarkForceGroupDto> Groups);
+    List<DarkForceApprenticeDto> Apprentices, List<DarkForceGroupDto> Groups,
+    int HistoricalRaisedCount, int HistoricalRaiseEvents,
+    int? NonhistoricalRaisedCount, int UnidentifiedRaiseEvents,
+    List<DarkForceRaisedFigureDto> RaisedHistoricalFigures);
 public sealed record DarkForcesPageDto(
     List<DarkForceDto> Items, int TotalCount, int TotalFilteredCount,
     int FallenCount, int TotalInvasions, int MaximumTerritory);
@@ -35,6 +40,12 @@ public static class DarkForcesAnalysis
     // invasion events, and distinct recorded kills (capped for readability).
     public static int PowerIndex(int peak, int conquests, int invasions, int kills) =>
         peak * 10 + conquests * 8 + invasions * 3 + Math.Min(kills, 100);
+
+    // ANIMATE and UNDEAD_RES are the explicit reanimation interactions in
+    // Legends. Other curses (SECRET, VAMPIRE, WEREBEAST) are not resurrections.
+    private static bool IsRaisingInteraction(string? interaction) =>
+        interaction?.Contains("ANIMATE", StringComparison.OrdinalIgnoreCase) == true ||
+        interaction?.Contains("UNDEAD_RES", StringComparison.OrdinalIgnoreCase) == true;
 
     private sealed record Tenure(Entity Root, int Start, int EndExclusive, string Evidence)
     {
@@ -59,6 +70,14 @@ public static class DarkForcesAnalysis
         var experimentalEvents = world.Events.OfType<HfPerformedHorribleExperiments>()
             .Where(e => e.GroupHistoricalFigure != null)
             .ToLookup(e => e.GroupHistoricalFigure!);
+        // HfRevived is attached to the victim, NOT to the actor. Index all
+        // world events once so named necromancers receive their own raises.
+        var revivalsByActor = world.Events.OfType<HfRevived>()
+            .Where(e => e.Actor != null)
+            .ToLookup(e => e.Actor!);
+        var animationsByActor = world.Events.OfType<HfDoesInteraction>()
+            .Where(e => e.Doer != null && IsRaisingInteraction(e.Interaction))
+            .ToLookup(e => e.Doer!);
         var entitiesByFaction = world.Entities.SelectMany(entity =>
                 SelfAndParents(entity).Select(root => new { Root = root, Entity = entity }))
             .GroupBy(x => x.Root)
@@ -106,7 +125,8 @@ public static class DarkForcesAnalysis
                         ? (IEnumerable<Entity>)members : new[] { t.Root })
                 .Distinct().ToList();
             var sourceEvents = figure.Events.Concat(
-                    experimentalEvents[figure]).Concat(involvedEntities.SelectMany(t => t.Events))
+                    experimentalEvents[figure]).Concat(revivalsByActor[figure])
+                .Concat(involvedEntities.SelectMany(t => t.Events))
                 .Where(e => e.Year >= 0 && e.Year <= currentYear)
                 .DistinctBy(e => e.Id)
                 .OrderBy(e => e.Year).ThenBy(e => e.Seconds72).ThenBy(e => e.Id)
@@ -124,6 +144,8 @@ public static class DarkForcesAnalysis
             {
                 var classified = incident switch
                 {
+                    HfRevived e when e.Actor == figure && !e.Disturbance =>
+                        ("Raised a historical figure", e.Site, (Entity?)null, false, "Personal"),
                     HfLearnsSecret e when e.Student == figure =>
                         ("Learned a dark secret", (Site?)null, (Entity?)null, false, "Personal"),
                     HfLearnsSecret e when e.Teacher == figure =>
@@ -194,6 +216,45 @@ public static class DarkForcesAnalysis
                 .Where(e => e.Source is SiteTakenOver && e.Site != null)
                 .DistinctBy(e => (e.Site!.Id, e.Source.Year)).Count();
             int kills = figure.NotableKills.Select(e => e.Id).Distinct().Count();
+
+            // Directly attributed necromancy only: do not count actions by an
+            // associated group, another necromancer or spontaneous revenants.
+            // A revived historical figure may be raised repeatedly, so expose
+            // both the unique-person count and recorded action count.
+            var raisingEvents = revivalsByActor[figure].Cast<WorldEvent>()
+                .Concat(figure.Events.OfType<HfRevived>()
+                    .Where(e => e.Actor == figure))
+                .Concat(animationsByActor[figure])
+                .Concat(figure.Events.OfType<HfDoesInteraction>()
+                    .Where(e => e.Doer == figure && IsRaisingInteraction(e.Interaction)))
+                .Where(e => e.Year >= 0 && e.Year <= currentYear)
+                .Where(e => e is not HfRevived r || !r.Disturbance)
+                .DistinctBy(e => e.Id)
+                .ToList();
+
+            HistoricalFigure? RaisedPerson(WorldEvent evt) => evt switch
+            {
+                HfRevived e => e.HistoricalFigure,
+                HfDoesInteraction e => e.Target,
+                _ => null
+            };
+            var knownRaises = raisingEvents.Where(e => RaisedPerson(e) != null).ToList();
+            var raisedHistorical = knownRaises
+                .GroupBy(e => RaisedPerson(e)!.Id)
+                .Select(group =>
+                {
+                    var first = group.OrderBy(e => e.Year).ThenBy(e => e.Id).First();
+                    return new DarkForceRaisedFigureDto(RaisedPerson(first)!.Id,
+                        RaisedPerson(first)!.Name, first.Year, group.Count());
+                })
+                .OrderBy(x => x.FirstRaisedYear).ThenBy(x => x.Name)
+                .ThenBy(x => x.FigureId).ToList();
+            int unidentifiedRaises = raisingEvents.Count - knownRaises.Count;
+            // Ordinary unnamed undead do not have stable historical-figure
+            // identifiers or an exported unit-count per reanimation. Null is
+            // intentional: never mistake unknown for zero. An untargeted
+            // animation event may refer to multiple, zero or unknown units.
+            int? nonhistoricalRaised = null;
             // The parser attaches HfLearnsSecret to both teacher and student.
             // Count distinct recorded students rather than the number of
             // lessons, as a student can be taught repeatedly.
@@ -254,7 +315,9 @@ public static class DarkForcesAnalysis
                 territory.Peak, territory.PeakYear, territory.Current, invasions, conquests,
                 kills, PowerIndex(territory.Peak, conquests, invasions, kills),
                 factionList, timeline.Take(300).ToList(), timeline.Count, firstInvasion,
-                apprentices.Count, apprentices, groups));
+                apprentices.Count, apprentices, groups,
+                raisedHistorical.Count, knownRaises.Count, nonhistoricalRaised,
+                unidentifiedRaises, raisedHistorical));
         }
         return result.OrderBy(r => r.FigureId).ToList();
     }
