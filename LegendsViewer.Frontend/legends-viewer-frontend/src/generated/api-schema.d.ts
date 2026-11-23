@@ -15850,6 +15850,10 @@ export interface components {
             deathsByRace?: components["schemas"]["ChartDataDto"];
             battleGraphData?: components["schemas"]["CytoscapeData"];
             readonly leadUp?: components["schemas"]["ListItemDto"][] | null;
+            readonly leadUpContext?: components["schemas"]["ListItemDto"][] | null;
+            readonly leadUpDiagnostics?: components["schemas"]["ListItemDto"][] | null;
+            /** Format: int32 */
+            readonly leadUpYears?: number;
             readonly battleList?: components["schemas"]["ListItemDto"][] | null;
             /** Format: double */
             readonly attackerToDefenderKills?: number;
