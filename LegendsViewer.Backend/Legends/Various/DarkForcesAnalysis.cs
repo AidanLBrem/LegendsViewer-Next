@@ -316,13 +316,14 @@ public static class DarkForcesAnalysis
             // Merge same-site intervals; multi-government and overlapping tenure
             // records must never count one settlement twice.
             var ordered = intervals.OrderBy(x => x.Start).ThenBy(x => x.End).ToList();
-            int? left = null, right = 0;
+            int? left = null;
+            int right = 0;
             void Emit()
             {
                 if (!left.HasValue) return;
                 change[left.Value] = change.GetValueOrDefault(left.Value) + 1;
                 change[right] = change.GetValueOrDefault(right) - 1;
-                if (left <= currentYear && right > currentYear) current++;
+                if (left.Value <= currentYear && right > currentYear) current++;
             }
             foreach (var interval in ordered)
             {
