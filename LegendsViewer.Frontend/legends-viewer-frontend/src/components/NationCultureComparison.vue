@@ -7,7 +7,7 @@ import {
 
 type RateKey = 'settlementExpansionPerCentury' | 'conquestPerCentury' | 'sitesLostInWarPerCentury' | 'offensiveOperationsPerCentury' |
     'plundersPerCentury' | 'diplomacyPerCentury' | 'upheavalsPerCentury';
-type SortKey = RateKey | 'name' | 'currentSites' | 'character';
+type SortKey = RateKey | 'name' | 'currentSites' | 'populationCount' | 'character';
 type CultureRow = NationCultureSummary & { period: NationCulturePeriod };
 
 const nations = ref<NationCultureSummary[]>([]);
@@ -31,6 +31,7 @@ const columns: { key: SortKey; title: string }[] = [
     { key: 'name', title: 'Civilization' },
     { key: 'character', title: 'Character' },
     { key: 'currentSites', title: 'Sites' },
+    { key: 'populationCount', title: 'Population' },
     ...rateColumns,
 ];
 const sort = (key: SortKey) => {
@@ -50,6 +51,12 @@ const sortedNations = computed<CultureRow[]>(() => nations.value
         if (sortKey.value === 'name') comparison = a.name.localeCompare(b.name);
         else if (sortKey.value === 'character') comparison = a.period.character.localeCompare(b.period.character);
         else if (sortKey.value === 'currentSites') comparison = a.currentSites - b.currentSites;
+        else if (sortKey.value === 'populationCount') {
+            // Missing population must not be treated as zero or reversed to first.
+            if (a.populationCount == null) return b.populationCount == null ? a.name.localeCompare(b.name) : 1;
+            if (b.populationCount == null) return -1;
+            comparison = a.populationCount - b.populationCount;
+        }
         else comparison = a.period[sortKey.value] - b.period[sortKey.value];
         return (descending.value ? -comparison : comparison) || a.name.localeCompare(b.name) || a.id - b.id;
     }));
@@ -122,6 +129,7 @@ onMounted(async () => {
                         </td>
                         <td>{{ nation.period.character }}</td>
                         <td class="text-end">{{ nation.currentSites.toLocaleString() }}</td>
+                        <td class="text-end culture-number">{{ nation.populationCount == null ? '—' : nation.populationCount.toLocaleString() }}</td>
                         <td v-for="column in rateColumns" :key="column.key" class="text-end culture-number">
                             <v-tooltip v-if="column.key === 'sitesLostInWarPerCentury'"
                                 :text="nation.period.sitesLostInWar.toLocaleString() + ' recorded wartime settlement losses in this period'">
@@ -133,7 +141,7 @@ onMounted(async () => {
                         </td>
                     </tr>
                     <tr v-if="sortedNations.length === 0">
-                        <td colspan="10" class="text-medium-emphasis">No matching civilizations.</td>
+                        <td colspan="11" class="text-medium-emphasis">No matching civilizations.</td>
                     </tr>
                 </tbody>
             </v-table>
