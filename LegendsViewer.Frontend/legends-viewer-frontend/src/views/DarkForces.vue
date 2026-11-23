@@ -194,7 +194,26 @@ import type { DarkForce, DarkForcesPage } from '../types/darkForces';
 
 const route = useRoute();
 const world = useWorldStore();
-const viewingDetail = computed(() => route.params.figureId !== undefined);
+// Vue Router returns an empty string for an omitted optional path parameter.
+// An empty ID must show the listing, not trigger a request to the collection API.
+const detailFigureId = computed(() => {
+  const raw = route.params.figureId;
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return null;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) ? id : null;
+});
+const viewingDetail = computed(() => detailFigureId.value !== null);
+
+function isDarkForce(value: unknown): value is DarkForce {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const figure = value as Partial<DarkForce>;
+  return typeof figure.figureId === 'number'
+    && typeof figure.name === 'string'
+    && typeof figure.status === 'string'
+    && typeof figure.powerIndex === 'number'
+    && Array.isArray(figure.factions)
+    && Array.isArray(figure.timeline);
+}
 const search = ref<string | null>('');
 const status = ref('all');
 const sortOrder = ref('power-desc');
@@ -240,15 +259,20 @@ watch([search, status, sortOrder, page, retry, () => world.world, viewingDetail]
   } finally { if (!controller.signal.aborted) loading.value = false; }
 }, { immediate: true });
 
-watch([() => route.params.figureId, () => world.world, retry], async (_, __, cleanup) => {
+watch([detailFigureId, () => world.world, retry], async (_, __, cleanup) => {
   const controller = new AbortController(); cleanup(() => controller.abort());
   selected.value = null; detailError.value = '';
-  if (!viewingDetail.value) return;
+  const id = detailFigureId.value;
+  if (id === null) { detailLoading.value = false; return; }
   detailLoading.value = true;
   try {
-    const response = await fetch(`${API_BASE_URL}api/dark-forces/${encodeURIComponent(String(route.params.figureId))}`, { signal: controller.signal });
+    const response = await fetch(`${API_BASE_URL}api/dark-forces/${id}`, { signal: controller.signal });
     if (!response.ok) throw new Error(response.status === 404 ? 'Necromancer not found.' : `Could not load chronicle (${response.status})`);
-    selected.value = await response.json();
+    const payload: unknown = await response.json();
+    if (!isDarkForce(payload) || payload.figureId !== id) {
+      throw new Error('Unexpected necromancer response. Check the Dark Forces API.');
+    }
+    selected.value = payload;
   } catch (e) {
     if (!controller.signal.aborted) detailError.value = e instanceof Error ? e.message : 'Could not load chronicle';
   } finally { if (!controller.signal.aborted) detailLoading.value = false; }
