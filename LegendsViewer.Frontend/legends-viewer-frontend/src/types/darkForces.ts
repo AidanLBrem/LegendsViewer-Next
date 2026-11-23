@@ -6,6 +6,14 @@ export interface DarkForceFaction {
   evidence: string;
 }
 
+export interface DarkForceGroup {
+  id: number;
+  name: string;
+  relationship: string;
+  holdingId: number | null;
+  holdingName: string | null;
+}
+
 export interface DarkForceApprentice {
   figureId: number;
   name: string;
@@ -45,6 +53,7 @@ export interface DarkForce {
   firstInvasionYear: number | null;
   apprenticeCount: number;
   apprentices: DarkForceApprentice[];
+  groups: DarkForceGroup[];
 }
 
 export interface DarkForcesPage {
