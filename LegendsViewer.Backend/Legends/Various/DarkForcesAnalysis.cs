@@ -39,6 +39,13 @@ public static class DarkForcesAnalysis
     public static List<DarkForceDto> Calculate(IWorld world)
     {
         int currentYear = Math.Max(0, world.CurrentYear);
+        // Index candidate settlements once. Large Legends exports can contain
+        // many thousands of sites and hundreds of necromancers.
+        var sitesByNation = world.Sites.SelectMany(site =>
+                site.OwnerHistory.Where(p => p.Owner != null)
+                    .Select(p => new { Nation = p.Owner!.MapNation, Site = site }))
+            .GroupBy(x => x.Nation)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Site).Distinct().ToList());
         var result = new List<DarkForceDto>();
         foreach (HistoricalFigure figure in world.HistoricalFigures.Where(IsNecromancer))
         {
@@ -53,7 +60,11 @@ public static class DarkForcesAnalysis
                     (entity == t.Root || entity.MapNation == t.Root));
             }
 
-            var territory = CalculateTerritory(world.Sites, tenures, currentYear);
+            var associatedSites = tenures.SelectMany(t =>
+                    sitesByNation.TryGetValue(t.Root, out var sites)
+                        ? (IEnumerable<Site>)sites : Enumerable.Empty<Site>())
+                .Distinct().ToList();
+            var territory = CalculateTerritory(associatedSites, tenures, currentYear);
             var sourceEvents = figure.Events.Concat(
                     tenures.SelectMany(t => t.Root.Events))
                 .Where(e => e.Year >= 0 && e.Year <= currentYear)
@@ -129,7 +140,7 @@ public static class DarkForcesAnalysis
             // establish that an army defeated them. Surviving figures whose
             // settlements vanished are only marked fallen with recorded loss.
             bool lossRecorded = annotated.Any(e => e.Source is EntityDissolved) ||
-                world.Sites.SelectMany(s => s.OwnerHistory).Any(p =>
+                associatedSites.SelectMany(s => s.OwnerHistory).Any(p =>
                     p.EndYear >= 0 && tenures.Any(t =>
                         p.Owner != null && (p.Owner == t.Root || p.Owner.MapNation == t.Root)) &&
                     (p.EndCause?.Contains("taken over", StringComparison.OrdinalIgnoreCase) == true ||
@@ -185,7 +196,7 @@ public static class DarkForcesAnalysis
             if (position.PositionId == 0)
                 Add(position.Entity, position.StartYear ?? 0, position.EndYear, "Recorded leadership");
         foreach (var link in figure.RelatedEntities.Where(l =>
-                     l.Type is EntityLinkType.Position or EntityLinkType.FormerPosition && l.PositionId == 0))
+                     (l.Type is EntityLinkType.Position or EntityLinkType.FormerPosition) && l.PositionId == 0))
             Add(link.Entity, link.StartYear, link.EndYear < 0 ? null : link.EndYear, "Recorded position link");
         return tenures.Distinct().ToList();
     }
