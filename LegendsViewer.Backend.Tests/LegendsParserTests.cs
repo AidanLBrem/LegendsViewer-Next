@@ -7,6 +7,28 @@ namespace LegendsViewer.Backend.Tests;
 public class LegendsParserTests
 {
     [TestMethod]
+    public async Task LoadsEthicsForMatchingExportAndEntity()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var xml = Path.Combine(directory.FullName, "world-00005-01-01-legends.xml");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "TestData", "Xah_Atho-00005-01-01-legends.xml"), xml);
+            File.WriteAllText(Path.Combine(directory.FullName, "world-00005-01-01-civ-ethics.tsv"),
+                "entity_id\tethic\tresponse\n0\tSLAVERY\tPUNISH_EXILE\n");
+            using var world = new World();
+            await world.ParseAsync(xml, null, null, null, null);
+            Assert.AreEqual("PUNISH_EXILE", world.GetEntity(0)!.ExportedEthics["SLAVERY"]);
+            Assert.AreEqual(0, world.GetEntity(1)!.ExportedEthics.Count);
+        }
+        finally
+        {
+            directory.Delete(true);
+        }
+    }
+
+    [TestMethod]
     public async Task Test_ParseLegendsXmlFile_Success()
     {
         // Arrange

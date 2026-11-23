@@ -13,6 +13,7 @@ public class EntityLaw : WorldEvent
     public HistoricalFigure? HistoricalFigure { get; set; }
     public EntityLawType Law { get; set; }
     public bool LawLaid { get; set; }
+    public string LawName => Law == EntityLawType.Harsh ? "Harsh edicts" : _unknownLawType ?? "Unspecified law";
     private readonly string? _unknownLawType;
 
     public EntityLaw(List<Property> properties, IWorld world)

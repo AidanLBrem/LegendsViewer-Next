@@ -49,6 +49,9 @@ export interface NationCultureProfile {
     currentYear: number;
     character: string;
     worshippedDeities: number;
+    lawHistory: { id: number; year: number; law: string; enacted: boolean; figureId: number | null; figureName: string | null }[];
+    occasions: { id: number; name: string; activities: string[] }[];
+    deities: { id: number; name: string }[];
     intrinsicValuesAvailable: boolean;
     intrinsicValuesNote: string;
     periods: NationCulturePeriod[];
