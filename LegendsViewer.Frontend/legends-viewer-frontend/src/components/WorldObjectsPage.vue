@@ -27,7 +27,7 @@
             </v-card>
         </v-col>
     </v-row>
-    <v-row>
+    <v-row v-if="$slots['type-specific-before-table']">
         <slot name="type-specific-before-table"></slot>
     </v-row>
     <v-row>
