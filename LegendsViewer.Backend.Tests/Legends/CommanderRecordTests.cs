@@ -115,6 +115,39 @@ public class CommanderRecordTests
     }
 
     [TestMethod]
+    public void ExistingExportsUseVanillaSizesWithoutMixingRatingSources()
+    {
+        using World world = new();
+        var dwarf = new LegendsViewer.Backend.Legends.Various.CreatureInfo("DWARF") { NativeCombatRating = 17 };
+        var troll = new LegendsViewer.Backend.Legends.Various.CreatureInfo("troll");
+        Battle battle = new([], world) { Outcome = BattleOutcome.AttackerWon };
+        battle.AttackerSquads.Add(new(dwarf, 100, 0, 0, 0));
+        battle.DefenderSquads.Add(new(troll, 50, 0, 0, 0));
+        CommanderRecord attacker = new(1, "Attacker");
+        attacker.AddBattle(battle, true);
+        Assert.AreEqual("body-size", attacker.Battles[0].OddsBasis);
+        Assert.AreEqual(120000d, attacker.Battles[0].OwnEffectiveStrength!.Value);
+        Assert.AreEqual(250000d, attacker.Battles[0].EnemyEffectiveStrength!.Value);
+        Assert.AreEqual(1, attacker.Outnumbered.Wins);
+
+        troll.NativeCombatRating = 20;
+        attacker.AddBattle(battle, true);
+        Assert.AreEqual("native", attacker.Battles[1].OddsBasis);
+        Assert.AreEqual(1700d, attacker.Battles[1].OwnEffectiveStrength!.Value);
+
+        troll.NativeCombatRating = null;
+        troll.AdultBodySize = 60000;
+        attacker.AddBattle(battle, true);
+        Assert.AreEqual(60000d, attacker.Battles[2].EnemyEffectiveStrength!.Value);
+        Assert.AreEqual(1, attacker.Favored.Wins);
+
+        battle.DefenderSquads[0].Race = new("unknown_modded_race");
+        attacker.AddBattle(battle, true);
+        Assert.AreEqual("numerical", attacker.Battles[3].OddsBasis);
+        Assert.IsNull(attacker.Battles[3].OwnEffectiveStrength);
+    }
+
+    [TestMethod]
     public void LargerBattlesCarryMoreWeightForWinsAndLosses()
     {
         using World world = new();
