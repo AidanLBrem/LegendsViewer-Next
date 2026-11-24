@@ -221,6 +221,42 @@ public class DarkForcesTests
     }
 
     [TestMethod]
+    public void Founder_FormerPositionEndsControlWithoutRemovingOtherOffices()
+    {
+        var figure = Necromancer(1, "Vex");
+        var former = Faction(10, "Former tower");
+        var current = Faction(11, "New tower");
+        figure.Events.Add(new EntityCreated([], _world.Object)
+            { Creator = figure, Entity = former, Year = 5 });
+        figure.RelatedEntities.Add(new EntityLink([], _world.Object)
+            { Entity = former, Type = EntityLinkType.FormerPosition, PositionId = 0, StartYear = 5, EndYear = 20 });
+        figure.StartPositionAssignment(current, 25, 0, "Leader");
+        var oldSite = Settlement(100);
+        oldSite.OwnerHistory.Add(new OwnerPeriod(oldSite, former, 5, "founded"));
+        var newSite = Settlement(101);
+        newSite.OwnerHistory.Add(new OwnerPeriod(newSite, current, 25, "founded"));
+
+        var result = DarkForcesAnalysis.Calculate(_world.Object).Single();
+        Assert.AreEqual(1, result.CurrentSettlements);
+        Assert.AreEqual(1, result.PeakSettlements);
+    }
+
+    [TestMethod]
+    public void CurrentAssignment_DeputyAloneDoesNotBecomeRuler()
+    {
+        var figure = Necromancer(1, "Deputy");
+        var tower = Faction(10, "Tower");
+        tower.EntityPositionAssignments.Add(new EntityPositionAssignment([], _world.Object)
+            { PositionId = 1, HistoricalFigure = figure });
+        var site = Settlement(100);
+        site.OwnerHistory.Add(new OwnerPeriod(site, tower, 5, "founded"));
+
+        var result = DarkForcesAnalysis.Calculate(_world.Object).Single();
+        Assert.AreEqual(0, result.CurrentSettlements);
+        Assert.AreEqual(0, result.Factions.Count);
+    }
+
+    [TestMethod]
     public void Chronicle_SeparatesPersonalAssaultFromFactionInvasion()
     {
         var figure = Necromancer(1, "Vex");
