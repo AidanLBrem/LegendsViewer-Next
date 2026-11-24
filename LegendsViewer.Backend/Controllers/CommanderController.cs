@@ -94,14 +94,23 @@ public record CommanderRecord(int Id, string Name)
 
         int own = attacking ? battle.AttackerCount : battle.DefenderCount;
         int enemy = attacking ? battle.DefenderCount : battle.AttackerCount;
+        // Only compare native ratings when both armies have complete coverage.
+        // Historical figures use their adult caste rating as a proxy, not their
+        // individual combat rating. Animated or transformed troops are unsupported.
+        double? ownStrength = Strength(battle, attacking);
+        double? enemyStrength = Strength(battle, !attacking);
+        bool weighted = ownStrength > 0 && enemyStrength > 0;
+        double ownOdds = weighted ? ownStrength!.Value : own;
+        double enemyOdds = weighted ? enemyStrength!.Value : enemy;
         Battles.Add(new CommandedBattle(battle.Id, battle.Name, battle.StartYear,
             attacking ? "Attacker" : "Defender", decided ? (won ? "Victory" : "Loss") : "Unknown",
             own, enemy, enemyDeaths, ownDeaths,
             DescribeTroops(attacking ? battle.Attackers : battle.Defenders),
-            DescribeTroops(attacking ? battle.Defenders : battle.Attackers)));
+            DescribeTroops(attacking ? battle.Defenders : battle.Attackers),
+            weighted ? ownStrength : null, weighted ? enemyStrength : null));
         if (own <= 0 || enemy <= 0) return;
 
-        var matchup = enemy >= 2L * own ? Outnumbered : own >= 2L * enemy ? Favored : NearPeer;
+        var matchup = enemyOdds >= 2 * ownOdds ? Outnumbered : ownOdds >= 2 * enemyOdds ? Favored : NearPeer;
         matchup.Battles++;
         if (won) matchup.Wins++;
         if (!decided) return;
@@ -109,8 +118,30 @@ public record CommanderRecord(int Id, string Name)
         RatedBattles++;
         double totalTroops = (double)own + enemy;
         double weight = Math.Sqrt(totalTroops / 100d);
-        _weightedWinsAboveExpected += weight * ((won ? 1 : 0) - own / totalTroops);
+        _weightedWinsAboveExpected += weight * ((won ? 1 : 0) - ownOdds / (ownOdds + enemyOdds));
         _totalBattleWeight += weight;
+    }
+
+    private static double? Strength(Battle battle, bool attacking)
+    {
+        double total = 0;
+        foreach (var squad in attacking ? battle.AttackerSquads : battle.DefenderSquads)
+        {
+            if (squad.Numbers <= 0) continue;
+            if (squad.Animated || squad.Race?.NativeCombatRating is not int rating || rating <= 0)
+                return null;
+            total += (double)squad.Numbers * rating;
+        }
+        foreach (var figure in (attacking ? battle.NotableAttackers : battle.NotableDefenders).Distinct())
+        {
+            if (figure.CreatureTypes.Count > 0 || figure.UndeadTypes.Count > 0 ||
+                !string.IsNullOrEmpty(figure.PreviousRace) ||
+                !string.IsNullOrEmpty(figure.AnimatedType) ||
+                figure.Race?.NativeCombatRating is not int rating || rating <= 0)
+                return null;
+            total += rating;
+        }
+        return total;
     }
 
     private static string DescribeTroops(List<Battle.Squad> squads) =>
@@ -119,7 +150,8 @@ public record CommanderRecord(int Id, string Name)
 }
 
 public record CommandedBattle(int Id, string Name, int Year, string Side, string Outcome,
-    int OwnTroops, int EnemyTroops, int OwnKills, int EnemyKills, string OwnComposition, string EnemyComposition);
+    int OwnTroops, int EnemyTroops, int OwnKills, int EnemyKills, string OwnComposition, string EnemyComposition,
+    double? OwnEffectiveStrength = null, double? EnemyEffectiveStrength = null);
 
 public class MatchupRecord
 {

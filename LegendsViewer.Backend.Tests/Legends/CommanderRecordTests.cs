@@ -86,6 +86,35 @@ public class CommanderRecordTests
     }
 
     [TestMethod]
+    public void NativeRatingsReverseNumericalOddsAndRequireCompleteCoverage()
+    {
+        using World world = new();
+        var strong = new LegendsViewer.Backend.Legends.Various.CreatureInfo("strong") { NativeCombatRating = 10 };
+        var weak = new LegendsViewer.Backend.Legends.Various.CreatureInfo("weak") { NativeCombatRating = 2 };
+        Battle battle = new([], world) { Outcome = BattleOutcome.AttackerWon };
+        battle.AttackerSquads.Add(new(strong, 10, 0, 0, 0));
+        battle.DefenderSquads.Add(new(weak, 25, 0, 0, 0));
+        CommanderRecord attacker = new(1, "Attacker");
+        CommanderRecord defender = new(2, "Defender");
+        attacker.AddBattle(battle, true);
+        defender.AddBattle(battle, false);
+        Assert.AreEqual(100d, attacker.Battles[0].OwnEffectiveStrength!.Value);
+        Assert.AreEqual(50d, attacker.Battles[0].EnemyEffectiveStrength!.Value);
+        Assert.AreEqual(1, attacker.Favored.Wins);
+        Assert.AreEqual(1, defender.Outnumbered.Battles);
+        double weight = Math.Sqrt(0.35);
+        Assert.AreEqual(100 * weight / 3 / (weight + 3) / 11, attacker.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(-attacker.CommandScore.Value, defender.CommandScore!.Value, 0.00001);
+
+        weak.NativeCombatRating = null;
+        CommanderRecord fallback = new(3, "Fallback");
+        fallback.AddBattle(battle, true);
+        Assert.IsNull(fallback.Battles[0].OwnEffectiveStrength);
+        Assert.IsNull(fallback.Battles[0].EnemyEffectiveStrength);
+        Assert.AreEqual(1, fallback.Outnumbered.Wins);
+    }
+
+    [TestMethod]
     public void LargerBattlesCarryMoreWeightForWinsAndLosses()
     {
         using World world = new();

@@ -9,6 +9,9 @@ public class CreatureInfo
     public static readonly CreatureInfo Unknown = new("UNKNOWN");
     public string Id { get; set; } = string.Empty;
 
+    // Optional native adult caste rating; export only when all relevant castes agree.
+    public int? NativeCombatRating { get; set; }
+
     public string NameSingular { get; set; } = string.Empty;
     public string NamePlural { get; set; } = string.Empty;
 
@@ -19,6 +22,9 @@ public class CreatureInfo
             switch (property.Name)
             {
                 case "creature_id": Id = string.Intern(property.Value); break;
+                case "native_combat_rating":
+                    NativeCombatRating = int.TryParse(property.Value, out int rating) && rating > 0 ? rating : null;
+                    break;
                 case "name_singular": NameSingular = string.Intern(Formatting.FormatRace(property.Value)); break;
                 case "name_plural": NamePlural = string.Intern(Formatting.FormatRace(property.Value)); break;
                 // TODO read the other properties and use them
