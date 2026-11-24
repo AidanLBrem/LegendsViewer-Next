@@ -112,7 +112,7 @@
                             {{ typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 3, minimumSignificantDigits: 1 }) + ' : 1' : '—' }}
                         </template>
                         <template v-slot:item.armyStrengthBasis="{ value }">
-                            {{ value === 'native' ? 'Native' : value === 'body-size' ? 'Body size' : value === 'numerical' ? 'Numerical fallback' : '—' }}
+                            {{ value === 'native' ? 'Native' : value === 'body-size-undead' ? 'Body size (undead modifiers unknown)' : value === 'body-size' ? 'Body size' : value === 'numerical' ? 'Numerical fallback' : '—' }}
                         </template>
                         <template v-slot:item.populationCount="{ value }">
                             {{ typeof value === "number" ? value.toLocaleString() : "—" }}
