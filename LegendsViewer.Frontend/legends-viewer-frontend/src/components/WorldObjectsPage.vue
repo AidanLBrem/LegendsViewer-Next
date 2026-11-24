@@ -88,6 +88,7 @@
                         </span>
                         <span v-else>
                             Troop figures are the forces initially fielded in each battle, before casualties.
+                            Strength is based on native ratings, body-size estimates, or troop counts (numerical fallback). Compare strength values within the same calculation basis.
                         </span>
                     </div>
                     <v-data-table-server v-model:items-per-page="store.objectsPerPage"
@@ -100,6 +101,18 @@
                         </template>
                         <template v-slot:item.subtype="{ value }">
                             <span v-html="value"></span>
+                        </template>
+                        <template v-slot:item.attackerArmyStrength="{ value }">
+                            {{ typeof value === 'number' ? value.toLocaleString() : '—' }}
+                        </template>
+                        <template v-slot:item.defenderArmyStrength="{ value }">
+                            {{ typeof value === 'number' ? value.toLocaleString() : '—' }}
+                        </template>
+                        <template v-slot:item.armyStrengthRatio="{ value }">
+                            {{ typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 3, minimumSignificantDigits: 1 }) + ' : 1' : '—' }}
+                        </template>
+                        <template v-slot:item.armyStrengthBasis="{ value }">
+                            {{ value === 'native' ? 'Native' : value === 'body-size' ? 'Body size' : value === 'numerical' ? 'Numerical fallback' : '—' }}
                         </template>
                         <template v-slot:item.populationCount="{ value }">
                             {{ typeof value === "number" ? value.toLocaleString() : "—" }}
