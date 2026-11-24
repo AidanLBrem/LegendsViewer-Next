@@ -109,7 +109,7 @@ public class Battle : EventCollection, IHasComplexSubtype
         void Add(CreatureInfo? race, int count, bool animated, bool transformed)
         {
             if (count <= 0) return;
-            int? rating = transformed || (native && animated) ? null :
+            int? rating = native && (transformed || animated) ? null :
                 native ? race?.NativeCombatRating : race?.EstimatedCombatRating;
             combatants += count;
             if (rating is not > 0)
