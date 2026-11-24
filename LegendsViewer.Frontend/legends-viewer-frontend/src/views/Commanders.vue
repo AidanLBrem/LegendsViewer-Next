@@ -5,14 +5,15 @@
     <details class="mb-4">
       <summary>How the command score and K/D are calculated</summary>
       <p>Each battle earns its result (1 for a win, 0 for a loss) minus its expected win chance (own starting troops / total starting troops). Multiply by the square root of total starting troops / 100. A 400-troop battle carries twice the weight of a 100-troop battle.</p>
-      <p>Command score = 100 × sum of weighted results above expectation / (sum of battle weights + 3). The extra 3 pulls short records toward zero and carries the weight of three 100-troop battles.</p>
+      <p>Battle performance = 100 × sum of weighted results above expectation / (sum of battle weights + 3). The extra 3 pulls short records toward zero and carries the weight of three 100-troop battles.</p>
+      <p>Command score = battle performance × rated battles / (rated battles + 10). This confidence adjustment rewards sustained performance and pulls short records toward zero. Experience counts all linked battles; only rated battles contribute to confidence.</p>
       <p>The score uses battles with a recorded winner and positive starting counts on both sides. The estimate uses troop numbers alone. Win % includes all decided battles. K/D divides total enemy deaths by own-side deaths across commanded battles. ∞ means kills with zero own deaths, and — means neither side recorded a death.</p>
     </details>
     <v-alert v-if="error" type="error">
       {{ error }} <v-btn variant="text" @click="retry++">Retry</v-btn>
     </v-alert>
     <v-data-table v-else class="commander-table" show-expand :item-value="(item: Commander) => String(item.id)" v-model:expanded="expanded" fixed-header height="min(64vh, 640px)" :headers="headers" :items="commanders" :loading="loading"
-      :sort-by="[{ key: 'victories', order: 'desc' }]" :items-per-page="25"
+      :sort-by="[{ key: 'commandScore', order: 'desc' }]" :items-per-page="25"
       no-data-text="No battle commanders were recorded in this world.">
       <template #item.data-table-expand="{ item, internalItem, isExpanded, toggleExpand }">
         <v-btn :icon="isExpanded(internalItem) ? 'mdi-chevron-up' : 'mdi-chevron-down'"
@@ -51,6 +52,9 @@
       <template #item.commandScore="{ item }">
         {{ item.commandScore?.toLocaleString(undefined, { maximumFractionDigits: 1, signDisplay: 'exceptZero' }) ?? '—' }}
       </template>
+      <template #item.battlePerformance="{ item }">
+        {{ item.battlePerformance?.toLocaleString(undefined, { maximumFractionDigits: 1, signDisplay: 'exceptZero' }) ?? '—' }}
+      </template>
       <template #item.killDeathRatio="{ item }">
         {{ item.ownDeaths ? (item.enemiesKilled / item.ownDeaths).toFixed(2) : item.enemiesKilled ? '∞' : '—' }}
       </template>
@@ -75,6 +79,8 @@ interface Commander {
   enemiesKilled: number;
   ownDeaths: number;
   commandScore: number | null;
+  battlePerformance: number | null;
+  experience: number;
   ratedBattles: number;
   battles: CommandedBattle[];
   outnumbered: Matchup;
@@ -111,6 +117,8 @@ const headers = [
   { title: '', key: 'data-table-expand', width: 48, sortable: false },
   { title: 'Commander', key: 'name', width: 216 },
   { title: 'Command score', key: 'commandScore', width: 128 },
+  { title: 'Battle performance', key: 'battlePerformance', width: 144 },
+  { title: 'Experience', key: 'experience', width: 104 },
   { title: 'Rated battles', key: 'ratedBattles', width: 104 },
   { title: 'Victories', key: 'victories', width: 96 },
   { title: 'Losses', key: 'losses', width: 84 },
@@ -151,7 +159,7 @@ watch([() => world.world, retry], async (_, __, cleanup) => {
 <style scoped>
 .commander-table :deep(.v-table__wrapper > table) {
   table-layout: fixed;
-  width: 1454px;
+  width: 1702px;
 }
 .commander-table :deep(td) {
   overflow-wrap: anywhere;

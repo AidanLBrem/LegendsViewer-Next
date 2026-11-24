@@ -66,8 +66,10 @@ public class CommanderRecordTests
         Assert.AreEqual(1, defender.Favored.Battles);
         Assert.AreEqual(0, defender.Favored.Wins);
         double expectedScore = 100 * Math.Sqrt(0.3) * (2d / 3) / (Math.Sqrt(0.3) + 3);
-        Assert.AreEqual(expectedScore, attacker.CommandScore!.Value, 0.00001);
-        Assert.AreEqual(-expectedScore, defender.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(expectedScore, attacker.BattlePerformance!.Value, 0.00001);
+        Assert.AreEqual(expectedScore / 11, attacker.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(-expectedScore, defender.BattlePerformance!.Value, 0.00001);
+        Assert.AreEqual(-expectedScore / 11, defender.CommandScore!.Value, 0.00001);
         Assert.AreEqual(0L, attacker.OwnDeaths);
         Assert.AreEqual(8L, defender.OwnDeaths);
 
@@ -104,8 +106,33 @@ public class CommanderRecordTests
         defender.AddBattle(battle, false);
 
         // Both went 1-1 at even odds. The 400-troop battle counts twice as much.
-        Assert.AreEqual(100d / 12, attacker.CommandScore!.Value, 0.00001);
-        Assert.AreEqual(-100d / 12, defender.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(100d / 12, attacker.BattlePerformance!.Value, 0.00001);
+        Assert.AreEqual(-100d / 12, defender.BattlePerformance!.Value, 0.00001);
         Assert.AreEqual(2, attacker.RatedBattles);
+        Assert.AreEqual(100d / 72, attacker.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(-100d / 72, defender.CommandScore!.Value, 0.00001);
+    }
+    [TestMethod]
+    public void ExperienceRewardsSustainedPerformanceAndExcludesUnratedBattles()
+    {
+        using World world = new();
+        Battle battle = new([], world) { Outcome = BattleOutcome.AttackerWon };
+        battle.AttackerSquads.Add(new(null!, 50, 0, 0, 0));
+        battle.DefenderSquads.Add(new(null!, 50, 0, 0, 0));
+        CommanderRecord newcomer = new(1, "Newcomer");
+        CommanderRecord veteran = new(2, "Veteran");
+        for (int i = 0; i < 3; i++) newcomer.AddBattle(battle, true);
+        for (int i = 0; i < 40; i++) veteran.AddBattle(battle, true);
+
+        Assert.AreEqual(newcomer.BattlePerformance!.Value * 3 / 13, newcomer.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(veteran.BattlePerformance!.Value * 40 / 50, veteran.CommandScore!.Value, 0.00001);
+        Assert.IsTrue(veteran.CommandScore > newcomer.CommandScore);
+        var score = newcomer.CommandScore;
+        battle.Outcome = BattleOutcome.Unknown;
+        newcomer.AddBattle(battle, true);
+        Assert.AreEqual(4, newcomer.Experience);
+        Assert.AreEqual(3, newcomer.RatedBattles);
+        Assert.AreEqual(score, newcomer.CommandScore);
+        Assert.IsNull(new CommanderRecord(3, "Unrated").CommandScore);
     }
 }
