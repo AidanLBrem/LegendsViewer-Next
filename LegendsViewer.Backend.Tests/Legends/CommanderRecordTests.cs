@@ -33,6 +33,14 @@ public class CommanderRecordTests
 
         var records = new CommanderController(world).Get().ToDictionary(r => r.Id);
         Assert.AreEqual(3, records.Count);
+        var defense = records[second.Id].Battles.Single();
+        Assert.AreEqual(20, defense.Id);
+        Assert.AreEqual("Victory", defense.Outcome);
+        Assert.AreEqual(12, defense.OwnKills);
+        Assert.AreEqual(3, defense.EnemyKills);
+        Assert.AreEqual(1, defense.EnemyTroops);
+        Assert.AreEqual("Unknown", records[first.Id].Battles.Single(b => b.Id == 21).Outcome);
+        Assert.AreEqual(0, records[third.Id].Battles.Count);
         Assert.AreEqual(1, records[first.Id].Losses);
         Assert.AreEqual(0d, records[first.Id].WinPercentage!.Value);
         Assert.AreEqual(8L, records[first.Id].EnemiesKilled);
