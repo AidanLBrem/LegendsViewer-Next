@@ -90,4 +90,29 @@ public class EntityOverthrownTests
         Assert.IsTrue(result.Contains("General"));
         Assert.IsTrue(result.Contains("assumed control"));
     }
+    [TestMethod]
+    public void Coup_EndsOnlyDeposedOffice_AndReconcilesLateHistory()
+    {
+        var entity = new Entity([], _mockWorld.Object) { Id = 1 };
+        var ruler = new HistoricalFigure { Id = 2 };
+        var successor = new HistoricalFigure { Id = 3 };
+        _mockWorld.Setup(w => w.GetEntity(1)).Returns(entity);
+        _mockWorld.Setup(w => w.GetHistoricalFigure(2)).Returns(ruler);
+        _mockWorld.Setup(w => w.GetHistoricalFigure(3)).Returns(successor);
+        ruler.StartPositionAssignment(entity, 10, 7, "Law Giver");
+        ruler.StartPositionAssignment(entity, 12, 8, "General");
+        successor.StartPositionAssignment(entity, 20, 7, "Law Giver");
+        var evt = new EntityOverthrown([
+            new Property { Name = "year", Value = "20" },
+            new Property { Name = "entity_id", Value = "1" },
+            new Property { Name = "position_profile_id", Value = "7" },
+            new Property { Name = "overthrown_hfid", Value = "2" },
+            new Property { Name = "pos_taker_hfid", Value = "3" }
+        ], _mockWorld.Object);
+        Assert.AreEqual(evt.Year, ruler.Positions!.Single(p => p.PositionId == 7).EndYear);
+        Assert.IsNull(ruler.Positions!.Single(p => p.PositionId == 8).EndYear);
+        Assert.IsNull(successor.Positions!.Single().EndYear);
+        ruler.StartPositionAssignment(entity, 11, 7, "Law Giver");
+        Assert.AreEqual(evt.Year, ruler.Positions!.Single(p => p.StartYear == 11).EndYear);
+    }
 }
