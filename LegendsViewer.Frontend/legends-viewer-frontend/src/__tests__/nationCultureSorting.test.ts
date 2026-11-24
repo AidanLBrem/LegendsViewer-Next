@@ -8,7 +8,7 @@ it('sorts both ways from every comparison header, using numeric rates', async ()
     const rates = ['settlementExpansionPerCentury', 'conquestPerCentury', 'sitesLostInWarPerCentury',
         'offensiveOperationsPerCentury', 'plundersPerCentury', 'diplomacyPerCentury', 'upheavalsPerCentury'];
     const nations = ['Beryl', 'Amber'].map((name, id) => ({
-        name, id, race: 'dwarves', currentSites: id ? 12 : 2,
+        name, id, race: 'dwarves', currentSites: id ? 12 : 2, populationCount: id ? 120 : 2,
         periods: [{ windowYears: 100, character: id ? 'Mixed' : 'Defensive', sitesLostInWar: 0,
             ...Object.fromEntries(rates.map((key, index) => [key, (index + id) % 2 ? 12 : 2])) }]
     }));
@@ -24,10 +24,10 @@ it('sorts both ways from every comparison header, using numeric rates', async ()
     } });
     await flushPromises();
     const buttons = wrapper.findAll('th button');
-    expect(buttons).toHaveLength(10);
+    expect(buttons).toHaveLength(11);
     for (const [index, button] of buttons.entries()) {
         await button.trigger('click');
-        const firstAscending = ['Amber', 'Beryl', 'Beryl', 'Beryl', 'Amber', 'Beryl', 'Amber', 'Beryl', 'Amber', 'Beryl'][index];
+        const firstAscending = ['Amber', 'Beryl', 'Beryl', 'Beryl', 'Beryl', 'Amber', 'Beryl', 'Amber', 'Beryl', 'Amber', 'Beryl'][index];
         const firstDescending = firstAscending === 'Amber' ? 'Beryl' : 'Amber';
         const firstDirection = index < 2 ? 'ascending' : 'descending';
         expect(button.element.parentElement?.getAttribute('aria-sort')).toBe(firstDirection);
