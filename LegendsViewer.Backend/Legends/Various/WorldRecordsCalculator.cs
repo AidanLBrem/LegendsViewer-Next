@@ -26,7 +26,12 @@ public static class WorldRecordsCalculator
                 CalculateTopSlayers(world),
                 CalculateBloodiestBattles(world),
                 CalculateFiercestDuelists(world),
-                CalculateDevastatingRampages(world)
+                CalculateDevastatingRampages(world),
+                CalculateCreatureRecord(world, "native_combat", "Most Combat-Capable Beings (Native Caste Rating)", true),
+                CalculateCreatureRecord(world, "largest_beings", "Largest Beings (Adult Body Size)", false),
+                CalculateCreatureRecord(world, "strongest_forgotten_beasts", "Strongest Forgotten Beasts (Native Caste Rating)", true, "FORGOTTEN_BEAST"),
+                CalculateCreatureRecord(world, "strongest_demons", "Strongest Demons (Native Caste Rating)", true, "DEMON"),
+                CalculateCreatureRecord(world, "strongest_titans", "Strongest Titans (Native Caste Rating)", true, "TITAN")
             ]
         };
 
@@ -176,6 +181,36 @@ public static class WorldRecordsCalculator
         }
 
         return highlights;
+    }
+
+    private static RecordCardDto CalculateCreatureRecord(World world, string id, string title, bool native, string? prefix = null)
+    {
+        var card = new RecordCardDto
+        {
+            Id = id, Title = title, Icon = native ? "mdi-sword-cross" : "mdi-ruler",
+            MetricName = native ? "Native caste strength (not individual skill)" : "Adult caste body size (cm³)"
+        };
+        var ranked = world.HistoricalFigures
+            .Where(h => h.Race != null && (prefix == null || h.Race.Id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            .Select(h => (Figure: h, Value: native ? h.Race.NativeForCaste(h.Caste) : h.Race.SizeForCaste(h.Caste)))
+            .Where(x => x.Value is > 0)
+            .OrderByDescending(x => x.Value)
+            .ThenByDescending(x => x.Figure.NotableKills.Count)
+            .ThenBy(x => x.Figure.Id)
+            .Take(10);
+        foreach (var (hf, value) in ranked)
+        {
+            card.Entries.Add(new RecordEntryDto
+            {
+                Rank = card.Entries.Count + 1, Id = hf.Id, Name = hf.Name, ObjectType = "hf",
+                LinkHtml = hf.ToLink(), NumericValue = value!.Value,
+                Value = native ? $"{value:N0} strength" : $"{value:N0} cm³",
+                Race = hf.GetRaceString(),
+                Subtitle = $"{hf.Race.NameSingular} · {hf.Caste}",
+                DetailText = $"Adult size: {hf.Race.SizeForCaste(hf.Caste)?.ToString("N0") ?? "unknown"} cm³ · Native rating: {hf.Race.NativeForCaste(hf.Caste)?.ToString("N0") ?? "unknown"} · {hf.NotableKills.Count} notable kills. Caste proxy; individual skills, age and transformations not modeled."
+            });
+        }
+        return card;
     }
 
     private static RecordCardDto CalculateTopSlayers(World world)
