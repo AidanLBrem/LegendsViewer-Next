@@ -109,8 +109,9 @@ public class CommanderRecordTests
         weak.NativeCombatRating = null;
         CommanderRecord fallback = new(3, "Fallback");
         fallback.AddBattle(battle, true);
-        Assert.IsNull(fallback.Battles[0].OwnEffectiveStrength);
-        Assert.IsNull(fallback.Battles[0].EnemyEffectiveStrength);
+        Assert.AreEqual(12000d, fallback.Battles[0].OwnEffectiveStrength!.Value);
+        Assert.AreEqual(30000d, fallback.Battles[0].EnemyEffectiveStrength!.Value);
+        Assert.AreEqual("body-size-placeholders", fallback.Battles[0].OddsBasis);
         Assert.AreEqual(1, fallback.Outnumbered.Wins);
     }
 
@@ -143,8 +144,10 @@ public class CommanderRecordTests
 
         battle.DefenderSquads[0].Race = new("unknown_modded_race");
         attacker.AddBattle(battle, true);
-        Assert.AreEqual("numerical", attacker.Battles[3].OddsBasis);
-        Assert.IsNull(attacker.Battles[3].OwnEffectiveStrength);
+        Assert.AreEqual("body-size-placeholders", attacker.Battles[3].OddsBasis);
+        Assert.AreEqual(120000d, attacker.Battles[3].OwnEffectiveStrength!.Value);
+        Assert.AreEqual(60000d, attacker.Battles[3].EnemyEffectiveStrength!.Value);
+        Assert.AreEqual(0d, attacker.Battles[3].EnemyStrengthEstimate!.Coverage!.Value);
     }
 
     [TestMethod]
@@ -179,9 +182,9 @@ public class CommanderRecordTests
         Assert.AreEqual(0.48d, battle.ArmyStrengthRatio!.Value, 0.00001);
 
         battle.DefenderSquads[0].Race = new("unknown_animated_race");
-        Assert.AreEqual("numerical", battle.ArmyStrengthBasis);
-        Assert.AreEqual(100d, battle.AttackerArmyStrength);
-        Assert.AreEqual(50d, battle.DefenderArmyStrength);
+        Assert.AreEqual("body-size-undead-placeholders", battle.ArmyStrengthBasis);
+        Assert.AreEqual(120000d, battle.AttackerArmyStrength);
+        Assert.AreEqual(60000d, battle.DefenderArmyStrength);
         Assert.AreEqual(2d, battle.ArmyStrengthRatio!.Value);
         battle.DefenderSquads.Clear();
         Assert.IsNull(battle.ArmyStrengthRatio);
@@ -218,6 +221,34 @@ public class CommanderRecordTests
         commander.AddBattle(battle, false);
         Assert.AreEqual(1, commander.NearPeer.Wins);
         Assert.AreEqual("body-size-undead", commander.Battles[0].OddsBasis);
+    }
+
+    [TestMethod]
+    public void UnknownCombatantsDoNotEraseKnownRatings()
+    {
+        using World world = new();
+        var dwarf = new LegendsViewer.Backend.Legends.Various.CreatureInfo("dwarf");
+        var troll = new LegendsViewer.Backend.Legends.Various.CreatureInfo("troll");
+        var unknown = new LegendsViewer.Backend.Legends.Various.CreatureInfo("custom_beast");
+        Battle battle = new([], world) { Outcome = BattleOutcome.AttackerWon };
+        battle.AttackerSquads.Add(new(dwarf, 100, 0, 0, 0));
+        battle.AttackerSquads.Add(new(troll, 20, 0, 0, 0));
+        battle.AttackerSquads.Add(new(unknown, 10, 0, 0, 0));
+        battle.DefenderSquads.Add(new(dwarf, 100, 0, 0, 0, true));
+        Assert.AreEqual(232000d, battle.AttackerArmyStrength);
+        Assert.AreEqual(120000d, battle.DefenderArmyStrength);
+        Assert.AreEqual("body-size-undead-placeholders", battle.ArmyStrengthBasis);
+        Assert.AreEqual(120d / 130 * 100, battle.AttackerRatingCoverage!.Value, 0.00001);
+        Assert.AreEqual(100d, battle.DefenderRatingCoverage!.Value);
+        Assert.AreEqual("custom_beast", battle.AttackerStrengthEstimate.Placeholders.Single().Race);
+        Assert.AreEqual(10, battle.AttackerStrengthEstimate.PlaceholderCount);
+        CommanderRecord defender = new(1, "Defender");
+        defender.AddBattle(battle, false);
+        Assert.AreEqual(10, defender.Battles[0].EnemyStrengthEstimate!.PlaceholderCount);
+        unknown.AdultBodySize = 100000;
+        Assert.AreEqual(240000d, battle.AttackerArmyStrength);
+        Assert.AreEqual(100d, battle.AttackerRatingCoverage!.Value);
+        Assert.AreEqual("body-size-undead", battle.ArmyStrengthBasis);
     }
 
     [TestMethod]
