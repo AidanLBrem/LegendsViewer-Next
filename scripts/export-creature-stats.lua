@@ -13,6 +13,7 @@ for raceIndex, creature in ipairs(df.global.world.raws.creatures.all) do
     for casteIndex, caste in ipairs(creature.caste) do
         table.insert(entry.castes, {
             caste_id = caste.caste_id, caste_index = casteIndex,
+            description = caste.description,
             adult_body_size = caste.misc.adult_size,
             native_army_strength = caste.misc.army_strength
         })
