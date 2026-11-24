@@ -27,14 +27,20 @@
             <thead><tr>
               <th scope="col">Battle</th><th scope="col">Side</th><th scope="col">Result</th>
               <th scope="col">Troops deployed</th><th scope="col">Troops faced</th>
+              <th scope="col">Own strength</th><th scope="col">Enemy strength</th>
+              <th scope="col">Strength ratio (own:enemy)</th><th scope="col">Basis</th>
               <th scope="col">Enemy killed</th><th scope="col">Own killed</th>
             </tr></thead>
             <tbody><tr v-for="battle in item.battles" :key="battle.id">
               <td><router-link :to="`/battle/${battle.id}`">{{ battle.name || `Battle #${battle.id}` }}</router-link>
                 <div v-if="battle.year >= 0" class="text-caption">Year {{ battle.year }}</div></td>
               <td>{{ battle.side }}</td><td>{{ battle.outcome }}</td>
-              <td>{{ battle.ownTroops.toLocaleString() }}<div class="text-caption">{{ battle.ownComposition }}</div><div class="text-caption">{{ battle.ownEffectiveStrength != null ? `${battle.oddsBasis === "body-size" ? "Size-estimated" : "Native-rating"} strength: ${battle.ownEffectiveStrength.toLocaleString()}` : "Numerical odds fallback" }}</div></td>
-              <td>{{ battle.enemyTroops.toLocaleString() }}<div class="text-caption">{{ battle.enemyComposition }}</div><div class="text-caption" v-if="battle.enemyEffectiveStrength != null">{{ battle.oddsBasis === 'body-size' ? 'Size-estimated' : 'Native-rating' }} strength: {{ battle.enemyEffectiveStrength.toLocaleString() }}</div></td>
+              <td>{{ battle.ownTroops.toLocaleString() }}<div class="text-caption">{{ battle.ownComposition }}</div></td>
+              <td>{{ battle.enemyTroops.toLocaleString() }}<div class="text-caption">{{ battle.enemyComposition }}</div></td>
+              <td>{{ (battle.ownEffectiveStrength ?? battle.ownTroops).toLocaleString() }}</td>
+              <td>{{ (battle.enemyEffectiveStrength ?? battle.enemyTroops).toLocaleString() }}</td>
+              <td>{{ strengthRatio(battle) }}</td>
+              <td>{{ battle.oddsBasis === 'native' ? 'Native' : battle.oddsBasis === 'body-size' ? 'Body size' : 'Numerical fallback' }}</td>
               <td>{{ battle.ownKills.toLocaleString() }}</td><td>{{ battle.enemyKills.toLocaleString() }}</td>
             </tr></tbody>
           </table>
@@ -97,6 +103,12 @@ interface CommandedBattle {
   enemyEffectiveStrength: number | null;
   ownComposition: string;
   enemyComposition: string;
+}
+
+function strengthRatio(battle: CommandedBattle) {
+  const own = battle.ownEffectiveStrength ?? battle.ownTroops;
+  const enemy = battle.enemyEffectiveStrength ?? battle.enemyTroops;
+  return enemy > 0 ? (own / enemy).toLocaleString(undefined, { maximumFractionDigits: 3, minimumSignificantDigits: 1 }) + ' : 1' : '—';
 }
 
 interface Matchup {
@@ -169,5 +181,6 @@ watch([() => world.world, retry], async (_, __, cleanup) => {
   text-align: left;
 }
 .battle-list caption { font-weight: 600; }
-.battle-list th:first-child, .battle-list th:nth-child(4), .battle-list th:nth-child(5) { width: 23%; }
+.battle-list th:first-child { width: 17%; }
+.battle-list th:nth-child(4), .battle-list th:nth-child(5) { width: 14%; }
 </style>
