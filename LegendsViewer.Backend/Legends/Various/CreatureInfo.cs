@@ -12,11 +12,15 @@ public class CreatureInfo
     // Optional native adult caste rating; export only when all relevant castes agree.
     public int? NativeCombatRating { get; set; }
     public int? AdultBodySize { get; set; }
+    public Dictionary<string, CreatureCasteStats> CasteStats { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public int? KnownAdultSize => AdultBodySize ?? VanillaCombatSizes.Find(Id);
+    public int? SizeForCaste(string caste) => CasteStats.TryGetValue(caste ?? string.Empty, out var stats) ? stats.AdultBodySize ?? KnownAdultSize : KnownAdultSize;
+    public int? NativeForCaste(string caste) => CasteStats.TryGetValue(caste ?? string.Empty, out var stats) ? stats.NativeArmyStrength ?? NativeCombatRating : NativeCombatRating;
     public int? EstimatedCombatRating
     {
         get
         {
-            int? size = AdultBodySize ?? VanillaCombatSizes.Find(Id);
+            int? size = KnownAdultSize;
             return size is > 0 ? Math.Max(1, size.Value / 50) : null;
         }
     }
