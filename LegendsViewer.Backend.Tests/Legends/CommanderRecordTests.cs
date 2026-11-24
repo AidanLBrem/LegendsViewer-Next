@@ -65,8 +65,9 @@ public class CommanderRecordTests
         Assert.AreEqual(1, attacker.Outnumbered.Wins);
         Assert.AreEqual(1, defender.Favored.Battles);
         Assert.AreEqual(0, defender.Favored.Wins);
-        Assert.AreEqual(100d / 6, attacker.CommandScore!.Value, 0.00001);
-        Assert.AreEqual(-100d / 6, defender.CommandScore!.Value, 0.00001);
+        double expectedScore = 100 * Math.Sqrt(0.3) * (2d / 3) / (Math.Sqrt(0.3) + 3);
+        Assert.AreEqual(expectedScore, attacker.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(-expectedScore, defender.CommandScore!.Value, 0.00001);
         Assert.AreEqual(0L, attacker.OwnDeaths);
         Assert.AreEqual(8L, defender.OwnDeaths);
 
@@ -82,5 +83,29 @@ public class CommanderRecordTests
         attacker.AddBattle(battle, true);
         Assert.AreEqual(1, attacker.RatedBattles);
         Assert.AreEqual(2, attacker.Victories);
+    }
+
+    [TestMethod]
+    public void LargerBattlesCarryMoreWeightForWinsAndLosses()
+    {
+        using World world = new();
+        Battle battle = new([], world) { Outcome = BattleOutcome.AttackerWon };
+        battle.AttackerSquads.Add(new(null!, 200, 0, 0, 0));
+        battle.DefenderSquads.Add(new(null!, 200, 0, 0, 0));
+        CommanderRecord attacker = new(1, "Attacker");
+        CommanderRecord defender = new(2, "Defender");
+        attacker.AddBattle(battle, true);
+        defender.AddBattle(battle, false);
+
+        battle.AttackerSquads[0].Numbers = 50;
+        battle.DefenderSquads[0].Numbers = 50;
+        battle.Outcome = BattleOutcome.DefenderWon;
+        attacker.AddBattle(battle, true);
+        defender.AddBattle(battle, false);
+
+        // Both went 1-1 at even odds. The 400-troop battle counts twice as much.
+        Assert.AreEqual(100d / 12, attacker.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(-100d / 12, defender.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(2, attacker.RatedBattles);
     }
 }
