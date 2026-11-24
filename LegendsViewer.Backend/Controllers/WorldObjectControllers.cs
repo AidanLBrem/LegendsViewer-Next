@@ -80,6 +80,7 @@ public class EntityController(IWorldObjectRepository<Entity> repository) : World
                     Name = entity.Name,
                     Race = entity.Race?.NamePlural ?? "",
                     CurrentSites = entity.CurrentSites.Count,
+                    PopulationCount = entity.PopulationCount,
                     Character = profile.Character,
                     Periods = profile.Periods
                 };

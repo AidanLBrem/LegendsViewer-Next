@@ -6,7 +6,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 it('defaults to complete recorded history and displays event totals rather than per-century rates', async () => {
     const nations = [
-        { name: 'Beryl', id: 1, race: 'dwarves', currentSites: 30,
+        { name: 'Beryl', id: 1, race: 'dwarves', currentSites: 30, populationCount: 300,
           periods: [
               { windowYears: 0, character: 'Zulu', settlementsFounded: 12, conquests: 9,
                 sitesLostInWar: 7, offensiveOperations: 16, sitesPlundered: 11,
@@ -16,7 +16,7 @@ it('defaults to complete recorded history and displays event totals rather than 
                 sitesLostInWar: 0, offensiveOperations: 1, sitesPlundered: 0,
                 peaceAgreements: 0, alliances: 0, internalUpheavals: 0 }
           ] },
-        { name: 'Amber', id: 2, race: 'dwarves', currentSites: 2,
+        { name: 'Amber', id: 2, race: 'dwarves', currentSites: 2, populationCount: 20,
           periods: [
               { windowYears: 0, character: 'Alpha', settlementsFounded: 2, conquests: 1,
                 sitesLostInWar: 0, offensiveOperations: 3, sitesPlundered: 1,
@@ -41,12 +41,13 @@ it('defaults to complete recorded history and displays event totals rather than 
     // The full-history totals, including combined diplomacy, must be displayed
     // even when the API also supplies unrelated normalized rates.
     const firstRow = wrapper.findAll('tbody tr')[0].findAll('td');
-    expect(firstRow.slice(3).map(cell => cell.text())).toEqual(['12', '9', '7', '16', '11', '7', '5']);
+    expect(firstRow[3].text()).toBe('300');
+    expect(firstRow.slice(4).map(cell => cell.text())).toEqual(['12', '9', '7', '16', '11', '7', '5']);
     expect(wrapper.text()).toContain('total recorded events');
     expect(wrapper.text()).not.toContain('per 100 observed years');
 
     const buttons = wrapper.findAll('th button');
-    expect(buttons).toHaveLength(10);
+    expect(buttons).toHaveLength(11);
     for (const [index, button] of buttons.entries()) {
         await button.trigger('click');
         const first = index < 2 ? 'Amber' : 'Beryl';

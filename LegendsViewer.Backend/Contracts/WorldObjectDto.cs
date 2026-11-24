@@ -1,5 +1,6 @@
 using LegendsViewer.Backend.Legends;
 using LegendsViewer.Backend.Legends.EventCollections;
+using LegendsViewer.Backend.Legends.WorldObjects;
 
 namespace LegendsViewer.Backend.Contracts;
 
@@ -37,6 +38,10 @@ public class WorldObjectDto
             DefenderTroopCount = battle.DefenderCount;
             SetSiteCounts(battle.SiteOutcomes);
         }
+        else if (worldObject is Entity entity)
+        {
+            PopulationCount = entity.PopulationCount;
+        }
     }
 
     public int Id { get; set; }
@@ -48,6 +53,7 @@ public class WorldObjectDto
     public string Html { get; set; }
     public int EventCount { get; set; }
     public int EventCollectionCount { get; set; }
+    public int? PopulationCount { get; set; }
 
     public int? DeathCount { get; set; }
     public int? AttackerDeathCount { get; set; }

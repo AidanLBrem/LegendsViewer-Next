@@ -32,9 +32,16 @@
         <template v-if="nationColorMode === 'Diplomacy'">
           <label for="map-perspective">Relations with</label>
           <select id="map-perspective" v-model.number="selectedNationId">
-            <option v-for="nation in nationOptions" :key="nation.id" :value="nation.id">{{ nation.name }}</option>
+            <option v-for="nation in sortedNationOptions" :key="nation.id" :value="nation.id">{{ nation.name }}</option>
           </select>
-          <small>As of year {{ selectedYear }}. Unmet means no recorded contact.</small>
+          <label for="map-perspective-sort">Sort nations</label>
+          <select id="map-perspective-sort" v-model="nationSortKey">
+            <option value="sites-desc">Most current sites</option>
+            <option value="population-desc">Population: highest first</option>
+            <option value="population-asc">Population: lowest first</option>
+            <option value="name-asc">Name: A–Z</option>
+          </select>
+          <small>As of year {{ selectedYear }}. Unmet means no recorded contact. Population order uses current site counts from the import.</small>
         </template>
         <template v-if="nationColorMode !== 'Nation'">
           <span v-if="nationDataMessage" role="status">{{ nationDataMessage }}</span>
@@ -106,10 +113,18 @@
       <div id="nation-expansion-details" v-show="nationExpansionExpanded" class="nation-expansion-panel__body">
         <label for="nation-expansion-selector">Civilization or faction</label>
         <select id="nation-expansion-selector" v-model.number="selectedNationId">
-          <option v-for="nation in nationOptions" :key="nation.id" :value="nation.id">
+          <option v-for="nation in sortedNationOptions" :key="nation.id" :value="nation.id">
             {{ nation.name }}
           </option>
         </select>
+        <label for="nation-expansion-sort">Sort nations</label>
+        <select id="nation-expansion-sort" v-model="nationSortKey">
+          <option value="sites-desc">Most current sites</option>
+          <option value="population-desc">Population: highest first</option>
+          <option value="population-asc">Population: lowest first</option>
+          <option value="name-asc">Name: A–Z</option>
+        </select>
+        <small>Population order uses the imported populations of current sites, not historical estimates.</small>
         <div class="nation-expansion-panel__metrics">
           <div><span>Owned sites in year {{ selectedYear }}</span>
             <strong>{{ nationSnapshot?.sites ?? 0 }}</strong></div>
@@ -197,6 +212,8 @@ import {
   nationExpansionChartPath,
   type NationExpansionHistory,
   type NationOption,
+  type NationSortKey,
+  sortNationOptions,
 } from '../utils/nationExpansion';
 
 export type SiteType = components['schemas']['SiteType'];
@@ -1173,6 +1190,8 @@ export default defineComponent({
     const historyBusy = ref(false);
     const nationExpansionExpanded = ref(true);
     const nationOptions = ref<NationOption[]>([]);
+    const nationSortKey = ref<NationSortKey>('sites-desc');
+    const sortedNationOptions = computed(() => sortNationOptions(nationOptions.value, nationSortKey.value));
     const selectedNationId = ref(-1);
     const nationHistory = shallowRef<NationExpansionHistory | null>(null);
     const territoryLandTiles = shallowRef(new Map<number, number>());
@@ -1270,7 +1289,7 @@ export default defineComponent({
           status = option.id === selectedNationId.value ? 'Selected nation' :
             diplomaticStatus(pairs.get(option.id) ?? [], selectedYear.value);
         categories.set(option.id, mapCategory(nationColorMode.value, nations.get(option.id),
-          necromancerNationIds.has(option.id), practice.value, status));
+          necromancerNationIds.has(option.id), practice.value, status, option.id));
       }
       return categories;
     });
@@ -2492,6 +2511,8 @@ export default defineComponent({
       toggleHistoryPlayback,
       nationExpansionExpanded,
       nationOptions,
+      nationSortKey,
+      sortedNationOptions,
       selectedNationId,
       selectedNation,
       nationHistory,

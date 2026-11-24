@@ -34,19 +34,38 @@ const policyColors = ['#a8aaae','#178456','#56a75a','#8fbb5e','#c2bb49','#d1a347
     '#ac98bf','#a26caa','#875086','#dd9259','#d36c49','#bb424c','#7f2638','#462c55','#167b8b'];
 
 function raceColor(token: string) {
-    if (Object.prototype.hasOwnProperty.call(raceColors, token)) return raceColors[token];
+    const key = token.trim().toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(raceColors, key)) return raceColors[key];
+    // Give every unlisted (including modded) race a stable pseudo-random color.
+    // Avalanche the hash so similar identifiers don't produce similar shades.
     let hash = 2166136261;
-    for (const char of token) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    for (const char of key) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    hash ^= hash >>> 16;
+    hash = Math.imul(hash, 0x7feb352d);
+    hash ^= hash >>> 15;
+    hash = Math.imul(hash, 0x846ca68b);
+    hash ^= hash >>> 16;
     return '#' + [0, 8, 16].map(shift => (64 + ((hash >>> shift) & 127)).toString(16)).join('');
 }
 
 export function mapCategory(mode: NationColorMode, nation: MapNation | undefined, necromancer: boolean,
-    practice: string, status: string) {
+    practice: string, status: string, fallbackNationId?: number) {
     if (mode === 'Diplomacy') return { label: status, color: statusColors[status] };
     if (mode === 'Race' && (necromancer || nation?.necromancer))
         return { label: 'Necromancer', color: '#733fb0' };
-    if (mode === 'Race' && nation?.race && nation.race.toLowerCase() !== 'unknown')
-        return { label: nation.raceName || nation.race, color: raceColor(nation.race.toLowerCase()) };
+    if (mode === 'Race') {
+        const id = nation?.race?.trim();
+        const name = nation?.raceName?.trim();
+        const raceId = id && id.toLowerCase() !== 'unknown' ? id :
+            name && name.toLowerCase() !== 'unknown' ? name : undefined;
+        if (raceId)
+            return { label: name && name.toLowerCase() !== 'unknown' ? name : raceId, color: raceColor(raceId) };
+        // An export can omit the race completely. Keep unidentified nations
+        // visible and distinguishable instead of rendering them all gray.
+        const nationId = nation?.id ?? fallbackNationId;
+        if (nationId !== undefined)
+            return { label: `Unknown race (#${nationId})`, color: raceColor(`unknown-nation:${nationId}`) };
+    }
     if (mode === 'Practice' && nation && (nation.civilization && !necromancer && !nation.necromancer || Object.keys(nation.responses).length)) {
         const policy = practicePolicy(nation, practice);
         if (policy.index >= 0) return { label: policy.label, color: policyColors[policy.index] };

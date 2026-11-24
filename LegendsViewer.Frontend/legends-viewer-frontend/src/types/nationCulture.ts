@@ -64,6 +64,7 @@ export interface NationCultureSummary {
     name: string;
     race: string;
     currentSites: number;
+    populationCount: number | null;
     character: string;
     periods: NationCulturePeriod[];
 }
@@ -75,6 +76,7 @@ export const cultureWindows = [
 ];
 
 export const cultureDimensionDescriptions: Record<string, string> = {
+    populationCount: 'Current recorded population from the imported site and legends_plus records, without double-counting overlapping races. Unknown if no records exist.',
     expansion: 'Total settlements founded plus sites conquered in the selected period; reclamations are excluded.',
     settlementsFounded: 'Total settlements founded in the selected period; conquered and reclaimed sites are excluded.',
     conquests: 'Total sites taken over or conquered in the selected period; founded and reclaimed settlements are excluded.',

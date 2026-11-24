@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using LegendsViewer.Backend.Legends;
+using LegendsViewer.Backend.Legends.WorldObjects;
 
 namespace LegendsViewer.Backend.Extensions;
 
@@ -29,6 +30,18 @@ public static class EnumerableExtensions
         if (propertyInfo == null)
         {
             throw new ArgumentException($"Property '{sortKey}' not found on type '{typeof(T).Name}'");
+        }
+
+        // Unknown population is not zero: always place missing values last,
+        // regardless of direction, before paginating the nation overview.
+        if (typeof(Entity).IsAssignableFrom(typeof(T)) &&
+            propertyName.Equals(nameof(Entity.PopulationCount), StringComparison.OrdinalIgnoreCase))
+        {
+            var withPopulation = source.Select(item =>
+                (Item: item, Count: (int?)propertyInfo.GetValue(item))).ToList();
+            return sortOrder.Equals("desc", StringComparison.OrdinalIgnoreCase)
+                ? withPopulation.OrderBy(x => x.Count == null).ThenByDescending(x => x.Count).Select(x => x.Item)
+                : withPopulation.OrderBy(x => x.Count == null).ThenBy(x => x.Count).Select(x => x.Item);
         }
 
         // Sort in ascending or descending order based on sortOrder

@@ -66,6 +66,7 @@ public sealed class NationCultureSummaryDto
     public string Name { get; set; } = "";
     public string Race { get; set; } = "";
     public int CurrentSites { get; set; }
+    public int? PopulationCount { get; set; }
     public string Character { get; set; } = "";
     public List<NationCulturePeriodDto> Periods { get; set; } = [];
 }
