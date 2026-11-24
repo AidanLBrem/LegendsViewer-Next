@@ -21,6 +21,8 @@ const tableHeaders: TableHeader[] = [
     { title: 'Atk strength', key: 'attackerArmyStrength', align: 'end' },
     { title: 'Def strength', key: 'defenderArmyStrength', align: 'end' },
     { title: 'Strength ratio (A:D)', key: 'armyStrengthRatio', align: 'end' },
+    { title: 'Atk coverage %', key: 'attackerRatingCoverage', align: 'end' },
+    { title: 'Def coverage %', key: 'defenderRatingCoverage', align: 'end' },
     { title: 'Strength basis', key: 'armyStrengthBasis', align: 'start' },
     { title: 'Chronicles', key: 'eventCollectionCount', align: 'end' },
     { title: 'Events', key: 'eventCount', align: 'end' },
