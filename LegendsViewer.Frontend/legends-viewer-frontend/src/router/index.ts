@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { retryLazyChunkOnce, clearSuccessfulChunkRetry } from '../utils/chunkRecovery'
 
 const routes = [
+  { path: '/commanders', name: 'Commanders', component: () => import('../views/Commanders.vue') },
   { path: '/conspiracies/:figureId?/:localId?', name: 'Conspiracy Analysis', component: () => import('../views/ConspiracyAnalysis.vue') },
   { path: '/dark-forces/:figureId?', name: 'Dark Forces', component: () => import('../views/DarkForces.vue') },
   { path: '/', name: 'Overview', component: () => import('../views/WorldOverview.vue') },
