@@ -9,6 +9,12 @@ import ArmyCompositionCard from '../components/ArmyCompositionCard.vue';
 import { computed, ComputedRef } from 'vue';
 import { LegendLinkListData } from '../types/legends';
 
+function strengthBasisLabel(basis?: string | null) {
+    return basis === 'native' ? 'Native caste ratings' :
+        basis === 'body-size' ? 'Estimated adult body-size ratings' :
+        basis === 'numerical' ? 'Numerical fallback (troop counts)' : 'Unavailable';
+}
+
 const store = useBattleStore()
 const mapStore = useBattleMapStore()
 
@@ -34,6 +40,27 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                     :attacker-remaining="store.object?.attackersRemainingCount"
                     :defender-remaining="store.object?.defendersRemainingCount"
                     :site-outcomes="store.object?.siteOutcomes" />
+            </v-col>
+            <v-col v-if="store.object" cols="12" xl="6" lg="12" md="12">
+                <v-card title="Starting Army Strength" variant="text"
+                    :subtitle="strengthBasisLabel(store.object.armyStrengthBasis)">
+                    <v-card-text>
+                        <v-row>
+                            <v-col cols="6">
+                                <div class="text-caption">Attacker army strength</div>
+                                <div class="text-h5">{{ store.object.attackerArmyStrength?.toLocaleString() ?? '—' }}</div>
+                            </v-col>
+                            <v-col cols="6">
+                                <div class="text-caption">Defender army strength</div>
+                                <div class="text-h5">{{ store.object.defenderArmyStrength?.toLocaleString() ?? '—' }}</div>
+                            </v-col>
+                        </v-row>
+                        <div class="mt-3">Attacker : defender strength ratio:
+                            {{ store.object.armyStrengthRatio == null ? '—' : store.object.armyStrengthRatio.toLocaleString(undefined, { maximumFractionDigits: 3, minimumSignificantDigits: 1 }) + ' : 1' }}
+                        </div>
+                        <div class="text-caption">Before casualties; strength is not a victory probability.</div>
+                    </v-card-text>
+                </v-card>
             </v-col>
             <v-col v-if="store.object?.attackerInitialArmyByRace?.labels?.length"
                 cols="12" xl="4" lg="6" md="12">
