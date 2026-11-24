@@ -206,7 +206,7 @@ public static class WorldRecordsCalculator
                 LinkHtml = hf.ToLink(), NumericValue = value!.Value,
                 Value = native ? $"{value:N0} strength" : $"{value:N0} cm³",
                 Race = hf.GetRaceString(),
-                Subtitle = $"{hf.Race.NameSingular} · {hf.Caste}",
+                Subtitle = hf.Race.RecordLabel(hf.Caste),
                 DetailText = $"Adult size: {hf.Race.SizeForCaste(hf.Caste)?.ToString("N0") ?? "unknown"} cm³ · Native rating: {hf.Race.NativeForCaste(hf.Caste)?.ToString("N0") ?? "unknown"} · {hf.NotableKills.Count} notable kills. Caste proxy; individual skills, age and transformations not modeled."
             });
         }
