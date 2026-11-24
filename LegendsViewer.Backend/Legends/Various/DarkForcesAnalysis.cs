@@ -90,7 +90,7 @@ public static class DarkForcesAnalysis
             {
                 Entity = e,
                 Leader = e.EntityPositionAssignments
-                    .Where(a => a.PositionId >= 0)
+                    .Where(a => a.PositionId == 0)
                     .OrderBy(a => a.PositionId).FirstOrDefault()?.HistoricalFigure
             })
             .Where(e => e.Leader != null)
@@ -339,6 +339,23 @@ public static class DarkForcesAnalysis
             // identifying its broader group, NEVER expanding personal control.
             Entity root = entity;
             int from = Math.Max(0, fromYear);
+            // Founding is historical evidence, not a lifetime appointment.
+            // End an inferred tenure at the first recorded departure from this office.
+            if (!throughYear.HasValue)
+            {
+                var departures = (figure.Positions ?? [])
+                    .Where(p => p.Entity == root && p.PositionId == 0 && p.EndYear.HasValue)
+                    .Select(p => p.EndYear!.Value)
+                    .Concat(figure.RelatedEntities
+                        .Where(l => l.Entity == root && l.PositionId == 0 &&
+                            l.Type == EntityLinkType.FormerPosition && l.EndYear >= 0)
+                        .Select(l => l.EndYear))
+                    .Where(year => year >= from)
+                    .OrderBy(year => year)
+                    .ToList();
+                if (departures.Count > 0)
+                    throughYear = departures[0];
+            }
             int endExclusive = Math.Min(currentYear + 1,
                 throughYear.HasValue ? throughYear.Value + 1 : currentYear + 1);
             if (figure.DeathYear >= 0)
