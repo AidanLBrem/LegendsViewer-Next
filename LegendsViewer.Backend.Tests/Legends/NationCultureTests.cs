@@ -336,6 +336,29 @@ public class NationCultureTests
     }
 
     [TestMethod]
+    public void LastHundredYearsContainsActualConquestCountsWithinThatWindow()
+    {
+        using World world = new() { CurrentYear = 300 };
+        Entity nation = new([], world) { Id = 1, Name = "Conquerors", IsCiv = true };
+        Site oldConquest = new([], world) { Id = 10, Name = "Old Keep" };
+        Site edgeConquest = new([], world) { Id = 11, Name = "Border Keep" };
+        Site recentConquest = new([], world) { Id = 12, Name = "New Keep" };
+
+        _ = new OwnerPeriod(oldConquest, nation, 200, "took over");
+        _ = new OwnerPeriod(edgeConquest, nation, 201, "took over");
+        _ = new OwnerPeriod(recentConquest, nation, 299, "took over");
+
+        var periods = NationCultureProfileDto.FromEntity(nation).Periods;
+        var lastHundred = periods.Single(p => p.WindowYears == 100);
+        var allHistory = periods.Single(p => p.WindowYears == 0);
+
+        Assert.AreEqual(201, lastHundred.StartYear);
+        Assert.AreEqual(300, lastHundred.EndYear);
+        Assert.AreEqual(2, lastHundred.Conquests);
+        Assert.AreEqual(3, allHistory.Conquests);
+    }
+
+    [TestMethod]
     public void MissingHistoricalEventsDoNotImplyPacifism()
     {
         using World world = new() { CurrentYear = 100 };

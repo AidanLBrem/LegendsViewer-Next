@@ -70,19 +70,19 @@ export interface NationCultureSummary {
 }
 
 export const cultureWindows = [
-    { title: 'Last 25 years', value: 25 },
-    { title: 'Last 100 years', value: 100 },
     { title: 'Entire recorded history', value: 0 },
+    { title: 'Last 100 years', value: 100 },
+    { title: 'Last 25 years', value: 25 },
 ];
 
 export const cultureDimensionDescriptions: Record<string, string> = {
     populationCount: 'Current recorded population from the imported site and legends_plus records, without double-counting overlapping races. Unknown if no records exist.',
-    expansionPerCentury: 'Combined territorial expansion: settlements founded plus sites conquered per 100 observed years; reclamations are excluded.',
-    settlementExpansionPerCentury: 'Settlements founded by the civilization per 100 observed years, excluding conquered or reclaimed sites.',
-    conquestPerCentury: 'Sites taken over or conquered by the civilization per 100 observed years, excluding settlements founded or reclaimed.',
-    sitesLostInWarPerCentury: 'Settlements captured, surrendered or destroyed by an opposing belligerent in a recorded war per 100 observed years. Excludes pillaging, abandonment and undated/unattributed losses.',
-    offensiveOperationsPerCentury: 'Recorded attacks on sites and offensive field battles per 100 observed years. These are engagements, not necessarily new wars.',
-    plundersPerCentury: 'Recorded site plunderings by this civilization per 100 observed years.',
-    diplomacyPerCentury: 'Accepted peace offers and alliances formed per 100 observed years; not a measure of all diplomatic activity.',
-    upheavalsPerCentury: 'Recorded insurrections and government overthrows per 100 observed years. A lack of records does not prove stability.',
+    expansion: 'Total settlements founded plus sites conquered in the selected period; reclamations are excluded.',
+    settlementsFounded: 'Total settlements founded in the selected period; conquered and reclaimed sites are excluded.',
+    conquests: 'Total sites taken over or conquered in the selected period; founded and reclaimed settlements are excluded.',
+    sitesLostInWar: 'Total settlements captured, surrendered or destroyed by opposing belligerents in recorded wars during the selected period. Excludes pillaging, abandonment and unattributed losses.',
+    offensiveOperations: 'Total recorded attacks on sites and offensive field battles in the selected period. These are engagements, not necessarily new wars.',
+    sitesPlundered: 'Total recorded site plunderings by this civilization in the selected period.',
+    diplomacy: 'Total accepted peace offers and alliances formed in the selected period; not a measure of all diplomatic activity.',
+    internalUpheavals: 'Total recorded insurrections and government overthrows in the selected period. A lack of records does not prove stability.',
 };
