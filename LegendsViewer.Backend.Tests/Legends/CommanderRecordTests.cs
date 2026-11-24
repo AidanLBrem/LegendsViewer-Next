@@ -171,12 +171,53 @@ public class CommanderRecordTests
         Assert.AreEqual(battle.AttackerArmyStrength, defender.Battles[0].EnemyEffectiveStrength!.Value);
 
         battle.DefenderSquads[0].Animated = true;
+        dwarf.NativeCombatRating = 10;
+        troll.NativeCombatRating = 20;
+        Assert.AreEqual("body-size-undead", battle.ArmyStrengthBasis);
+        Assert.AreEqual(120000d, battle.AttackerArmyStrength);
+        Assert.AreEqual(250000d, battle.DefenderArmyStrength);
+        Assert.AreEqual(0.48d, battle.ArmyStrengthRatio!.Value, 0.00001);
+
+        battle.DefenderSquads[0].Race = new("unknown_animated_race");
         Assert.AreEqual("numerical", battle.ArmyStrengthBasis);
         Assert.AreEqual(100d, battle.AttackerArmyStrength);
         Assert.AreEqual(50d, battle.DefenderArmyStrength);
         Assert.AreEqual(2d, battle.ArmyStrengthRatio!.Value);
         battle.DefenderSquads.Clear();
         Assert.IsNull(battle.ArmyStrengthRatio);
+    }
+
+    [TestMethod]
+    public void MixedWarBeastsAgainstAnimatedArmyUseSizeOdds()
+    {
+        using World world = new();
+        Battle battle = new([], world) { Outcome = BattleOutcome.DefenderWon };
+        void Add(List<Battle.Squad> squads, string race, int count, bool animated = false)
+        {
+            squads.Add(new(new LegendsViewer.Backend.Legends.Various.CreatureInfo(race), count, 0, 0, 0, animated));
+        }
+
+        Add(battle.DefenderSquads, "ELF", 30);
+        Add(battle.DefenderSquads, "DWARF", 22);
+        Add(battle.DefenderSquads, "GOBLIN", 12);
+        Add(battle.DefenderSquads, "HUMAN", 4);
+        foreach (string race in new[] { "ANDREWSARCHUS", "CAMEL_2_HUMP", "JAGUAR", "LEOPARD",
+            "BEAR_GRIZZLY", "BIRD_SWALLOW_CAVE_GIANT", "OLM_GIANT", "CROCODILE_CAVE", "JABBERER" })
+            Add(battle.DefenderSquads, race, 5);
+        Add(battle.AttackerSquads, "DWARF", 591, true);
+        Add(battle.AttackerSquads, "HUMAN", 220, true);
+        Add(battle.AttackerSquads, "GOBLIN", 172, true);
+        Add(battle.AttackerSquads, "ELF", 21, true);
+
+        Assert.AreEqual(113, battle.DefenderCount);
+        Assert.AreEqual(1004, battle.AttackerCount);
+        Assert.AreEqual("body-size-undead", battle.ArmyStrengthBasis);
+        Assert.AreEqual(799900d, battle.DefenderArmyStrength);
+        Assert.AreEqual(1248800d, battle.AttackerArmyStrength);
+        CommanderRecord commander = new(1, "Defender");
+        commander.AddBattle(battle, false);
+        Assert.AreEqual(1, commander.NearPeer.Wins);
+        Assert.AreEqual("body-size-undead", commander.Battles[0].OddsBasis);
     }
 
     [TestMethod]
