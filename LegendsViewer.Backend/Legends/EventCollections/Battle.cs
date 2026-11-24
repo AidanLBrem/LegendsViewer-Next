@@ -47,6 +47,60 @@ public class Battle : EventCollection, IHasComplexSubtype
     public int DefenderTroopCount => DefenderCount;
     public int AttackerCount => NotableAttackers.Distinct().Count() + AttackerSquads.Sum(squad => squad.Numbers);
     public int DefenderCount => NotableDefenders.Distinct().Count() + DefenderSquads.Sum(squad => squad.Numbers);
+    // Both armies must use the same rating basis. Counts are the explicit fallback.
+    [JsonIgnore]
+    public (double Attacker, double Defender, string Basis) ArmyStrength
+    {
+        get
+        {
+            double? attacker = CalculateSideStrength(true, true);
+            double? defender = CalculateSideStrength(false, true);
+            if (attacker > 0 && defender > 0)
+                return (attacker.Value, defender.Value, "native");
+
+            attacker = CalculateSideStrength(true, false);
+            defender = CalculateSideStrength(false, false);
+            if (attacker > 0 && defender > 0)
+                return (attacker.Value, defender.Value, "body-size");
+
+            return (AttackerCount, DefenderCount, "numerical");
+        }
+    }
+
+    public double AttackerArmyStrength => ArmyStrength.Attacker;
+    public double DefenderArmyStrength => ArmyStrength.Defender;
+    public string ArmyStrengthBasis => ArmyStrength.Basis;
+    public double? ArmyStrengthRatio
+    {
+        get
+        {
+            var strength = ArmyStrength;
+            return strength.Defender > 0 ? strength.Attacker / strength.Defender : null;
+        }
+    }
+
+    private double? CalculateSideStrength(bool attacking, bool native)
+    {
+        double total = 0;
+        foreach (var squad in attacking ? AttackerSquads : DefenderSquads)
+        {
+            if (squad.Numbers <= 0) continue;
+            if (squad.Animated || (native ? squad.Race?.NativeCombatRating : squad.Race?.EstimatedCombatRating) is not int rating || rating <= 0)
+                return null;
+            total += (double)squad.Numbers * rating;
+        }
+        foreach (var figure in (attacking ? NotableAttackers : NotableDefenders).Distinct())
+        {
+            if (figure.CreatureTypes.Count > 0 || figure.UndeadTypes.Count > 0 ||
+                !string.IsNullOrEmpty(figure.PreviousRace) ||
+                !string.IsNullOrEmpty(figure.AnimatedType) ||
+                (native ? figure.Race?.NativeCombatRating : figure.Race?.EstimatedCombatRating) is not int rating || rating <= 0)
+                return null;
+            total += rating;
+        }
+        return total;
+    }
+
     public int AttackersRemainingCount => Attackers.Sum(squad => Math.Max(0, squad.Numbers - squad.Deaths));
     public int DefendersRemainingCount => Defenders.Sum(squad => Math.Max(0, squad.Numbers - squad.Deaths));
     public int DeathCount => AttackerDeathCount + DefenderDeathCount;
