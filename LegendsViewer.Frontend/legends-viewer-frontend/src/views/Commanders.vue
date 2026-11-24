@@ -187,6 +187,10 @@ watch([() => world.world, retry], async (_, __, cleanup) => {
   padding: 6px 10px;
   text-align: left;
 }
+.battle-list thead th,
+.battle-list tbody tr:not(:last-child) td {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.28);
+}
 .battle-list caption { font-weight: 600; }
 .battle-list th:first-child { width: 17%; }
 .battle-list th:nth-child(4), .battle-list th:nth-child(5) { width: 14%; }
