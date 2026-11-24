@@ -77,7 +77,9 @@ public record CommanderRecord(int Id, string Name)
     public int RatedBattles { get; private set; }
     private double _weightedWinsAboveExpected;
     private double _totalBattleWeight;
-    public double? CommandScore => RatedBattles == 0 ? null : 100 * _weightedWinsAboveExpected / (_totalBattleWeight + 3d);
+    public int Experience => Battles.Count;
+    public double? BattlePerformance => RatedBattles == 0 ? null : 100 * _weightedWinsAboveExpected / (_totalBattleWeight + 3d);
+    public double? CommandScore => BattlePerformance * (RatedBattles / (RatedBattles + 10d));
 
     public void AddBattle(Battle battle, bool attacking)
     {
