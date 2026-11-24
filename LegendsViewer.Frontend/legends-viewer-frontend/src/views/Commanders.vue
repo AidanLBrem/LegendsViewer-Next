@@ -4,7 +4,8 @@
     <p class="mb-2">Matchups show wins / battles by starting troop count. Outnumbered and favored mean at least a 2-to-1 disadvantage or advantage. Near-peer covers the battles in between.</p>
     <details class="mb-4">
       <summary>How the command score and K/D are calculated</summary>
-      <p>Expected wins for one battle = own troops / total troops. Command score = 100 × (actual wins − expected wins) / (rated battles + 3). A positive score means more wins than the army sizes predicted. The three extra battles pull short records toward zero.</p>
+      <p>Each battle earns its result (1 for a win, 0 for a loss) minus its expected win chance (own starting troops / total starting troops). Multiply by the square root of total starting troops / 100. A 400-troop battle carries twice the weight of a 100-troop battle.</p>
+      <p>Command score = 100 × sum of weighted results above expectation / (sum of battle weights + 3). The extra 3 pulls short records toward zero and carries the weight of three 100-troop battles.</p>
       <p>The score uses battles with a recorded winner and positive starting counts on both sides. The estimate uses troop numbers alone. Win % includes all decided battles. K/D divides total enemy deaths by own-side deaths across commanded battles. ∞ means kills with zero own deaths, and — means neither side recorded a death.</p>
     </details>
     <v-alert v-if="error" type="error">

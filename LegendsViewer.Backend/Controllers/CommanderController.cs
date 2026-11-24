@@ -75,8 +75,9 @@ public record CommanderRecord(int Id, string Name)
     public MatchupRecord Favored { get; } = new();
     public List<CommandedBattle> Battles { get; } = [];
     public int RatedBattles { get; private set; }
-    private double _winsAboveExpected;
-    public double? CommandScore => RatedBattles == 0 ? null : 100 * _winsAboveExpected / (RatedBattles + 3d);
+    private double _weightedWinsAboveExpected;
+    private double _totalBattleWeight;
+    public double? CommandScore => RatedBattles == 0 ? null : 100 * _weightedWinsAboveExpected / (_totalBattleWeight + 3d);
 
     public void AddBattle(Battle battle, bool attacking)
     {
@@ -106,7 +107,10 @@ public record CommanderRecord(int Id, string Name)
         if (!decided) return;
 
         RatedBattles++;
-        _winsAboveExpected += (won ? 1 : 0) - own / ((double)own + enemy);
+        double totalTroops = (double)own + enemy;
+        double weight = Math.Sqrt(totalTroops / 100d);
+        _weightedWinsAboveExpected += weight * ((won ? 1 : 0) - own / totalTroops);
+        _totalBattleWeight += weight;
     }
 
     private static string DescribeTroops(List<Battle.Squad> squads) =>
