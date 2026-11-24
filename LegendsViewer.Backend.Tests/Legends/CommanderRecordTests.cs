@@ -148,6 +148,38 @@ public class CommanderRecordTests
     }
 
     [TestMethod]
+    public void BattleStrengthFieldsAgreeWithCommanderAndOverview()
+    {
+        using World world = new();
+        var dwarf = new LegendsViewer.Backend.Legends.Various.CreatureInfo("dwarf");
+        var troll = new LegendsViewer.Backend.Legends.Various.CreatureInfo("troll");
+        Battle battle = new([], world) { Outcome = BattleOutcome.DefenderWon };
+        battle.AttackerSquads.Add(new(dwarf, 100, 0, 0, 0));
+        battle.DefenderSquads.Add(new(troll, 50, 0, 0, 0));
+        Assert.AreEqual(120000d, battle.AttackerArmyStrength);
+        Assert.AreEqual(250000d, battle.DefenderArmyStrength);
+        Assert.AreEqual("body-size", battle.ArmyStrengthBasis);
+        Assert.AreEqual(0.48d, battle.ArmyStrengthRatio!.Value, 0.00001);
+        var row = new LegendsViewer.Backend.Contracts.WorldObjectDto(battle);
+        Assert.AreEqual(battle.AttackerArmyStrength, row.AttackerArmyStrength!.Value);
+        Assert.AreEqual(battle.DefenderArmyStrength, row.DefenderArmyStrength!.Value);
+        Assert.AreEqual(battle.ArmyStrengthRatio, row.ArmyStrengthRatio);
+        Assert.AreEqual(battle.ArmyStrengthBasis, row.ArmyStrengthBasis);
+        CommanderRecord defender = new(1, "Defender");
+        defender.AddBattle(battle, false);
+        Assert.AreEqual(battle.DefenderArmyStrength, defender.Battles[0].OwnEffectiveStrength!.Value);
+        Assert.AreEqual(battle.AttackerArmyStrength, defender.Battles[0].EnemyEffectiveStrength!.Value);
+
+        battle.DefenderSquads[0].Animated = true;
+        Assert.AreEqual("numerical", battle.ArmyStrengthBasis);
+        Assert.AreEqual(100d, battle.AttackerArmyStrength);
+        Assert.AreEqual(50d, battle.DefenderArmyStrength);
+        Assert.AreEqual(2d, battle.ArmyStrengthRatio!.Value);
+        battle.DefenderSquads.Clear();
+        Assert.IsNull(battle.ArmyStrengthRatio);
+    }
+
+    [TestMethod]
     public void LargerBattlesCarryMoreWeightForWinsAndLosses()
     {
         using World world = new();
