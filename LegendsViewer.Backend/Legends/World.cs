@@ -163,6 +163,24 @@ public class World : IDisposable, IWorld
 
         XmlParser xmlParser = new(this, xmlFile, xmlPlusFile);
         await xmlParser.ParseAsync();
+        // Match the exact Legends export prefix; never auto-load a generic JSON from another world.
+        const string legendsSuffix = "-legends.xml";
+        if (xmlFile.EndsWith(legendsSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            string statsFile = xmlFile[..^legendsSuffix.Length] + "-creature-stats.json";
+            if (File.Exists(statsFile))
+            {
+                try
+                {
+                    int imported = CreatureStatsImport.Apply(await File.ReadAllTextAsync(statsFile), CreatureInfos);
+                    Log.AppendLine($"Imported DFHack creature statistics for {imported} races.");
+                }
+                catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or UnauthorizedAccessException)
+                {
+                    Log.AppendLine($"Creature statistics import skipped: {ex.Message}");
+                }
+            }
+        }
         ReadCivilizationEthics(xmlFile);
         if (!string.IsNullOrWhiteSpace(historyFile))
         {
