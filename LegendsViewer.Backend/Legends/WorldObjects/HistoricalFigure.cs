@@ -409,7 +409,7 @@ public class HistoricalFigure : WorldObject
         {
             Positions = [];
         }
-        var position = Positions.LastOrDefault(p => p.Entity == entity && p.PositionId == positionId &&
+        var position = Positions.LastOrDefault(p => p.Entity == entity && (p.PositionId == positionId || (positionId == -1 && !string.IsNullOrWhiteSpace(title) && string.Equals(p.Title, title, StringComparison.OrdinalIgnoreCase))) &&
             (!p.StartYear.HasValue || !endYear.HasValue || p.StartYear.Value <= endYear.Value) &&
             (string.IsNullOrWhiteSpace(title) || title == "-1" || string.Equals(p.Title, title, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(p.Title)));
         if (position != null)
