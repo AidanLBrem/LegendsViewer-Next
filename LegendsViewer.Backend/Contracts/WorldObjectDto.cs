@@ -40,6 +40,8 @@ public class WorldObjectDto
             AttackerArmyStrength = strength.Attacker;
             DefenderArmyStrength = strength.Defender;
             ArmyStrengthBasis = strength.Basis;
+            AttackerRatingCoverage = strength.AttackerEstimate.Coverage;
+            DefenderRatingCoverage = strength.DefenderEstimate.Coverage;
             ArmyStrengthRatio = strength.Defender > 0 ? strength.Attacker / strength.Defender : null;
             SetSiteCounts(battle.SiteOutcomes);
         }
@@ -72,6 +74,8 @@ public class WorldObjectDto
     public double? DefenderArmyStrength { get; set; }
     public string? ArmyStrengthBasis { get; set; }
     public double? ArmyStrengthRatio { get; set; }
+    public double? AttackerRatingCoverage { get; set; }
+    public double? DefenderRatingCoverage { get; set; }
 
     public int? AttackerSitesGainedCount { get; set; }
     public int? AttackerSitesLostCount { get; set; }

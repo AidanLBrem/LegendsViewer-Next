@@ -13,6 +13,8 @@ public static class VanillaCombatSizes
         ["ALLIGATOR"] = 400000,
         ["ALPACA"] = 70000,
         ["AMPHIBIAN_MAN"] = 20000,
+        // https://dwarffortresswiki.org/index.php/Andrewsarchus/raw
+        ["ANDREWSARCHUS"] = 850000,
         ["ARMADILLO"] = 7500,
         ["BADGER"] = 15000,
         ["BAT"] = 100,
@@ -111,6 +113,8 @@ public static class VanillaCombatSizes
         ["HUMAN"] = 70000,
         ["HYDRA"] = 8000000,
         ["IMP_FIRE"] = 6000,
+        // Pinned DF-Raws snapshot, creature_next_underground.txt
+        ["JABBERER"] = 4500000,
         ["JAGUAR"] = 75000,
         ["KOBOLD"] = 20000,
         ["LEOPARD"] = 50000,

@@ -10,7 +10,9 @@ import { computed, ComputedRef } from 'vue';
 import { LegendLinkListData } from '../types/legends';
 
 function strengthBasisLabel(basis?: string | null) {
+    if (basis?.includes('placeholders')) return 'Body-size estimate with placeholders' + (basis.includes('undead') ? ' (undead modifiers unknown)' : '');
     return basis === 'native' ? 'Native caste ratings' :
+        basis === 'body-size-undead' ? 'Body-size estimate (undead modifiers unknown)' :
         basis === 'body-size' ? 'Estimated adult body-size ratings' :
         basis === 'numerical' ? 'Numerical fallback (troop counts)' : 'Unavailable';
 }
@@ -49,10 +51,14 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                             <v-col cols="6">
                                 <div class="text-caption">Attacker army strength</div>
                                 <div class="text-h5">{{ store.object.attackerArmyStrength?.toLocaleString() ?? '—' }}</div>
+                                <div class="text-caption">Rating coverage: {{ store.object.attackerRatingCoverage?.toFixed(1) ?? '—' }}%</div>
+                                <div v-for="p in store.object.attackerStrengthEstimate?.placeholders" :key="p.race" class="text-caption" title="Unknown combat rating: 1,200 per unit">* {{ p.count }} × {{ p.race }} (placeholder)</div>
                             </v-col>
                             <v-col cols="6">
                                 <div class="text-caption">Defender army strength</div>
                                 <div class="text-h5">{{ store.object.defenderArmyStrength?.toLocaleString() ?? '—' }}</div>
+                                <div class="text-caption">Rating coverage: {{ store.object.defenderRatingCoverage?.toFixed(1) ?? '—' }}%</div>
+                                <div v-for="p in store.object.defenderStrengthEstimate?.placeholders" :key="p.race" class="text-caption" title="Unknown combat rating: 1,200 per unit">* {{ p.count }} × {{ p.race }} (placeholder)</div>
                             </v-col>
                         </v-row>
                         <div class="mt-3">Attacker : defender strength ratio:

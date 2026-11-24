@@ -14548,6 +14548,10 @@ export interface components {
             outcome?: components["schemas"]["BattleOutcome"];
             coordinates?: components["schemas"]["Location"];
             /** Format: int32 */
+            readonly attackerStrengthEstimate?: { total?: number; combatants?: number; placeholderCount?: number; coverage?: number | null; placeholders?: { race?: string; count?: number }[] };
+            readonly defenderStrengthEstimate?: { total?: number; combatants?: number; placeholderCount?: number; coverage?: number | null; placeholders?: { race?: string; count?: number }[] };
+            readonly attackerRatingCoverage?: number | null;
+            readonly defenderRatingCoverage?: number | null;
             readonly attackerArmyStrength?: number;
             readonly defenderArmyStrength?: number;
             readonly armyStrengthBasis?: string;
@@ -15969,6 +15973,8 @@ export interface components {
             /** Format: int32 */
             defenderDeathCount?: number | null;
             /** Format: int32 */
+            attackerRatingCoverage?: number | null;
+            defenderRatingCoverage?: number | null;
             attackerArmyStrength?: number | null;
             defenderArmyStrength?: number | null;
             armyStrengthBasis?: string | null;

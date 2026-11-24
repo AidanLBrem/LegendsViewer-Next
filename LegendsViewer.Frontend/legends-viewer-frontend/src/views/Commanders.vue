@@ -1,12 +1,12 @@
 <template>
   <v-container fluid>
     <h1 class="text-h4 mb-3">Commanders</h1>
-    <p class="mb-2">Matchups show wins / battles by native-rating-weighted starting strength when available, otherwise estimated adult body-size strength, or starting troop count if neither is available. Outnumbered and favored mean at least a 2-to-1 disadvantage or advantage. Near-peer covers the battles in between.</p>
+    <p class="mb-2">Matchups show wins / battles by native-rating-weighted starting strength when available, otherwise estimated adult body-size strength, with dwarf-equivalent placeholders for unknown creatures. Outnumbered and favored mean at least a 2-to-1 disadvantage or advantage. Near-peer covers the battles in between.</p>
     <details class="mb-4">
       <summary>How the command score and K/D are calculated</summary>
-      <p>Each battle earns its result (1 for a win, 0 for a loss) minus its expected strength share (own effective strength / total effective strength, or troop share when ratings are missing). Multiply by the square root of total starting troops / 100. A 400-troop battle carries twice the weight of a 100-troop battle.</p>
+      <p>Each battle earns its result (1 for a win, 0 for a loss) minus its expected strength share (own effective strength / total effective strength). Multiply by the square root of total starting troops / 100. A 400-troop battle carries twice the weight of a 100-troop battle.</p>
       <p>Command score = 100 × sum of weighted results above expectation / (sum of battle weights + 3) × rated battles / (rated battles + 10). The extra 3 carries the weight of three 100-troop battles. The experience factor further discounts short records regardless of battle size: three rated battles retain 23% of the base score, ten retain 50%, and thirty retain 75%.</p>
-      <p>The score uses battles with a recorded winner and positive starting counts on both sides. Native adult caste ratings are a proxy, not a simulated victory probability. If native ratings are incomplete, both sides use estimated adult body size / 50 (minimum 1) when all creatures have size data. The bundled vanilla raw snapshot may differ from your game or mods. If either side lacks size data or has unsupported undead/transformed troops, both use troop counts. Win % includes all decided battles. K/D divides total enemy deaths by own-side deaths across commanded battles. ∞ means kills with zero own deaths, and — means neither side recorded a death.</p>
+      <p>The score uses battles with a recorded winner and positive starting counts on both sides. Native adult caste ratings are a proxy, not a simulated victory probability. If native ratings are incomplete, both sides use estimated adult body size / 50 (minimum 1) with a rating of 1,200 per unknown combatant. The bundled vanilla raw snapshot may differ from your game or mods. Animated troops use their underlying race's adult body size, without an undead-specific modifier; this is labeled separately. Unknown or transformed combatants receive a 1,200 placeholder, explicitly listed with rating coverage. Win % includes all decided battles. K/D divides total enemy deaths by own-side deaths across commanded battles. ∞ means kills with zero own deaths, and — means neither side recorded a death.</p>
     </details>
     <v-alert v-if="error" type="error">
       {{ error }} <v-btn variant="text" @click="retry++">Retry</v-btn>
@@ -35,12 +35,12 @@
               <td><router-link :to="`/battle/${battle.id}`">{{ battle.name || `Battle #${battle.id}` }}</router-link>
                 <div v-if="battle.year >= 0" class="text-caption">Year {{ battle.year }}</div></td>
               <td>{{ battle.side }}</td><td>{{ battle.outcome }}</td>
-              <td>{{ battle.ownTroops.toLocaleString() }}<div class="text-caption">{{ battle.ownComposition }}</div></td>
-              <td>{{ battle.enemyTroops.toLocaleString() }}<div class="text-caption">{{ battle.enemyComposition }}</div></td>
-              <td>{{ (battle.ownEffectiveStrength ?? battle.ownTroops).toLocaleString() }}</td>
-              <td>{{ (battle.enemyEffectiveStrength ?? battle.enemyTroops).toLocaleString() }}</td>
+              <td>{{ battle.ownTroops.toLocaleString() }}<div class="text-caption">{{ battle.ownComposition }}</div><div v-for="p in battle.ownStrengthEstimate?.placeholders" :key="p.race" class="text-caption" title="Unknown rating: 1,200 per unit">* {{ p.count }} × {{ p.race }} (placeholder)</div></td>
+              <td>{{ battle.enemyTroops.toLocaleString() }}<div class="text-caption">{{ battle.enemyComposition }}</div><div v-for="p in battle.enemyStrengthEstimate?.placeholders" :key="p.race" class="text-caption" title="Unknown rating: 1,200 per unit">* {{ p.count }} × {{ p.race }} (placeholder)</div></td>
+              <td>{{ (battle.ownEffectiveStrength ?? battle.ownTroops).toLocaleString() }}<div class="text-caption">{{ battle.ownStrengthEstimate?.coverage?.toFixed(1) ?? '—' }}% covered</div></td>
+              <td>{{ (battle.enemyEffectiveStrength ?? battle.enemyTroops).toLocaleString() }}<div class="text-caption">{{ battle.enemyStrengthEstimate?.coverage?.toFixed(1) ?? '—' }}% covered</div></td>
               <td>{{ strengthRatio(battle) }}</td>
-              <td>{{ battle.oddsBasis === 'native' ? 'Native' : battle.oddsBasis === 'body-size' ? 'Body size' : 'Numerical fallback' }}</td>
+              <td>{{ battle.oddsBasis.includes('placeholders') ? ('Body size + placeholders' + (battle.oddsBasis.includes('undead') ? ' (undead)' : '')) : battle.oddsBasis === 'native' ? 'Native' : battle.oddsBasis === 'body-size-undead' ? 'Body size (undead modifiers unknown)' : battle.oddsBasis === 'body-size' ? 'Body size' : 'Numerical fallback' }}</td>
               <td>{{ battle.ownKills.toLocaleString() }}</td><td>{{ battle.enemyKills.toLocaleString() }}</td>
             </tr></tbody>
           </table>
@@ -98,11 +98,18 @@ interface CommandedBattle {
   enemyTroops: number;
   ownKills: number;
   enemyKills: number;
-  oddsBasis: 'native' | 'body-size' | 'numerical';
+  oddsBasis: string;
+  ownStrengthEstimate?: StrengthEstimate;
+  enemyStrengthEstimate?: StrengthEstimate;
   ownEffectiveStrength: number | null;
   enemyEffectiveStrength: number | null;
   ownComposition: string;
   enemyComposition: string;
+}
+
+interface StrengthEstimate {
+  coverage: number | null;
+  placeholders: { race: string; count: number }[];
 }
 
 function strengthRatio(battle: CommandedBattle) {

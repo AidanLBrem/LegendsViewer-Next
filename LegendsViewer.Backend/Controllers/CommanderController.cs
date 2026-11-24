@@ -104,7 +104,9 @@ public record CommanderRecord(int Id, string Name)
             own, enemy, enemyDeaths, ownDeaths,
             DescribeTroops(attacking ? battle.Attackers : battle.Defenders),
             DescribeTroops(attacking ? battle.Defenders : battle.Attackers),
-            weighted ? ownOdds : null, weighted ? enemyOdds : null, oddsBasis));
+            weighted ? ownOdds : null, weighted ? enemyOdds : null, oddsBasis,
+            attacking ? strength.AttackerEstimate : strength.DefenderEstimate,
+            attacking ? strength.DefenderEstimate : strength.AttackerEstimate));
         if (own <= 0 || enemy <= 0) return;
 
         var matchup = enemyOdds >= 2 * ownOdds ? Outnumbered : ownOdds >= 2 * enemyOdds ? Favored : NearPeer;
@@ -126,7 +128,8 @@ public record CommanderRecord(int Id, string Name)
 
 public record CommandedBattle(int Id, string Name, int Year, string Side, string Outcome,
     int OwnTroops, int EnemyTroops, int OwnKills, int EnemyKills, string OwnComposition, string EnemyComposition,
-    double? OwnEffectiveStrength = null, double? EnemyEffectiveStrength = null, string OddsBasis = "numerical");
+    double? OwnEffectiveStrength = null, double? EnemyEffectiveStrength = null, string OddsBasis = "numerical",
+    Battle.StrengthEstimate? OwnStrengthEstimate = null, Battle.StrengthEstimate? EnemyStrengthEstimate = null);
 
 public class MatchupRecord
 {
