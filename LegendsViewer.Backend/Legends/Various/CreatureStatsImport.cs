@@ -6,7 +6,8 @@ namespace LegendsViewer.Backend.Legends.Various;
 public record CreatureCasteStats(
     [property: JsonPropertyName("caste_id")] string CasteId,
     [property: JsonPropertyName("adult_body_size")] int? AdultBodySize,
-    [property: JsonPropertyName("native_army_strength")] int? NativeArmyStrength);
+    [property: JsonPropertyName("native_army_strength")] int? NativeArmyStrength,
+    [property: JsonPropertyName("description")] string? Description = null);
 
 public static class CreatureStatsImport
 {
