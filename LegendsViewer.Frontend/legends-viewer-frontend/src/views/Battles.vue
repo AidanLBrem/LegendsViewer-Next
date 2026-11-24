@@ -18,6 +18,10 @@ const tableHeaders: TableHeader[] = [
     { title: 'Type', key: 'type', align: 'start' },
     { title: 'Attacker vs. Defender', key: 'subtype', align: 'start' },
     ...warfareOverviewHeaders,
+    { title: 'Atk strength', key: 'attackerArmyStrength', align: 'end' },
+    { title: 'Def strength', key: 'defenderArmyStrength', align: 'end' },
+    { title: 'Strength ratio (A:D)', key: 'armyStrengthRatio', align: 'end' },
+    { title: 'Strength basis', key: 'armyStrengthBasis', align: 'start' },
     { title: 'Chronicles', key: 'eventCollectionCount', align: 'end' },
     { title: 'Events', key: 'eventCount', align: 'end' },
 ];
