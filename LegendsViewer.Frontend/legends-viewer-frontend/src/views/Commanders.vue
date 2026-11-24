@@ -5,7 +5,7 @@
     <details class="mb-4">
       <summary>How the command score and K/D are calculated</summary>
       <p>Each battle earns its result (1 for a win, 0 for a loss) minus its expected win chance (own starting troops / total starting troops). Multiply by the square root of total starting troops / 100. A 400-troop battle carries twice the weight of a 100-troop battle.</p>
-      <p>Command score = 100 × sum of weighted results above expectation / (sum of battle weights + 3). The extra 3 pulls short records toward zero and carries the weight of three 100-troop battles.</p>
+      <p>Command score = 100 × sum of weighted results above expectation / (sum of battle weights + 3) × rated battles / (rated battles + 10). The extra 3 carries the weight of three 100-troop battles. The experience factor further discounts short records regardless of battle size: three rated battles retain 23% of the base score, ten retain 50%, and thirty retain 75%.</p>
       <p>The score uses battles with a recorded winner and positive starting counts on both sides. The estimate uses troop numbers alone. Win % includes all decided battles. K/D divides total enemy deaths by own-side deaths across commanded battles. ∞ means kills with zero own deaths, and — means neither side recorded a death.</p>
     </details>
     <v-alert v-if="error" type="error">
