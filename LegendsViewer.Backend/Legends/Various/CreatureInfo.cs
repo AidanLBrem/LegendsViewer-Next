@@ -13,6 +13,26 @@ public class CreatureInfo
     public int? NativeCombatRating { get; set; }
     public int? AdultBodySize { get; set; }
     public Dictionary<string, CreatureCasteStats> CasteStats { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public string? Description { get; set; }
+    public string? DescriptionForCaste(string caste)
+    {
+        if (CasteStats.TryGetValue(caste ?? string.Empty, out var stats) && !string.IsNullOrWhiteSpace(stats.Description))
+            return stats.Description;
+        if (CasteStats.Count == 1)
+        {
+            var description = CasteStats.Values.First().Description;
+            if (!string.IsNullOrWhiteSpace(description)) return description;
+        }
+        return Description;
+    }
+
+    public string RecordLabel(string caste)
+    {
+        var description = DescriptionForCaste(caste);
+        var label = string.IsNullOrWhiteSpace(description) ? NameSingular : $"{NameSingular} — {description}";
+        return string.IsNullOrWhiteSpace(caste) || string.Equals(caste, "default", StringComparison.OrdinalIgnoreCase)
+            ? label : $"{label} · {caste}";
+    }
     public int? KnownAdultSize => AdultBodySize ?? VanillaCombatSizes.Find(Id);
     public int? SizeForCaste(string caste) => CasteStats.TryGetValue(caste ?? string.Empty, out var stats) ? stats.AdultBodySize ?? KnownAdultSize : KnownAdultSize;
     public int? NativeForCaste(string caste) => CasteStats.TryGetValue(caste ?? string.Empty, out var stats) ? stats.NativeArmyStrength ?? NativeCombatRating : NativeCombatRating;
@@ -41,6 +61,7 @@ public class CreatureInfo
                 case "adult_body_size":
                     AdultBodySize = int.TryParse(property.Value, out int size) && size > 0 ? size : null;
                     break;
+                case "description": Description = property.Value; break;
                 case "name_singular": NameSingular = string.Intern(Formatting.FormatRace(property.Value)); break;
                 case "name_plural": NamePlural = string.Intern(Formatting.FormatRace(property.Value)); break;
                 // TODO read the other properties and use them
