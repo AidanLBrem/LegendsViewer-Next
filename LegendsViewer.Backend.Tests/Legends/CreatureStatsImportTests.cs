@@ -6,6 +6,20 @@ namespace LegendsViewer.Backend.Tests.Legends;
 public class CreatureStatsImportTests
 {
     [TestMethod]
+    public void RecordLabelUsesGeneratedDescriptionAndHidesDefaultCaste()
+    {
+        var race = new CreatureInfo("FORGOTTEN_BEAST_14") { NameSingular = "Forgotten Beast" };
+        Assert.AreEqual("Forgotten Beast", race.RecordLabel("Default"));
+        CreatureStatsImport.Apply("""
+        {"schema_version":1,"creatures":[{"creature_id":"FORGOTTEN_BEAST_14","castes":[
+        {"caste_id":"DEFAULT","adult_body_size":100000,"native_army_strength":2000,
+         "description":"A gigantic feathered serpent."}]}]}
+        """, new[] { race });
+        Assert.AreEqual("Forgotten Beast — A gigantic feathered serpent.", race.RecordLabel("Default"));
+        Assert.AreEqual("Dwarf · Female", new CreatureInfo("DWARF") { NameSingular = "Dwarf" }.RecordLabel("Female"));
+    }
+
+    [TestMethod]
     public void ImportsGeneratedCreatureAndPreservesCasteDifferences()
     {
         var race = new CreatureInfo("FORGOTTEN_BEAST_14");
