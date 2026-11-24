@@ -14,7 +14,7 @@ public class RemoveHfEntityLink : WorldEvent
     public HistoricalFigure? HistoricalFigure { get; set; }
     public HfEntityLinkType LinkType { get; set; }
     public string? Position { get; set; }
-    public int PositionId { get; set; }
+    public int PositionId { get; set; } = -1;
 
     public RemoveHfEntityLink(List<Property> properties, IWorld world)
         : base(properties, world)
@@ -74,12 +74,12 @@ public class RemoveHfEntityLink : WorldEvent
         if (HistoricalFigure != null)
         {
             HistoricalFigure.AddEvent(this);
-            if(PositionId != -1)
+            if (LinkType == HfEntityLinkType.Position && (PositionId != -1 || !string.IsNullOrWhiteSpace(Position)))
             {
                 HistoricalFigure.EndPositionAssignment(Entity, Year, PositionId, Position ?? string.Empty);
             }
         }
-        Entity.AddEvent(this);
+        Entity?.AddEvent(this);
     }
 
     public override string Print(bool link = true, DwarfObject? pov = null)
