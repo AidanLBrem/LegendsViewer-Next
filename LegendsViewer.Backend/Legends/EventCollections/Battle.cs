@@ -47,29 +47,43 @@ public class Battle : EventCollection, IHasComplexSubtype
     public int DefenderTroopCount => DefenderCount;
     public int AttackerCount => NotableAttackers.Distinct().Count() + AttackerSquads.Sum(squad => squad.Numbers);
     public int DefenderCount => NotableDefenders.Distinct().Count() + DefenderSquads.Sum(squad => squad.Numbers);
-    // Both armies must use the same rating basis. Counts are the explicit fallback.
+    // Keep both armies on one scale; unknown sizes receive the adult dwarf proxy.
+    public const int PlaceholderCombatRating = 1200;
+
+    public record PlaceholderRating(string Race, int Count);
+    public record StrengthEstimate(double Total, int Combatants, List<PlaceholderRating> Placeholders)
+    {
+        public int PlaceholderCount => Placeholders.Sum(p => p.Count);
+        public double? Coverage => Combatants > 0 ? 100d * (Combatants - PlaceholderCount) / Combatants : null;
+    }
+
     [JsonIgnore]
-    public (double Attacker, double Defender, string Basis) ArmyStrength
+    public (double Attacker, double Defender, string Basis, StrengthEstimate AttackerEstimate, StrengthEstimate DefenderEstimate) ArmyStrength
     {
         get
         {
-            double? attacker = CalculateSideStrength(true, true);
-            double? defender = CalculateSideStrength(false, true);
-            if (attacker > 0 && defender > 0)
-                return (attacker.Value, defender.Value, "native");
+            var attacker = CalculateSideStrength(true, true);
+            var defender = CalculateSideStrength(false, true);
+            if (attacker.Combatants > 0 && defender.Combatants > 0 &&
+                attacker.PlaceholderCount == 0 && defender.PlaceholderCount == 0)
+                return (attacker.Total, defender.Total, "native", attacker, defender);
 
             attacker = CalculateSideStrength(true, false);
             defender = CalculateSideStrength(false, false);
-            if (attacker > 0 && defender > 0)
-                return (attacker.Value, defender.Value, HasAnimatedCombatants ? "body-size-undead" : "body-size");
-
-            return (AttackerCount, DefenderCount, "numerical");
+            bool placeholders = attacker.PlaceholderCount > 0 || defender.PlaceholderCount > 0;
+            string basis = HasAnimatedCombatants ? "body-size-undead" : "body-size";
+            if (placeholders) basis += "-placeholders";
+            return (attacker.Total, defender.Total, basis, attacker, defender);
         }
     }
 
     public double AttackerArmyStrength => ArmyStrength.Attacker;
     public double DefenderArmyStrength => ArmyStrength.Defender;
     public string ArmyStrengthBasis => ArmyStrength.Basis;
+    public StrengthEstimate AttackerStrengthEstimate => ArmyStrength.AttackerEstimate;
+    public StrengthEstimate DefenderStrengthEstimate => ArmyStrength.DefenderEstimate;
+    public double? AttackerRatingCoverage => AttackerStrengthEstimate.Coverage;
+    public double? DefenderRatingCoverage => DefenderStrengthEstimate.Coverage;
     public double? ArmyStrengthRatio
     {
         get
@@ -79,30 +93,46 @@ public class Battle : EventCollection, IHasComplexSubtype
         }
     }
 
+    private static bool IsAnimated(HistoricalFigure f) =>
+        f.Animated || f.Zombie || f.Skeleton || f.UndeadTypes.Count > 0 || !string.IsNullOrEmpty(f.AnimatedType);
+
     private bool HasAnimatedCombatants =>
         AttackerSquads.Concat(DefenderSquads).Any(s => s.Numbers > 0 && s.Animated) ||
-        NotableAttackers.Concat(NotableDefenders).Any(f =>
-            f.UndeadTypes.Count > 0 || !string.IsNullOrEmpty(f.AnimatedType));
+        NotableAttackers.Concat(NotableDefenders).Any(IsAnimated);
 
-    private double? CalculateSideStrength(bool attacking, bool native)
+    private StrengthEstimate CalculateSideStrength(bool attacking, bool native)
     {
         double total = 0;
+        int combatants = 0;
+        var placeholders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(CreatureInfo? race, int count, bool animated, bool transformed)
+        {
+            if (count <= 0) return;
+            int? rating = transformed || (native && animated) ? null :
+                native ? race?.NativeCombatRating : race?.EstimatedCombatRating;
+            combatants += count;
+            if (rating is not > 0)
+            {
+                string name = race?.Id ?? "unknown";
+                if (string.IsNullOrWhiteSpace(name)) name = "unknown";
+                if (animated) name += " (undead)";
+                if (transformed) name += " (transformed)";
+                placeholders[name] = placeholders.GetValueOrDefault(name) + count;
+                rating = PlaceholderCombatRating;
+            }
+            total += (double)count * rating.Value;
+        }
+
         foreach (var squad in attacking ? AttackerSquads : DefenderSquads)
-        {
-            if (squad.Numbers <= 0) continue;
-            if ((native && squad.Animated) || (native ? squad.Race?.NativeCombatRating : squad.Race?.EstimatedCombatRating) is not int rating || rating <= 0)
-                return null;
-            total += (double)squad.Numbers * rating;
-        }
+            Add(squad.Race, squad.Numbers, squad.Animated, false);
+
         foreach (var figure in (attacking ? NotableAttackers : NotableDefenders).Distinct())
-        {
-            if (figure.CreatureTypes.Count > 0 || !string.IsNullOrEmpty(figure.PreviousRace) ||
-                (native && (figure.UndeadTypes.Count > 0 || !string.IsNullOrEmpty(figure.AnimatedType))) ||
-                (native ? figure.Race?.NativeCombatRating : figure.Race?.EstimatedCombatRating) is not int rating || rating <= 0)
-                return null;
-            total += rating;
-        }
-        return total;
+            Add(figure.Race, 1, IsAnimated(figure),
+                figure.CreatureTypes.Count > 0 || !string.IsNullOrEmpty(figure.PreviousRace));
+
+        return new StrengthEstimate(total, combatants, placeholders.OrderBy(p => p.Key)
+            .Select(p => new PlaceholderRating(p.Key, p.Value)).ToList());
     }
 
     public int AttackersRemainingCount => Attackers.Sum(squad => Math.Max(0, squad.Numbers - squad.Deaths));
