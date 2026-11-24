@@ -36,6 +36,11 @@ public class WorldObjectDto
             DefenderDeathCount = battle.DefenderDeathCount;
             AttackerTroopCount = battle.AttackerCount;
             DefenderTroopCount = battle.DefenderCount;
+            var strength = battle.ArmyStrength;
+            AttackerArmyStrength = strength.Attacker;
+            DefenderArmyStrength = strength.Defender;
+            ArmyStrengthBasis = strength.Basis;
+            ArmyStrengthRatio = strength.Defender > 0 ? strength.Attacker / strength.Defender : null;
             SetSiteCounts(battle.SiteOutcomes);
         }
         else if (worldObject is Entity entity)
@@ -62,6 +67,11 @@ public class WorldObjectDto
     // deployments (not unique troops or a war-start snapshot).
     public int? AttackerTroopCount { get; set; }
     public int? DefenderTroopCount { get; set; }
+
+    public double? AttackerArmyStrength { get; set; }
+    public double? DefenderArmyStrength { get; set; }
+    public string? ArmyStrengthBasis { get; set; }
+    public double? ArmyStrengthRatio { get; set; }
 
     public int? AttackerSitesGainedCount { get; set; }
     public int? AttackerSitesLostCount { get; set; }

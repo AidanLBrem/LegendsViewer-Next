@@ -14548,6 +14548,10 @@ export interface components {
             outcome?: components["schemas"]["BattleOutcome"];
             coordinates?: components["schemas"]["Location"];
             /** Format: int32 */
+            readonly attackerArmyStrength?: number;
+            readonly defenderArmyStrength?: number;
+            readonly armyStrengthBasis?: string;
+            readonly armyStrengthRatio?: number | null;
             readonly attackerCount?: number;
             /** Format: int32 */
             readonly defenderCount?: number;
@@ -15965,6 +15969,10 @@ export interface components {
             /** Format: int32 */
             defenderDeathCount?: number | null;
             /** Format: int32 */
+            attackerArmyStrength?: number | null;
+            defenderArmyStrength?: number | null;
+            armyStrengthBasis?: string | null;
+            armyStrengthRatio?: number | null;
             attackerTroopCount?: number | null;
             /** Format: int32 */
             defenderTroopCount?: number | null;
