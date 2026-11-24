@@ -1,11 +1,16 @@
 <template>
   <v-container fluid>
     <h1 class="text-h4 mb-3">Commanders</h1>
-    <p class="mb-4">Win % uses battles with a recorded winner. Enemies killed counts deaths on the opposing side in battles the figure commanded.</p>
+    <p class="mb-2">Matchups show wins / battles by starting troop count. Outnumbered and favored mean at least a 2-to-1 disadvantage or advantage. Near-peer covers the battles in between.</p>
+    <details class="mb-4">
+      <summary>How the command score and K/D are calculated</summary>
+      <p>Expected wins for one battle = own troops / total troops. Command score = 100 × (actual wins − expected wins) / (rated battles + 3). A positive score means more wins than the army sizes predicted. The three extra battles pull short records toward zero.</p>
+      <p>The score uses battles with a recorded winner and positive starting counts on both sides. The estimate uses troop numbers alone. Win % includes all decided battles. K/D divides total enemy deaths by own-side deaths across commanded battles. ∞ means kills with zero own deaths, and — means neither side recorded a death.</p>
+    </details>
     <v-alert v-if="error" type="error">
       {{ error }} <v-btn variant="text" @click="retry++">Retry</v-btn>
     </v-alert>
-    <v-data-table v-else :headers="headers" :items="commanders" :loading="loading"
+    <v-data-table v-else class="commander-table" fixed-header height="min(64vh, 640px)" :headers="headers" :items="commanders" :loading="loading"
       :sort-by="[{ key: 'victories', order: 'desc' }]" :items-per-page="25"
       no-data-text="No battle commanders were recorded in this world.">
       <template #item.name="{ item }">
@@ -15,6 +20,15 @@
         {{ item.winPercentage == null ? '—' : item.winPercentage.toLocaleString(undefined, { maximumFractionDigits: 1 }) + '%' }}
       </template>
       <template #item.enemiesKilled="{ item }">{{ item.enemiesKilled.toLocaleString() }}</template>
+      <template #item.commandScore="{ item }">
+        {{ item.commandScore?.toLocaleString(undefined, { maximumFractionDigits: 1, signDisplay: 'exceptZero' }) ?? '—' }}
+      </template>
+      <template #item.killDeathRatio="{ item }">
+        {{ item.ownDeaths ? (item.enemiesKilled / item.ownDeaths).toFixed(2) : item.enemiesKilled ? '∞' : '—' }}
+      </template>
+      <template v-for="band in bands" :key="band.key" #[`item.${band.key}`]="{ item }">
+        {{ item[band.key].wins }} / {{ item[band.key].battles }}
+      </template>
     </v-data-table>
   </v-container>
 </template>
@@ -31,14 +45,38 @@ interface Commander {
   losses: number;
   winPercentage: number | null;
   enemiesKilled: number;
+  ownDeaths: number;
+  commandScore: number | null;
+  ratedBattles: number;
+  outnumbered: Matchup;
+  nearPeer: Matchup;
+  favored: Matchup;
 }
 
+interface Matchup {
+  battles: number;
+  wins: number;
+}
+
+const bands = [
+  { key: 'outnumbered', title: 'Outnumbered' },
+  { key: 'nearPeer', title: 'Near-peer' },
+  { key: 'favored', title: 'Favored' },
+] as const;
+
 const headers = [
-  { title: 'Commander', key: 'name' },
-  { title: 'Victories', key: 'victories' },
-  { title: 'Losses', key: 'losses' },
-  { title: 'Win %', key: 'winPercentage' },
-  { title: 'Enemies killed', key: 'enemiesKilled' },
+  { title: 'Commander', key: 'name', width: 216 },
+  { title: 'Command score', key: 'commandScore', width: 128 },
+  { title: 'Rated battles', key: 'ratedBattles', width: 104 },
+  { title: 'Victories', key: 'victories', width: 96 },
+  { title: 'Losses', key: 'losses', width: 84 },
+  { title: 'Win %', key: 'winPercentage', width: 88 },
+  { title: 'Enemies killed', key: 'enemiesKilled', width: 112 },
+  { title: 'Own deaths', key: 'ownDeaths', width: 104 },
+  { title: 'K/D', key: 'killDeathRatio', width: 90,
+    value: (row: Commander) => row.ownDeaths ? row.enemiesKilled / row.ownDeaths : row.enemiesKilled ? Infinity : -1,
+    sort: (a: number, b: number) => a === b ? 0 : a < b ? -1 : 1 },
+  ...bands.map(band => ({ ...band, width: 128, value: (row: Commander) => row[band.key].battles })),
 ];
 const world = useWorldStore();
 const commanders = ref<Commander[]>([]);
@@ -64,3 +102,12 @@ watch([() => world.world, retry], async (_, __, cleanup) => {
   }
 }, { immediate: true });
 </script>
+<style scoped>
+.commander-table :deep(table) {
+  table-layout: fixed;
+  width: 1406px;
+}
+.commander-table :deep(td) {
+  overflow-wrap: anywhere;
+}
+</style>

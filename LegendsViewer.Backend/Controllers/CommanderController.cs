@@ -45,13 +45,7 @@ public class CommanderController(IWorld world) : ControllerBase
         {
             if (attacking == null) continue;
             var record = records[figureId];
-            record.EnemiesKilled += attacking.Value ? battle.DefenderDeathCount : battle.AttackerDeathCount;
-            if (battle.Outcome == BattleOutcome.Unknown) continue;
-
-            if (attacking.Value == (battle.Outcome == BattleOutcome.AttackerWon))
-                record.Victories++;
-            else
-                record.Losses++;
+            record.AddBattle(battle, attacking.Value);
         }
         return records.Values.OrderBy(r => r.Name).ThenBy(r => r.Id);
 
@@ -75,4 +69,40 @@ public record CommanderRecord(int Id, string Name)
     public int Losses { get; set; }
     public long EnemiesKilled { get; set; }
     public double? WinPercentage => Victories + Losses == 0 ? null : 100d * Victories / (Victories + Losses);
+    public long OwnDeaths { get; private set; }
+    public MatchupRecord Outnumbered { get; } = new();
+    public MatchupRecord NearPeer { get; } = new();
+    public MatchupRecord Favored { get; } = new();
+    public int RatedBattles { get; private set; }
+    private double _winsAboveExpected;
+    public double? CommandScore => RatedBattles == 0 ? null : 100 * _winsAboveExpected / (RatedBattles + 3d);
+
+    public void AddBattle(Battle battle, bool attacking)
+    {
+        EnemiesKilled += attacking ? battle.DefenderDeathCount : battle.AttackerDeathCount;
+        OwnDeaths += attacking ? battle.AttackerDeathCount : battle.DefenderDeathCount;
+
+        bool decided = battle.Outcome != BattleOutcome.Unknown;
+        bool won = decided && attacking == (battle.Outcome == BattleOutcome.AttackerWon);
+        if (won) Victories++;
+        else if (decided) Losses++;
+
+        int own = attacking ? battle.AttackerCount : battle.DefenderCount;
+        int enemy = attacking ? battle.DefenderCount : battle.AttackerCount;
+        if (own <= 0 || enemy <= 0) return;
+
+        var matchup = enemy >= 2L * own ? Outnumbered : own >= 2L * enemy ? Favored : NearPeer;
+        matchup.Battles++;
+        if (won) matchup.Wins++;
+        if (!decided) return;
+
+        RatedBattles++;
+        _winsAboveExpected += (won ? 1 : 0) - own / ((double)own + enemy);
+    }
+}
+
+public class MatchupRecord
+{
+    public int Battles { get; set; }
+    public int Wins { get; set; }
 }

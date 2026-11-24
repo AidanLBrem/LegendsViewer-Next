@@ -41,4 +41,38 @@ public class CommanderRecordTests
         Assert.AreEqual(12L, records[second.Id].EnemiesKilled);
         Assert.IsNull(records[third.Id].WinPercentage);
     }
+
+    [TestMethod]
+    public void RatesWinsAgainstStartingNumbersAndSeparatesMatchups()
+    {
+        using World world = new();
+        Battle battle = new([], world) { Outcome = BattleOutcome.AttackerWon, DefenderDeathCount = 8 };
+        battle.AttackerSquads.Add(new(null!, 10, 0, 0, 0));
+        battle.DefenderSquads.Add(new(null!, 20, 8, 0, 0));
+        CommanderRecord attacker = new(1, "Attacker");
+        CommanderRecord defender = new(2, "Defender");
+
+        attacker.AddBattle(battle, true);
+        defender.AddBattle(battle, false);
+        Assert.AreEqual(1, attacker.Outnumbered.Wins);
+        Assert.AreEqual(1, defender.Favored.Battles);
+        Assert.AreEqual(0, defender.Favored.Wins);
+        Assert.AreEqual(100d / 6, attacker.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(-100d / 6, defender.CommandScore!.Value, 0.00001);
+        Assert.AreEqual(0L, attacker.OwnDeaths);
+        Assert.AreEqual(8L, defender.OwnDeaths);
+
+        battle.DefenderSquads[0].Numbers = 11;
+        battle.Outcome = BattleOutcome.Unknown;
+        attacker.AddBattle(battle, true);
+        Assert.AreEqual(1, attacker.NearPeer.Battles);
+        Assert.AreEqual(0, attacker.NearPeer.Wins);
+        Assert.AreEqual(1, attacker.RatedBattles);
+
+        battle.AttackerSquads.Clear();
+        battle.Outcome = BattleOutcome.AttackerWon;
+        attacker.AddBattle(battle, true);
+        Assert.AreEqual(1, attacker.RatedBattles);
+        Assert.AreEqual(2, attacker.Victories);
+    }
 }
