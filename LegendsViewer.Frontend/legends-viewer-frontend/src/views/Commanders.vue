@@ -10,9 +10,36 @@
     <v-alert v-if="error" type="error">
       {{ error }} <v-btn variant="text" @click="retry++">Retry</v-btn>
     </v-alert>
-    <v-data-table v-else class="commander-table" fixed-header height="min(64vh, 640px)" :headers="headers" :items="commanders" :loading="loading"
+    <v-data-table v-else class="commander-table" show-expand :item-value="(item: Commander) => String(item.id)" v-model:expanded="expanded" fixed-header height="min(64vh, 640px)" :headers="headers" :items="commanders" :loading="loading"
       :sort-by="[{ key: 'victories', order: 'desc' }]" :items-per-page="25"
       no-data-text="No battle commanders were recorded in this world.">
+      <template #item.data-table-expand="{ item, internalItem, isExpanded, toggleExpand }">
+        <v-btn :icon="isExpanded(internalItem) ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+          size="small" variant="text" :aria-expanded="isExpanded(internalItem)"
+          :aria-label="`Battles commanded by ${item.name || 'historical figure ' + item.id}`"
+          @click="toggleExpand(internalItem)" />
+      </template>
+      <template #expanded-row="{ item, columns }">
+        <tr><td :colspan="columns.length" class="py-2">
+          <table v-if="item.battles.length" class="battle-list">
+            <caption>Battles commanded by {{ item.name || 'historical figure ' + item.id }}</caption>
+            <thead><tr>
+              <th scope="col">Battle</th><th scope="col">Side</th><th scope="col">Result</th>
+              <th scope="col">Troops deployed</th><th scope="col">Troops faced</th>
+              <th scope="col">Enemy killed</th><th scope="col">Own killed</th>
+            </tr></thead>
+            <tbody><tr v-for="battle in item.battles" :key="battle.id">
+              <td><router-link :to="`/battle/${battle.id}`">{{ battle.name || `Battle #${battle.id}` }}</router-link>
+                <div v-if="battle.year >= 0" class="text-caption">Year {{ battle.year }}</div></td>
+              <td>{{ battle.side }}</td><td>{{ battle.outcome }}</td>
+              <td>{{ battle.ownTroops.toLocaleString() }}<div class="text-caption">{{ battle.ownComposition }}</div></td>
+              <td>{{ battle.enemyTroops.toLocaleString() }}<div class="text-caption">{{ battle.enemyComposition }}</div></td>
+              <td>{{ battle.ownKills.toLocaleString() }}</td><td>{{ battle.enemyKills.toLocaleString() }}</td>
+            </tr></tbody>
+          </table>
+          <p v-else>No linked battles with a recorded command side.</p>
+        </td></tr>
+      </template>
       <template #item.name="{ item }">
         <router-link :to="`/hf/${item.id}`">{{ item.name || `Historical figure ${item.id}` }}</router-link>
       </template>
@@ -48,9 +75,24 @@ interface Commander {
   ownDeaths: number;
   commandScore: number | null;
   ratedBattles: number;
+  battles: CommandedBattle[];
   outnumbered: Matchup;
   nearPeer: Matchup;
   favored: Matchup;
+}
+
+interface CommandedBattle {
+  id: number;
+  name: string;
+  year: number;
+  side: string;
+  outcome: string;
+  ownTroops: number;
+  enemyTroops: number;
+  ownKills: number;
+  enemyKills: number;
+  ownComposition: string;
+  enemyComposition: string;
 }
 
 interface Matchup {
@@ -65,6 +107,7 @@ const bands = [
 ] as const;
 
 const headers = [
+  { title: '', key: 'data-table-expand', width: 48, sortable: false },
   { title: 'Commander', key: 'name', width: 216 },
   { title: 'Command score', key: 'commandScore', width: 128 },
   { title: 'Rated battles', key: 'ratedBattles', width: 104 },
@@ -78,6 +121,7 @@ const headers = [
     sort: (a: number, b: number) => a === b ? 0 : a < b ? -1 : 1 },
   ...bands.map(band => ({ ...band, width: 128, value: (row: Commander) => row[band.key].battles })),
 ];
+const expanded = ref<string[]>([]);
 const world = useWorldStore();
 const commanders = ref<Commander[]>([]);
 const loading = ref(false);
@@ -88,6 +132,7 @@ watch([() => world.world, retry], async (_, __, cleanup) => {
   const controller = new AbortController();
   cleanup(() => controller.abort());
   commanders.value = [];
+  expanded.value = [];
   loading.value = true;
   error.value = '';
   try {
@@ -103,11 +148,22 @@ watch([() => world.world, retry], async (_, __, cleanup) => {
 }, { immediate: true });
 </script>
 <style scoped>
-.commander-table :deep(table) {
+.commander-table :deep(.v-table__wrapper > table) {
   table-layout: fixed;
-  width: 1406px;
+  width: 1454px;
 }
 .commander-table :deep(td) {
   overflow-wrap: anywhere;
 }
+.battle-list {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.battle-list caption, .battle-list th, .battle-list td {
+  padding: 6px 10px;
+  text-align: left;
+}
+.battle-list caption { font-weight: 600; }
+.battle-list th:first-child, .battle-list th:nth-child(4), .battle-list th:nth-child(5) { width: 23%; }
 </style>

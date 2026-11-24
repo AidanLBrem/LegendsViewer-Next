@@ -41,7 +41,7 @@ public class CommanderController(IWorld world) : ControllerBase
             AddCommand(defender, parent as Battle, false);
         }
 
-        foreach (var ((figureId, battle), attacking) in commands)
+        foreach (var ((figureId, battle), attacking) in commands.OrderBy(c => c.Key.Battle.StartYear).ThenBy(c => c.Key.Battle.Id))
         {
             if (attacking == null) continue;
             var record = records[figureId];
@@ -73,14 +73,18 @@ public record CommanderRecord(int Id, string Name)
     public MatchupRecord Outnumbered { get; } = new();
     public MatchupRecord NearPeer { get; } = new();
     public MatchupRecord Favored { get; } = new();
+    public List<CommandedBattle> Battles { get; } = [];
     public int RatedBattles { get; private set; }
     private double _winsAboveExpected;
     public double? CommandScore => RatedBattles == 0 ? null : 100 * _winsAboveExpected / (RatedBattles + 3d);
 
     public void AddBattle(Battle battle, bool attacking)
     {
-        EnemiesKilled += attacking ? battle.DefenderDeathCount : battle.AttackerDeathCount;
-        OwnDeaths += attacking ? battle.AttackerDeathCount : battle.DefenderDeathCount;
+        int enemyDeaths = attacking ? battle.DefenderDeathCount : battle.AttackerDeathCount;
+        int ownDeaths = attacking ? battle.AttackerDeathCount : battle.DefenderDeathCount;
+
+        EnemiesKilled += enemyDeaths;
+        OwnDeaths += ownDeaths;
 
         bool decided = battle.Outcome != BattleOutcome.Unknown;
         bool won = decided && attacking == (battle.Outcome == BattleOutcome.AttackerWon);
@@ -89,6 +93,11 @@ public record CommanderRecord(int Id, string Name)
 
         int own = attacking ? battle.AttackerCount : battle.DefenderCount;
         int enemy = attacking ? battle.DefenderCount : battle.AttackerCount;
+        Battles.Add(new CommandedBattle(battle.Id, battle.Name, battle.StartYear,
+            attacking ? "Attacker" : "Defender", decided ? (won ? "Victory" : "Loss") : "Unknown",
+            own, enemy, enemyDeaths, ownDeaths,
+            DescribeTroops(attacking ? battle.Attackers : battle.Defenders),
+            DescribeTroops(attacking ? battle.Defenders : battle.Attackers)));
         if (own <= 0 || enemy <= 0) return;
 
         var matchup = enemy >= 2L * own ? Outnumbered : own >= 2L * enemy ? Favored : NearPeer;
@@ -99,7 +108,14 @@ public record CommanderRecord(int Id, string Name)
         RatedBattles++;
         _winsAboveExpected += (won ? 1 : 0) - own / ((double)own + enemy);
     }
+
+    private static string DescribeTroops(List<Battle.Squad> squads) =>
+        string.Join(", ", squads.Where(s => s.Numbers > 0).OrderByDescending(s => s.Numbers)
+            .Select(s => $"{s.Numbers} {(s.Animated ? "undead " : "")}{(s.Numbers == 1 ? s.Race.NameSingular : s.Race.NamePlural)}"));
 }
+
+public record CommandedBattle(int Id, string Name, int Year, string Side, string Outcome,
+    int OwnTroops, int EnemyTroops, int OwnKills, int EnemyKills, string OwnComposition, string EnemyComposition);
 
 public class MatchupRecord
 {
