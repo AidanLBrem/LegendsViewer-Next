@@ -61,7 +61,7 @@ public class Battle : EventCollection, IHasComplexSubtype
             attacker = CalculateSideStrength(true, false);
             defender = CalculateSideStrength(false, false);
             if (attacker > 0 && defender > 0)
-                return (attacker.Value, defender.Value, "body-size");
+                return (attacker.Value, defender.Value, HasAnimatedCombatants ? "body-size-undead" : "body-size");
 
             return (AttackerCount, DefenderCount, "numerical");
         }
@@ -79,21 +79,25 @@ public class Battle : EventCollection, IHasComplexSubtype
         }
     }
 
+    private bool HasAnimatedCombatants =>
+        AttackerSquads.Concat(DefenderSquads).Any(s => s.Numbers > 0 && s.Animated) ||
+        NotableAttackers.Concat(NotableDefenders).Any(f =>
+            f.UndeadTypes.Count > 0 || !string.IsNullOrEmpty(f.AnimatedType));
+
     private double? CalculateSideStrength(bool attacking, bool native)
     {
         double total = 0;
         foreach (var squad in attacking ? AttackerSquads : DefenderSquads)
         {
             if (squad.Numbers <= 0) continue;
-            if (squad.Animated || (native ? squad.Race?.NativeCombatRating : squad.Race?.EstimatedCombatRating) is not int rating || rating <= 0)
+            if ((native && squad.Animated) || (native ? squad.Race?.NativeCombatRating : squad.Race?.EstimatedCombatRating) is not int rating || rating <= 0)
                 return null;
             total += (double)squad.Numbers * rating;
         }
         foreach (var figure in (attacking ? NotableAttackers : NotableDefenders).Distinct())
         {
-            if (figure.CreatureTypes.Count > 0 || figure.UndeadTypes.Count > 0 ||
-                !string.IsNullOrEmpty(figure.PreviousRace) ||
-                !string.IsNullOrEmpty(figure.AnimatedType) ||
+            if (figure.CreatureTypes.Count > 0 || !string.IsNullOrEmpty(figure.PreviousRace) ||
+                (native && (figure.UndeadTypes.Count > 0 || !string.IsNullOrEmpty(figure.AnimatedType))) ||
                 (native ? figure.Race?.NativeCombatRating : figure.Race?.EstimatedCombatRating) is not int rating || rating <= 0)
                 return null;
             total += rating;
