@@ -252,6 +252,60 @@ public class CommanderRecordTests
     }
 
     [TestMethod]
+    public void PrehistoricAndMissingVanillaRacesUseExportedIdentifiers()
+    {
+        var sizes = new Dictionary<string, int>
+        {
+            ["BOBCAT"] = 8000,
+            ["CENOZOIC_ANDREWSARCHUS"] = 850000,
+            ["CENOZOIC_DEINOTHERIUM"] = 11793000,
+            ["CENOZOIC_KELENKEN"] = 100000,
+            ["CENOZOIC_MAMMOTH_PYGMY"] = 1055000,
+            ["CENOZOIC_MAMMOTH_WOOLLY"] = 6045000,
+            ["CENOZOIC_MEGACEROPS"] = 3000000,
+            ["CENOZOIC_MEGALANIA"] = 450000,
+            ["CENOZOIC_PARACERATHERIUM"] = 18000000,
+            ["CENOZOIC_RHINOCEROS_WOOLLY"] = 2650000,
+            ["CENOZOIC_SMILODON"] = 328000,
+            ["CENOZOIC_THYLACINE"] = 19000,
+            ["CRETACEOUS_CARNOTAURUS"] = 1700000,
+            ["CRETACEOUS_QUETZALCOATLUS"] = 225000,
+            ["CRETACEOUS_QUETZALCOATLUS_MAN"] = 147500,
+            ["CRETACEOUS_THERIZINOSAURUS"] = 5000000,
+            ["ELK_BIRD"] = 100000,
+            ["GIANT_OPOSSUM"] = 221040,
+            ["JURASSIC_AFROVENATOR"] = 950000,
+            ["JURASSIC_KENTROSAURUS"] = 1600000,
+            ["PERMIAN_ANTEOSAURUS"] = 600000,
+            ["RUTHERER"] = 3000000,
+            ["VORACIOUS_CAVE_CRAWLER"] = 900000,
+        };
+        foreach (var (id, size) in sizes)
+        {
+            var race = new LegendsViewer.Backend.Legends.Various.CreatureInfo(id.ToLowerInvariant());
+            Assert.AreEqual(size / 50, race.EstimatedCombatRating!.Value, id);
+        }
+    }
+
+    [TestMethod]
+    public void TransformedFiguresRetainKnownRaceSize()
+    {
+        using World world = new();
+        var human = new LegendsViewer.Backend.Legends.Various.CreatureInfo("human") { NativeCombatRating = 10 };
+        var dwarf = new LegendsViewer.Backend.Legends.Various.CreatureInfo("dwarf") { NativeCombatRating = 10 };
+        Battle battle = new([], world);
+        battle.NotableAttackers.Add(new HistoricalFigure([], world) { Id = 1, Race = human, PreviousRace = "elf" });
+        battle.NotableDefenders.Add(new HistoricalFigure([], world) { Id = 2, Race = dwarf });
+        Assert.AreEqual("body-size", battle.ArmyStrengthBasis);
+        Assert.AreEqual(1400d, battle.AttackerArmyStrength);
+        Assert.AreEqual(1200d, battle.DefenderArmyStrength);
+        Assert.AreEqual(100d, battle.AttackerRatingCoverage!.Value);
+        battle.NotableAttackers[0].Race = new("night_creature_14");
+        Assert.AreEqual("body-size-placeholders", battle.ArmyStrengthBasis);
+        Assert.AreEqual(0d, battle.AttackerRatingCoverage!.Value);
+    }
+
+    [TestMethod]
     public void LargerBattlesCarryMoreWeightForWinsAndLosses()
     {
         using World world = new();

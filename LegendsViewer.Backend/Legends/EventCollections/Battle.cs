@@ -106,11 +106,12 @@ public class Battle : EventCollection, IHasComplexSubtype
         int combatants = 0;
         var placeholders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        void Add(CreatureInfo? race, int count, bool animated, bool transformed)
+        void Add(CreatureInfo? race, int count, bool animated, bool transformed, string? caste = null)
         {
             if (count <= 0) return;
-            int? rating = transformed || (native && animated) ? null :
-                native ? race?.NativeCombatRating : race?.EstimatedCombatRating;
+            int? rating = native && (transformed || animated) ? null :
+                native ? (caste == null ? race?.NativeCombatRating : race?.NativeForCaste(caste)) :
+                caste == null ? race?.EstimatedCombatRating : race?.SizeForCaste(caste) is int size && size > 0 ? Math.Max(1, size / 50) : null;
             combatants += count;
             if (rating is not > 0)
             {
@@ -129,7 +130,7 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         foreach (var figure in (attacking ? NotableAttackers : NotableDefenders).Distinct())
             Add(figure.Race, 1, IsAnimated(figure),
-                figure.CreatureTypes.Count > 0 || !string.IsNullOrEmpty(figure.PreviousRace));
+                figure.CreatureTypes.Count > 0 || !string.IsNullOrEmpty(figure.PreviousRace), figure.Caste);
 
         return new StrengthEstimate(total, combatants, placeholders.OrderBy(p => p.Key)
             .Select(p => new PlaceholderRating(p.Key, p.Value)).ToList());

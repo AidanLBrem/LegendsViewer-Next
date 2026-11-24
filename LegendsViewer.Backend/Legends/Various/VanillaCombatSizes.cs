@@ -8,9 +8,35 @@ namespace LegendsViewer.Backend.Legends.Various;
 /// </summary>
 public static class VanillaCombatSizes
 {
+    // Additional sizes from the current DF Wiki creature raws and adult-size table:
+    // https://dwarffortresswiki.org/index.php/List_of_creatures_by_adult_size
+    // Extinct creature IDs include their geological period, as exported by Legends.
     private static readonly Dictionary<string, int> Sizes = new(StringComparer.OrdinalIgnoreCase)
     {
         ["ALLIGATOR"] = 400000,
+        ["BOBCAT"] = 8000,
+        ["CENOZOIC_ANDREWSARCHUS"] = 850000,
+        ["CENOZOIC_DEINOTHERIUM"] = 11793000,
+        ["CENOZOIC_KELENKEN"] = 100000,
+        ["CENOZOIC_MAMMOTH_PYGMY"] = 1055000,
+        ["CENOZOIC_MAMMOTH_WOOLLY"] = 6045000,
+        ["CENOZOIC_MEGACEROPS"] = 3000000,
+        ["CENOZOIC_MEGALANIA"] = 450000,
+        ["CENOZOIC_PARACERATHERIUM"] = 18000000,
+        ["CENOZOIC_RHINOCEROS_WOOLLY"] = 2650000,
+        ["CENOZOIC_SMILODON"] = 328000,
+        ["CENOZOIC_THYLACINE"] = 19000,
+        ["CRETACEOUS_CARNOTAURUS"] = 1700000,
+        ["CRETACEOUS_QUETZALCOATLUS"] = 225000,
+        ["CRETACEOUS_QUETZALCOATLUS_MAN"] = 147500,
+        ["CRETACEOUS_THERIZINOSAURUS"] = 5000000,
+        ["ELK_BIRD"] = 100000,
+        ["GIANT_OPOSSUM"] = 221040,
+        ["JURASSIC_AFROVENATOR"] = 950000,
+        ["JURASSIC_KENTROSAURUS"] = 1600000,
+        ["PERMIAN_ANTEOSAURUS"] = 600000,
+        ["RUTHERER"] = 3000000,
+        ["VORACIOUS_CAVE_CRAWLER"] = 900000,
         ["ALPACA"] = 70000,
         ["AMPHIBIAN_MAN"] = 20000,
         // https://dwarffortresswiki.org/index.php/Andrewsarchus/raw
