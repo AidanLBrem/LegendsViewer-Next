@@ -11,6 +11,7 @@ import { LegendLinkListData } from '../types/legends';
 
 function strengthBasisLabel(basis?: string | null) {
     return basis === 'native' ? 'Native caste ratings' :
+        basis === 'body-size-undead' ? 'Body-size estimate (undead modifiers unknown)' :
         basis === 'body-size' ? 'Estimated adult body-size ratings' :
         basis === 'numerical' ? 'Numerical fallback (troop counts)' : 'Unavailable';
 }
