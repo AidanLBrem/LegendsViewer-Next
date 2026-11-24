@@ -217,26 +217,23 @@ public class HistoryParser : IDisposable
                     if (leaders.Count == 1)
                     {
                         var leader = leaders[0];
-                        if (_currentCiv.Leaders[_currentCiv.LeaderTypes.Count - 1].Count > 0) //End of previous leader's reign
+                        var profile = _currentCiv.EntityPositions.FirstOrDefault(p =>
+                            string.Equals(p.Name, leaderType, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(p.NameMale, leaderType, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(p.NameFemale, leaderType, StringComparison.OrdinalIgnoreCase));
+                        int positionId = profile?.Id ?? 0;
+                        var lastLeader = _currentCiv.Leaders[_currentCiv.LeaderTypes.Count - 1].LastOrDefault();
+                        var previousPosition = lastLeader?.Positions?.LastOrDefault(p =>
+                            p.Entity == _currentCiv &&
+                            string.Equals(p.Title, leaderType, StringComparison.OrdinalIgnoreCase) &&
+                            (!p.StartYear.HasValue || p.StartYear.Value <= reignBegan));
+                        if (previousPosition != null &&
+                            (!previousPosition.EndYear.HasValue || previousPosition.EndYear.Value > reignBegan))
                         {
-                            HistoricalFigure? lastLeader = _currentCiv.Leaders[_currentCiv.LeaderTypes.Count - 1].LastOrDefault();
-                            HfPosition? lastLeadersLastHfPosition = lastLeader?.Positions?.OrderBy(p => p.StartYear ?? -1).LastOrDefault();
-                            if (lastLeader != null && lastLeadersLastHfPosition != null) //End of leader's last leader position (move up rank etc.)
-                            {
-                                lastLeader.EndPositionAssignment(_currentCiv, reignBegan - 1, lastLeadersLastHfPosition.PositionId, lastLeadersLastHfPosition.Title);
-                            }
+                            previousPosition.EndYear = reignBegan;
                         }
 
-                        if (leader.Positions?.Count > 0) //End of leader's last leader position (move up rank etc.)
-                        {
-                            HfPosition? lastHfPosition = leader.Positions.OrderBy(p => p.StartYear ?? -1).LastOrDefault(p => !string.Equals(p.Title, leaderType, StringComparison.OrdinalIgnoreCase));
-                            if (lastHfPosition != null) //End of leader's last leader position (move up rank etc.)
-                            {
-                                leader.EndPositionAssignment(_currentCiv, reignBegan - 1, lastHfPosition.PositionId, lastHfPosition.Title);
-                            }
-                        }
-
-                        leader.StartPositionAssignment(_currentCiv, reignBegan, 0, leaderType);
+                        leader.StartPositionAssignment(_currentCiv, reignBegan, positionId, leaderType);
                         _currentCiv.Leaders[_currentCiv.LeaderTypes.Count - 1].Add(leader);
                     }
                     else if (leaders.Count == 0)
