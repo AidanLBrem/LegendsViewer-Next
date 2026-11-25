@@ -240,6 +240,42 @@ public class Battle : EventCollection, IHasComplexSubtype
 
     public List<string> NotableDeathLinks => NotableDeaths.ConvertAll(x => x.ToLink(true, this));
 
+    public List<ListItemDto> NotableParticipants
+    {
+        get
+        {
+            var attackers = NotableAttackers.Concat(AttackerSupportMercenaryHfs).Select(f => f.Id).ToHashSet();
+            var defenders = NotableDefenders.Concat(DefenderSupportMercenaryHfs).Select(f => f.Id).ToHashSet();
+            var nonCombatants = NonCombatants.Select(f => f.Id).ToHashSet();
+            var deaths = NotableDeaths.Select(f => f.Id).ToHashSet();
+            return NotableAttackers.Concat(AttackerSupportMercenaryHfs)
+                .Concat(NotableDefenders).Concat(DefenderSupportMercenaryHfs)
+                .Concat(NonCombatants).Concat(NotableDeaths)
+                .DistinctBy(f => f.Id)
+                .Select(f =>
+                {
+                    string side = attackers.Contains(f.Id) && defenders.Contains(f.Id) ? "Both sides" :
+                        attackers.Contains(f.Id) ? "Attacker" : defenders.Contains(f.Id) ? "Defender" :
+                        nonCombatants.Contains(f.Id) ? "Non-combatant" : "Side unknown";
+                    decimal? fraction = IndividualCombatStrength.SupportsEstimate(f)
+                        ? IndividualCombatStrength.HistoricalSkillFraction(f, StartYear, World?.CurrentYear) : null;
+                    var skills = f.Skills.Where(s => IndividualCombatStrength.IsCombatSkill(s.Name))
+                        .GroupBy(s => s.Name.Replace(' ', '_'), StringComparer.OrdinalIgnoreCase)
+                        .Select(g => new Skill(g.Key, (int)(Math.Max(0, g.Max(s => s.Points)) * (fraction ?? 1))))
+                        .Where(s => s.Points >= 2600)
+                        .OrderByDescending(s => s.Points).ThenBy(s => s.Name)
+                        .Select(s => System.Net.WebUtility.HtmlEncode(s.Rank + " " + s.Name.Replace('_', ' ')))
+                        .ToList();
+                    string details = side + (deaths.Contains(f.Id) ? " · Died in battle" : "");
+                    if (skills.Count > 0)
+                        details += "<br>" + (fraction.HasValue ? "Estimated at battle: " : "Export-time skills: ") + string.Join(" · ", skills);
+                    else
+                        details += "<br>No recorded skilled-or-higher combat skills at " + (fraction.HasValue ? "estimated battle time" : "export time");
+                    return new ListItemDto { Title = f.ToLink(true, this), Subtitle = details };
+                }).ToList();
+        }
+    }
+
     // Keep animated undead separate from the living form of the same race.
     // The chart totals still reconcile with the reported troop/death totals.
     public ChartDataDto DeathsByRace => BuildSquadChart(Attackers.Concat(Defenders), squad => squad.Deaths);
