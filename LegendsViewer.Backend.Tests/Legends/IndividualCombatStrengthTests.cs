@@ -49,8 +49,8 @@ public class IndividualCombatStrengthTests
     {
         using World world = new();
         var dwarf = new CreatureInfo("DWARF") { NativeCombatRating = 120, AdultBodySize = 60000 };
-        var warrior = new HistoricalFigure([], world) { Id = 1, Race = dwarf, Skills = [new("axe", 18000), new("dodging", 18000)] };
-        var battle = new Battle([], world) { Outcome = BattleOutcome.AttackerWon };
+        var warrior = new HistoricalFigure([], world) { Id = 1, Race = dwarf, BirthYear = 0, DeathYear = 40, Skills = [new("axe", 18000), new("dodging", 18000)] };
+        var battle = new Battle([], world) { Outcome = BattleOutcome.AttackerWon, StartYear = 40 };
         battle.NotableAttackers.AddRange([warrior, warrior]);
         battle.AttackerSquads.Add(new(dwarf, 10, 0, 0, 0));
         battle.DefenderSquads.Add(new(dwarf, 20, 0, 0, 0));
@@ -74,8 +74,8 @@ public class IndividualCombatStrengthTests
     {
         using World world = new();
         var dwarf = new CreatureInfo("DWARF") { AdultBodySize = 60000 };
-        var warrior = new HistoricalFigure([], world) { Race = dwarf, Skills = [new("dodging", 20000)] };
-        var battle = new Battle([], world);
+        var warrior = new HistoricalFigure([], world) { Race = dwarf, BirthYear = 0, DeathYear = 40, Skills = [new("dodging", 20000)] };
+        var battle = new Battle([], world) { StartYear = 40 };
         battle.NotableAttackers.Add(warrior);
         battle.DefenderSquads.Add(new(dwarf, 1, 0, 0, 0));
         Assert.AreEqual(2400d, battle.AttackerArmyStrength);
@@ -90,6 +90,28 @@ public class IndividualCombatStrengthTests
         warrior.Race = new CreatureInfo("UNKNOWN_TEST_CREATURE");
         Assert.AreEqual(1200d, battle.AttackerArmyStrength);
         Assert.AreEqual(1, battle.AttackerStrengthEstimate.PlaceholderCount);
+    }
+
+    [TestMethod]
+    public void HistoricalPointsScaleBeforeNativeFactorCap()
+    {
+        using World world = new();
+        var dwarf = new CreatureInfo("DWARF") { NativeCombatRating = 120 };
+        var warrior = new HistoricalFigure([], world)
+        {
+            Race = dwarf, BirthYear = 100, DeathYear = 152,
+            Skills = [new("axe", 18000), new("dodging", 40000)]
+        };
+        Assert.AreEqual(0L, IndividualCombatStrength.HistoricalPoints(warrior, 112, 200).Total);
+        var early = IndividualCombatStrength.HistoricalPoints(warrior, 122, 200);
+        Assert.AreEqual(4500L, early.Material);
+        Assert.AreEqual(10000L, early.Defensive);
+        Assert.AreEqual(183d, IndividualCombatStrength.Estimate(120, early));
+        Assert.AreEqual(0L, IndividualCombatStrength.HistoricalPoints(warrior, 153, 200).Total);
+        warrior.DeathYear = -1;
+        Assert.AreEqual(4500L, IndividualCombatStrength.HistoricalPoints(warrior, 122, 152).Material);
+        warrior.BirthYear = -1;
+        Assert.AreEqual(0L, IndividualCombatStrength.HistoricalPoints(warrior, 122, 152).Total);
     }
 
     [TestMethod]
