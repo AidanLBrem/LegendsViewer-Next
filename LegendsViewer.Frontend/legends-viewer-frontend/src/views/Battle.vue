@@ -13,6 +13,7 @@ import { strengthBasisLabel, skillEstimateExplanation } from '../utils/strengthB
 
 const store = useBattleStore()
 const mapStore = useBattleMapStore()
+const participants = computed(() => (store.object as (typeof store.object & { notableParticipants?: { title?: string | null; subtitle?: string | null }[] }))?.notableParticipants ?? [])
 
 
 
@@ -83,6 +84,19 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                     <LegendsCardList :list="list" />
                 </v-col>
             </template>
+            <v-col v-if="participants.length" cols="12" xl="4" lg="6" md="12">
+                <v-card title="Notable Participants" :subtitle="`${participants.length} recorded historical figures; skilled or higher combat skills`" height="400" variant="text">
+                    <template #prepend><v-icon class="mr-2" icon="mdi-account-group" size="32px" /></template>
+                    <v-card-text>
+                        <v-list height="300" scrollable>
+                            <v-list-item v-for="(participant, index) in participants" :key="index">
+                                <div v-html="participant.title" />
+                                <div class="text-caption" v-html="participant.subtitle" />
+                            </v-list-item>
+                        </v-list>
+                    </v-card-text>
+                </v-card>
+            </v-col>
             <v-col v-if="store.object?.attackerDeathsByRace?.labels?.length"
                 cols="12" xl="4" lg="6" md="12">
                 <v-card title="Attacker Deaths by Race"

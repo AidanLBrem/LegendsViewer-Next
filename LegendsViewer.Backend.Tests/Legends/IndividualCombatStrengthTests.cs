@@ -115,6 +115,32 @@ public class IndividualCombatStrengthTests
     }
 
     [TestMethod]
+    public void NotableParticipantsIncludeBothSidesAndNonCombatantsWithoutDuplicates()
+    {
+        using World world = new();
+        var race = new CreatureInfo("DWARF");
+        var warrior = new HistoricalFigure([], world)
+        {
+            Id = 1, Race = race, BirthYear = 0, DeathYear = 52,
+            Skills = [new("axe", 18000), new("mining", 29000)]
+        };
+        var defender = new HistoricalFigure([], world) { Id = 2, Race = race };
+        var civilian = new HistoricalFigure([], world) { Id = 3, Race = race };
+        var battle = new Battle([], world) { StartYear = 32 };
+        battle.NotableAttackers.AddRange([warrior, warrior]);
+        battle.AttackerSupportMercenaryHfs.Add(warrior);
+        battle.NotableDefenders.Add(defender);
+        battle.NonCombatants.Add(civilian);
+        var participants = battle.NotableParticipants;
+        Assert.AreEqual(3, participants.Count);
+        StringAssert.Contains(participants[0].Subtitle!, "Estimated at battle:");
+        StringAssert.Contains(participants[0].Subtitle!, "Professional");
+        Assert.IsFalse(participants[0].Subtitle!.Contains("Mining", StringComparison.OrdinalIgnoreCase));
+        StringAssert.Contains(participants[1].Subtitle!, "Defender");
+        StringAssert.Contains(participants[2].Subtitle!, "Non-combatant");
+    }
+
+    [TestMethod]
     public void HallOfFameRanksIndividualsAndExperienceWithStableTies()
     {
         using World world = new();

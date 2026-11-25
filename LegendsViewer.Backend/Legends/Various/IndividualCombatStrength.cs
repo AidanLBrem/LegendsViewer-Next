@@ -53,7 +53,16 @@ public static class IndividualCombatStrength
 
     // Reconstruct accumulated IP before applying the native factor and cap.
     // Maturity ages are conservative model defaults, not exported caste data.
-    public static SkillPoints HistoricalPoints(HistoricalFigure figure, int battleYear, int? worldYear)
+    public static bool IsCombatSkill(string name)
+    {
+        string token = name.Replace(' ', '_');
+        return MaterialSkills.Contains(token) || DefensiveSkills.Contains(token) ||
+            token.Equals("MELEE_COMBAT", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("RANGED_COMBAT", StringComparison.OrdinalIgnoreCase) ||
+            token.Equals("THROW", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static decimal? HistoricalSkillFraction(HistoricalFigure figure, int battleYear, int? worldYear)
     {
         int? maturity = figure.Race?.Id.ToUpperInvariant() switch
         {
@@ -62,11 +71,16 @@ public static class IndividualCombatStrength
         };
         int? end = figure.DeathYear >= 0 ? figure.DeathYear : worldYear;
         if (!maturity.HasValue || figure.BirthYear < 0 || battleYear < 0 || !end.HasValue || battleYear > end.Value)
-            return new(0, 0);
+            return null;
         long adult = (long)figure.BirthYear + maturity.Value;
-        if (end.Value <= adult || battleYear <= adult) return new(0, 0);
+        if (end.Value <= adult || battleYear <= adult) return 0;
+        return (decimal)(battleYear - adult) / (end.Value - adult);
+    }
+
+    public static SkillPoints HistoricalPoints(HistoricalFigure figure, int battleYear, int? worldYear)
+    {
+        decimal fraction = HistoricalSkillFraction(figure, battleYear, worldYear) ?? 0;
         var points = Points(figure.Skills);
-        decimal fraction = (decimal)(battleYear - adult) / (end.Value - adult);
         return new((long)(points.Material * fraction), (long)(points.Defensive * fraction));
     }
 
