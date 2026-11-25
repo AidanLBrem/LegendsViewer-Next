@@ -66,13 +66,14 @@ public class Battle : EventCollection, IHasComplexSubtype
             var defender = CalculateSideStrength(false, true);
             if (attacker.Combatants > 0 && defender.Combatants > 0 &&
                 attacker.PlaceholderCount == 0 && defender.PlaceholderCount == 0)
-                return (attacker.Total, defender.Total, "native", attacker, defender);
+                return (attacker.Total, defender.Total, "native" + SkillBasisSuffix, attacker, defender);
 
             attacker = CalculateSideStrength(true, false);
             defender = CalculateSideStrength(false, false);
             bool placeholders = attacker.PlaceholderCount > 0 || defender.PlaceholderCount > 0;
             string basis = HasAnimatedCombatants ? "body-size-undead" : "body-size";
             if (placeholders) basis += "-placeholders";
+            basis += SkillBasisSuffix;
             return (attacker.Total, defender.Total, basis, attacker, defender);
         }
     }
@@ -100,20 +101,25 @@ public class Battle : EventCollection, IHasComplexSubtype
         AttackerSquads.Concat(DefenderSquads).Any(s => s.Numbers > 0 && s.Animated) ||
         NotableAttackers.Concat(NotableDefenders).Any(IsAnimated);
 
+    private string SkillBasisSuffix => NotableAttackers.Concat(NotableDefenders)
+        .Any(f => IndividualCombatStrength.SupportsEstimate(f) && IndividualCombatStrength.Points(f.Skills).Total > 0)
+        ? "-skill-estimate" : "";
+
     private StrengthEstimate CalculateSideStrength(bool attacking, bool native)
     {
         double total = 0;
         int combatants = 0;
         var placeholders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        void Add(CreatureInfo? race, int count, bool animated, bool transformed, string? caste = null)
+        void Add(CreatureInfo? race, int count, bool animated, bool transformed, string? caste = null, HistoricalFigure? figure = null)
         {
             if (count <= 0) return;
             int? rating = native && (transformed || animated) ? null :
                 native ? (caste == null ? race?.NativeCombatRating : race?.NativeForCaste(caste)) :
                 caste == null ? race?.EstimatedCombatRating : race?.SizeForCaste(caste) is int size && size > 0 ? Math.Max(1, size / 50) : null;
             combatants += count;
-            if (rating is not > 0)
+            bool knownRating = rating is > 0;
+            if (!knownRating)
             {
                 string name = race?.Id ?? "unknown";
                 if (string.IsNullOrWhiteSpace(name)) name = "unknown";
@@ -122,7 +128,8 @@ public class Battle : EventCollection, IHasComplexSubtype
                 placeholders[name] = placeholders.GetValueOrDefault(name) + count;
                 rating = PlaceholderCombatRating;
             }
-            total += (double)count * rating.Value;
+            total += (double)count * (knownRating && figure != null && IndividualCombatStrength.SupportsEstimate(figure)
+                ? IndividualCombatStrength.Estimate(rating!.Value, figure.Skills) : rating!.Value);
         }
 
         foreach (var squad in attacking ? AttackerSquads : DefenderSquads)
@@ -130,7 +137,7 @@ public class Battle : EventCollection, IHasComplexSubtype
 
         foreach (var figure in (attacking ? NotableAttackers : NotableDefenders).Distinct())
             Add(figure.Race, 1, IsAnimated(figure),
-                figure.CreatureTypes.Count > 0 || !string.IsNullOrEmpty(figure.PreviousRace), figure.Caste);
+                figure.CreatureTypes.Count > 0 || !string.IsNullOrEmpty(figure.PreviousRace), figure.Caste, figure);
 
         return new StrengthEstimate(total, combatants, placeholders.OrderBy(p => p.Key)
             .Select(p => new PlaceholderRating(p.Key, p.Value)).ToList());
