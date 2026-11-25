@@ -9,13 +9,7 @@ import ArmyCompositionCard from '../components/ArmyCompositionCard.vue';
 import { computed, ComputedRef } from 'vue';
 import { LegendLinkListData } from '../types/legends';
 
-function strengthBasisLabel(basis?: string | null) {
-    if (basis?.includes('placeholders')) return 'Body-size estimate with placeholders' + (basis.includes('undead') ? ' (undead modifiers unknown)' : '');
-    return basis === 'native' ? 'Native caste ratings' :
-        basis === 'body-size-undead' ? 'Body-size estimate (undead modifiers unknown)' :
-        basis === 'body-size' ? 'Estimated adult body-size ratings' :
-        basis === 'numerical' ? 'Numerical fallback (troop counts)' : 'Unavailable';
-}
+import { strengthBasisLabel, skillEstimateExplanation } from '../utils/strengthBasis';
 
 const store = useBattleStore()
 const mapStore = useBattleMapStore()
@@ -64,7 +58,7 @@ const lists: ComputedRef<LegendLinkListData[]> = computed(() => [
                         <div class="mt-3">Attacker : defender strength ratio:
                             {{ store.object.armyStrengthRatio == null ? '—' : store.object.armyStrengthRatio.toLocaleString(undefined, { maximumFractionDigits: 3, minimumSignificantDigits: 1 }) + ' : 1' }}
                         </div>
-                        <div class="text-caption">Before casualties; strength is not a victory probability.</div>
+                        <div class="text-caption">Before casualties. {{ skillEstimateExplanation }}</div>
                     </v-card-text>
                 </v-card>
             </v-col>

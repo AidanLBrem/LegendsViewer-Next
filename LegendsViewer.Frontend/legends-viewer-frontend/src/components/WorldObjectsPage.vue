@@ -88,7 +88,7 @@
                         </span>
                         <span v-else>
                             Troop figures are the forces initially fielded in each battle, before casualties.
-                            Strength is based on native ratings, body-size estimates, with explicit placeholders (1,200 per unknown creature). Compare strength values within the same calculation basis.
+                            Strength uses caste ratings or body-size estimates, with 1,200 per unknown creature. {{ skillEstimateExplanation }}
                         </span>
                     </div>
                     <v-data-table-server v-model:items-per-page="store.objectsPerPage"
@@ -118,7 +118,7 @@
                             {{ typeof value === 'number' ? value.toFixed(1) + '%' : '—' }}
                         </template>
                         <template v-slot:item.armyStrengthBasis="{ value }">
-                            {{ typeof value === 'string' && value.includes('placeholders') ? ('Body size + placeholders' + (value.includes('undead') ? ' (undead)' : '')) : value === 'native' ? 'Native' : value === 'body-size-undead' ? 'Body size (undead modifiers unknown)' : value === 'body-size' ? 'Body size' : value === 'numerical' ? 'Numerical fallback' : '—' }}
+                            {{ strengthBasisLabel(typeof value === 'string' ? value : null) }}
                         </template>
                         <template v-slot:item.populationCount="{ value }">
                             {{ typeof value === "number" ? value.toLocaleString() : "—" }}
@@ -144,6 +144,7 @@
 </template>
 
 <script setup lang="ts">
+import { strengthBasisLabel, skillEstimateExplanation } from '../utils/strengthBasis';
 import { ref, watch } from 'vue';
 import { LoadItemsOptionsWithSearch, LoadItemsSortOption, TableHeader } from '../types/legends';
 import type { FilterOperator, FilterRuleDto } from '../stores/worldObjectStores'; // Adjust the path as needed

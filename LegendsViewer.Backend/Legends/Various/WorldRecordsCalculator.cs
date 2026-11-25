@@ -27,6 +27,8 @@ public static class WorldRecordsCalculator
                 CalculateBloodiestBattles(world),
                 CalculateFiercestDuelists(world),
                 CalculateDevastatingRampages(world),
+                CalculateIndividualCombatRecord(world, false),
+                CalculateIndividualCombatRecord(world, true),
                 CalculateCreatureRecord(world, "native_combat", "Most Combat-Capable Beings (Native Caste Rating)", true),
                 CalculateCreatureRecord(world, "largest_beings", "Largest Beings (Adult Body Size)", false),
                 CalculateCreatureRecord(world, "strongest_forgotten_beasts", "Strongest Forgotten Beasts (Native Caste Rating)", true, "FORGOTTEN_BEAST"),
@@ -181,6 +183,36 @@ public static class WorldRecordsCalculator
         }
 
         return highlights;
+    }
+
+    private static RecordCardDto CalculateIndividualCombatRecord(World world, bool proficiency)
+    {
+        var card = new RecordCardDto
+        {
+            Id = proficiency ? "combat_proficiency" : "individual_combat",
+            Title = proficiency ? "Most Combat Experience" : "Strongest Individuals (Skill Estimate)",
+            Icon = "mdi-sword-cross",
+            MetricName = proficiency ? "Exported combat skill points (not kills)" : "Native caste base + estimated skill adjustment"
+        };
+        var ranked = world.HistoricalFigures
+            .Where(h => proficiency || IndividualCombatStrength.SupportsEstimate(h))
+            .Select(h => (Figure: h, Points: IndividualCombatStrength.Points(h.Skills), Base: h.Race?.NativeForCaste(h.Caste)))
+            .Where(x => proficiency ? x.Points.Total > 0 : x.Base is > 0)
+            .Select(x => (x.Figure, x.Points, Value: proficiency ? (double)x.Points.Total : IndividualCombatStrength.Estimate(x.Base!.Value, x.Figure.Skills)))
+            .OrderByDescending(x => x.Value).ThenBy(x => x.Figure.Id).Take(10);
+        foreach (var (hf, points, value) in ranked)
+            card.Entries.Add(new RecordEntryDto
+            {
+                Rank = card.Entries.Count + 1, Id = hf.Id, Name = hf.Name, ObjectType = "hf",
+                LinkHtml = hf.ToLink(), NumericValue = value,
+                Value = $"{value:N0} {(proficiency ? "points" : "estimated strength")}",
+                Race = hf.GetRaceString(), Subtitle = hf.Race?.RecordLabel(hf.Caste),
+                DetailText = $"Material skills: {points.Material:N0} IP · Defensive skills: {points.Defensive:N0} IP. " +
+                    "Export-time skills, not historical battle-time skills. Native skill factors cap at 20,000 IP per group. " +
+                    (proficiency ? "Experience total is not a native combat rating." :
+                    "Estimate uses adult caste strength and a 10-point equipment proxy for the training increment only; actual equipment, age and profession modifiers are not modeled. Missing skills add no bonus. Transformed and undead figures are excluded.")
+            });
+        return card;
     }
 
     private static RecordCardDto CalculateCreatureRecord(World world, string id, string title, bool native, string? prefix = null)

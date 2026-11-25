@@ -6,6 +6,7 @@
       <summary>How the command score and K/D are calculated</summary>
       <p>Each battle earns its result (1 for a win, 0 for a loss) minus its expected strength share (own effective strength / total effective strength). Multiply by the square root of total starting troops / 100. A 400-troop battle carries twice the weight of a 100-troop battle.</p>
       <p>Command score = 100 × sum of weighted results above expectation / (sum of battle weights + 3) × rated battles / (rated battles + 10). The extra 3 carries the weight of three 100-troop battles. The experience factor further discounts short records regardless of battle size: three rated battles retain 23% of the base score, ten retain 50%, and thirty retain 75%.</p>
+      <p>{{ skillEstimateExplanation }}</p>
       <p>The score uses battles with a recorded winner and positive starting counts on both sides. Native adult caste ratings are a proxy, not a simulated victory probability. If native ratings are incomplete, both sides use estimated adult body size / 50 (minimum 1) with a rating of 1,200 per unknown combatant. The bundled vanilla raw snapshot may differ from your game or mods. Animated troops use their underlying race's adult body size, without an undead-specific modifier; this is labeled separately. Transformed figures use their recorded race's adult body size when known; transformation effects are not modeled. Unknown combatants receive a 1,200 placeholder, explicitly listed with rating coverage. Win % includes all decided battles. K/D divides total enemy deaths by own-side deaths across commanded battles. ∞ means kills with zero own deaths, and — means neither side recorded a death.</p>
     </details>
     <v-alert v-if="error" type="error">
@@ -40,7 +41,7 @@
               <td>{{ (battle.ownEffectiveStrength ?? battle.ownTroops).toLocaleString() }}<div class="text-caption">{{ battle.ownStrengthEstimate?.coverage?.toFixed(1) ?? '—' }}% covered</div></td>
               <td>{{ (battle.enemyEffectiveStrength ?? battle.enemyTroops).toLocaleString() }}<div class="text-caption">{{ battle.enemyStrengthEstimate?.coverage?.toFixed(1) ?? '—' }}% covered</div></td>
               <td>{{ strengthRatio(battle) }}</td>
-              <td>{{ battle.oddsBasis.includes('placeholders') ? ('Body size + placeholders' + (battle.oddsBasis.includes('undead') ? ' (undead)' : '')) : battle.oddsBasis === 'native' ? 'Native' : battle.oddsBasis === 'body-size-undead' ? 'Body size (undead modifiers unknown)' : battle.oddsBasis === 'body-size' ? 'Body size' : 'Numerical fallback' }}</td>
+              <td>{{ strengthBasisLabel(battle.oddsBasis) }}</td>
               <td>{{ battle.ownKills.toLocaleString() }}</td><td>{{ battle.enemyKills.toLocaleString() }}</td>
             </tr></tbody>
           </table>
@@ -68,6 +69,7 @@
 </template>
 
 <script setup lang="ts">
+import { strengthBasisLabel, skillEstimateExplanation } from '../utils/strengthBasis';
 import { ref, watch } from 'vue';
 import { API_BASE_URL } from '../apiClient';
 import { useWorldStore } from '../stores/worldStore';
