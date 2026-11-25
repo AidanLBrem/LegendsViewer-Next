@@ -48,7 +48,30 @@ public static class IndividualCombatStrength
 
     public static double Estimate(double casteRating, IEnumerable<Skill> skills)
     {
-        var points = Points(skills);
+        return Estimate(casteRating, Points(skills));
+    }
+
+    // Reconstruct accumulated IP before applying the native factor and cap.
+    // Maturity ages are conservative model defaults, not exported caste data.
+    public static SkillPoints HistoricalPoints(HistoricalFigure figure, int battleYear, int? worldYear)
+    {
+        int? maturity = figure.Race?.Id.ToUpperInvariant() switch
+        {
+            "DWARF" => 12, "HUMAN" => 12, "ELF" => 12, "GOBLIN" => 12, "KOBOLD" => 12,
+            _ => null
+        };
+        int? end = figure.DeathYear >= 0 ? figure.DeathYear : worldYear;
+        if (!maturity.HasValue || figure.BirthYear < 0 || battleYear < 0 || !end.HasValue || battleYear > end.Value)
+            return new(0, 0);
+        long adult = (long)figure.BirthYear + maturity.Value;
+        if (end.Value <= adult || battleYear <= adult) return new(0, 0);
+        var points = Points(figure.Skills);
+        decimal fraction = (decimal)(battleYear - adult) / (end.Value - adult);
+        return new((long)(points.Material * fraction), (long)(points.Defensive * fraction));
+    }
+
+    public static double Estimate(double casteRating, SkillPoints points)
+    {
         // Only add the training increment over assumed untrained equipment.
         // Equipment itself is absent from exports; the 10-point proxy is a model choice.
         long trainingBonus = AssumedMaterialBonus * SkillFactor(points.Material) / 40 - AssumedMaterialBonus;

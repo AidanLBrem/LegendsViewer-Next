@@ -102,7 +102,7 @@ public class Battle : EventCollection, IHasComplexSubtype
         NotableAttackers.Concat(NotableDefenders).Any(IsAnimated);
 
     private string SkillBasisSuffix => NotableAttackers.Concat(NotableDefenders)
-        .Any(f => IndividualCombatStrength.SupportsEstimate(f) && IndividualCombatStrength.Points(f.Skills).Total > 0)
+        .Any(f => IndividualCombatStrength.SupportsEstimate(f) && IndividualCombatStrength.HistoricalPoints(f, StartYear, World?.CurrentYear).Total > 0)
         ? "-skill-estimate" : "";
 
     private StrengthEstimate CalculateSideStrength(bool attacking, bool native)
@@ -129,7 +129,7 @@ public class Battle : EventCollection, IHasComplexSubtype
                 rating = PlaceholderCombatRating;
             }
             total += (double)count * (knownRating && figure != null && IndividualCombatStrength.SupportsEstimate(figure)
-                ? IndividualCombatStrength.Estimate(rating!.Value, figure.Skills) : rating!.Value);
+                ? IndividualCombatStrength.Estimate(rating!.Value, IndividualCombatStrength.HistoricalPoints(figure, StartYear, World?.CurrentYear)) : rating!.Value);
         }
 
         foreach (var squad in attacking ? AttackerSquads : DefenderSquads)
