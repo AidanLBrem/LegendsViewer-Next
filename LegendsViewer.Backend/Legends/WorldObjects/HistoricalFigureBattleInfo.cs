@@ -1,4 +1,5 @@
 using LegendsViewer.Backend.Legends.EventCollections;
+using LegendsViewer.Backend.Legends.Enums;
 
 namespace LegendsViewer.Backend.Legends.WorldObjects;
 
@@ -77,6 +78,46 @@ public class HistoricalFigureBattleInfo
     public int GetBattleNonCombatantCount()
     {
         return GetBattlesNonCombatant().Count;
+    }
+
+    /// <summary>
+    /// Counts recorded victories and defeats of this figure as a combatant.
+    /// A noteworthy figure on a battle's winning side is not necessarily
+    /// the commander; commanders are identified independently from generals.
+    /// Noncombatants, unknown outcomes and ambiguous dual-side listings do
+    /// not count. Multiple references to the same battle count once.
+    /// </summary>
+    public (int Won, int Lost) GetBattleResults()
+    {
+        int won = 0;
+        int lost = 0;
+        foreach (Battle battle in _historicalFigure.Battles.Distinct())
+        {
+            if (battle.Outcome == BattleOutcome.Unknown)
+            {
+                continue;
+            }
+
+            bool attacking = battle.NotableAttackers.Contains(_historicalFigure);
+            bool defending = battle.NotableDefenders.Contains(_historicalFigure);
+            if (attacking == defending)
+            {
+                continue;
+            }
+
+            bool victory = (attacking && battle.Outcome == BattleOutcome.AttackerWon) ||
+                           (defending && battle.Outcome == BattleOutcome.DefenderWon);
+            if (victory)
+            {
+                won++;
+            }
+            else
+            {
+                lost++;
+            }
+        }
+
+        return (won, lost);
     }
 
     /// <summary>

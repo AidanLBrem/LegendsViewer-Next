@@ -189,6 +189,14 @@ public class HistoricalFigure : WorldObject
                     Subtitle = string.Join(", ", Spheres)
                 });
             }
+            if (BattlesWon > 0 || BattlesLost > 0)
+            {
+                list.Add(new ListItemDto
+                {
+                    Title = "Recorded Battles",
+                    Subtitle = $"{BattlesWon} won · {BattlesLost} lost"
+                });
+            }
             if (RelatedRegions.Count > 0)
             {
                 list.Add(new ListItemDto
@@ -247,6 +255,20 @@ public class HistoricalFigure : WorldObject
 
     [JsonIgnore]
     public List<Battle> Battles { get; set; } = [];
+
+    // A general explicitly named in an attack or field-battle event, not
+    // merely someone who fought in a battle or belongs to a military group.
+    public bool IsCommander => Events.Any(entry =>
+        entry is FieldBattle field &&
+        (field.AttackerGeneral == this || field.DefenderGeneral == this) ||
+        entry is AttackedSite site &&
+        (site.AttackerGeneral == this || site.DefenderGeneral == this));
+
+    // These count victories/defeats as a recorded combatant, independently
+    // of whether the historical figure was commanding that particular battle.
+    public int BattlesWon => BattleInfo.GetBattleResults().Won;
+    public int BattlesLost => BattleInfo.GetBattleResults().Lost;
+
     public List<string> BattleLinks => BattleInfo.GetAllBattles().ConvertAll(x => x.ToLink(true, this));
 
     [JsonIgnore]
@@ -619,6 +641,11 @@ public class HistoricalFigure : WorldObject
             }
             if (rule.PropertyName.Equals(nameof(IsDeity), StringComparison.InvariantCultureIgnoreCase) &&
                 rule.ViolatesBooleanCriteria(IsDeity))
+            {
+                return false;
+            }
+            if (rule.PropertyName.Equals(nameof(IsCommander), StringComparison.InvariantCultureIgnoreCase) &&
+                rule.ViolatesBooleanCriteria(IsCommander))
             {
                 return false;
             }
