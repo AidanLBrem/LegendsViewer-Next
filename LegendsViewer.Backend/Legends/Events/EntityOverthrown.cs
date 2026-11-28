@@ -9,7 +9,7 @@ namespace LegendsViewer.Backend.Legends.Events;
 public class EntityOverthrown : WorldEvent
 {
     public Entity? Entity { get; set; }
-    public int PositionProfileId { get; set; }
+    public int PositionProfileId { get; set; } = -1;
     public HistoricalFigure? OverthrownHistoricalFigure { get; set; }
     public Site? Site { get; set; }
     public HistoricalFigure? PositionTaker { get; set; }
@@ -40,6 +40,7 @@ public class EntityOverthrown : WorldEvent
 
         Entity?.AddEvent(this);
         OverthrownHistoricalFigure?.AddEvent(this);
+        OverthrownHistoricalFigure?.ApplyOverthrow(this);
         Site?.AddEvent(this);
         PositionTaker?.AddEvent(this);
         if (Instigator != PositionTaker)

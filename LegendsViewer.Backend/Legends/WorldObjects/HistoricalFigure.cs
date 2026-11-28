@@ -355,10 +355,51 @@ public class HistoricalFigure : WorldObject
         {
             return;
         }
-        Positions.Add(new HfPosition(entity, startYear, null, positionId, title));
+        var position = new HfPosition(entity, startYear, null, positionId, title);
+        Positions.Add(position);
+        // history.txt can reconstruct a reign after its terminating XML event was parsed.
+        foreach (var coup in Events.OfType<EntityOverthrown>().Where(e =>
+                     e.Entity == entity && e.OverthrownHistoricalFigure == this &&
+                     e.PositionTaker != this && (!startYear.HasValue || e.Year >= startYear.Value)))
+        {
+            if (MatchesOverthrownPosition(position, coup))
+            {
+                position.EndYear = position.EndYear.HasValue ? Math.Min(position.EndYear.Value, coup.Year) : coup.Year;
+            }
+        }
         if (entity != null && entity.IsCiv && positionId == 0)
         {
             IsMainCivLeader = true;
+        }
+    }
+
+    public static bool MatchesOverthrownPosition(HfPosition position, EntityOverthrown coup)
+    {
+        if (position.Entity != coup.Entity || coup.Entity == null || coup.PositionProfileId < 0)
+        {
+            return false;
+        }
+        var profile = coup.Entity.EntityPositions.Find(p => p.Id == coup.PositionProfileId);
+        if (profile != null && !string.IsNullOrWhiteSpace(position.Title))
+        {
+            return string.Equals(profile.Name, position.Title, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(profile.NameMale, position.Title, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(profile.NameFemale, position.Title, StringComparison.OrdinalIgnoreCase);
+        }
+        return position.PositionId == coup.PositionProfileId;
+    }
+
+    public void ApplyOverthrow(EntityOverthrown coup)
+    {
+        if (Positions == null || coup.PositionTaker == this)
+        {
+            return;
+        }
+        foreach (var position in Positions.Where(p => MatchesOverthrownPosition(p, coup) &&
+                     (!p.StartYear.HasValue || p.StartYear.Value <= coup.Year) &&
+                     (!p.EndYear.HasValue || p.EndYear.Value > coup.Year)))
+        {
+            position.EndYear = coup.Year;
         }
     }
 
@@ -368,10 +409,15 @@ public class HistoricalFigure : WorldObject
         {
             Positions = [];
         }
-        var position = Positions.LastOrDefault(p => p.Entity == entity && p.PositionId == positionId);
+        var position = Positions.LastOrDefault(p => p.Entity == entity && (p.PositionId == positionId || (positionId == -1 && !string.IsNullOrWhiteSpace(title) && string.Equals(p.Title, title, StringComparison.OrdinalIgnoreCase))) &&
+            (!p.StartYear.HasValue || !endYear.HasValue || p.StartYear.Value <= endYear.Value) &&
+            (string.IsNullOrWhiteSpace(title) || title == "-1" || string.Equals(p.Title, title, StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(p.Title)));
         if (position != null)
         {
-            position.EndYear = endYear;
+            if (!position.EndYear.HasValue || (endYear.HasValue && endYear.Value < position.EndYear.Value))
+            {
+                position.EndYear = endYear;
+            }
         }
         else if(!string.IsNullOrEmpty(title) && title != "-1")
         {
