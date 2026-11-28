@@ -104,6 +104,28 @@ public class EntityController(IWorldObjectRepository<Entity> repository) : World
         return Ok(NationCultureProfileDto.FromEntity(entity));
     }
 
+    [HttpGet("{id}/diplomacy/{otherId}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public ActionResult<NationDiplomacyFactorsDto> GetDiplomaticFactors(
+        [FromRoute] int id, [FromRoute] int otherId)
+    {
+        if (id == otherId)
+        {
+            return BadRequest("Select two different civilizations.");
+        }
+
+        Entity? source = Repository.GetById(id);
+        Entity? target = Repository.GetById(otherId);
+        if (source == null || target == null)
+        {
+            return NotFound();
+        }
+
+        return Ok(NationDiplomacyFactorsDto.FromEntities(source, target));
+    }
+
     [HttpGet("{id}/monarchs")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
